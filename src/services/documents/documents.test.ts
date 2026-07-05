@@ -8,7 +8,7 @@ import * as docs from '@/services/documents';
 import type { Principal } from '@/access';
 import { seedRoles, makePrincipal } from '@/test/access';
 import type { CollectionDefinition } from '@/fields/types';
-import { InputValidationError, ConflictError, ForbiddenError } from '@/lib/errors';
+import { InputValidationError, ConflictError, ForbiddenError, NotFoundError } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
 
@@ -112,6 +112,16 @@ describe('documents service — the save pipeline', () => {
 
     const rows = await indexRows(db, created.id);
     expect(rows.find((r) => r.fieldKey === 'views')?.valueNum).toBe(99);
+  });
+
+  it('removes the document_index rows when the document is deleted (FK cascade)', async () => {
+    const doc = await docs.createDocument(db, admin, 'posts', { title: 'To Delete', views: 7 }, NOW);
+    expect((await indexRows(db, doc.id)).length).toBeGreaterThan(0); // title/slug/views indexed
+
+    await docs.deleteDocument(db, admin, 'posts', doc.id, NOW);
+
+    expect(await indexRows(db, doc.id)).toHaveLength(0); // index cascaded away
+    await expect(docs.getDocument(db, admin, 'posts', doc.id, NOW)).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('publishes and unpublishes, setting publishedAt', async () => {
