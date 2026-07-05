@@ -24,8 +24,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply remill --local",
     "db:migrate:remote": "wrangler d1 migrations apply remill --remote",
-    "db:seed": "wrangler d1 execute remill --local --file src/db/seed.sql",
-    "db:seed:remote": "wrangler d1 execute remill --remote --file src/db/seed.sql"
+    "db:seed": "wrangler d1 execute remill --local --file src/db/seed.sql && bun run db:bootstrap:local",
+    "db:seed:remote": "wrangler d1 execute remill --remote --file src/db/seed.sql",
+    "db:bootstrap:local": "bun run scripts/bootstrap-admin.ts --local",
+    "db:bootstrap:remote": "bun run scripts/bootstrap-admin.ts --remote"
   },
   "dependencies": {
     "@noble/hashes": "^1.7.2",
