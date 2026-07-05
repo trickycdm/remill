@@ -36,7 +36,7 @@ FieldType contract against all six surfaces before merging.
 ```ts
 interface FieldType<Config, Value> {
   key: string                    // 'text' | 'markdown' | 'number' | 'boolean' | 'datetime'
-                                 // | 'select' | 'media' | 'reference' | 'tags' | 'slug' | 'json'
+                                 // | 'select' | 'media' | 'tags' | 'slug' | 'json'
   configSchema: ZodType<Config>  // validates per-field options stored in fields_json
   valueSchema: (cfg: Config) => ZodType<Value>   // (2) one validator for ALL surfaces
   toIndex?: (v: Value) => string | number | null // (1) promoted to document_index for query/sort
@@ -73,8 +73,7 @@ Rules:
     { "key": "slug",   "type": "slug",      "config": { "from": "title" }, "unique": true },
     { "key": "body",   "type": "markdown" },
     { "key": "hero",   "type": "media",     "config": { "kinds": ["image"] } },
-    { "key": "tags",   "type": "tags",      "index": true },
-    { "key": "author", "type": "reference", "config": { "collection": "users" } }
+    { "key": "tags",   "type": "tags",      "index": true }
   ],
   "workflow": { "draftPublish": true },     // declarative behaviors, not code hooks
   "access": { "publicRead": true }          // sugar: anonymous may read published docs
