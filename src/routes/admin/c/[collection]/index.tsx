@@ -28,6 +28,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   return c.render(
     <AdminShell user={user} current="content">
       <PageHeader
+        breadcrumb={[{ label: 'Content', href: '/admin/c' }, { label: def.name }]}
         title={def.name}
         description={`${total} ${total === 1 ? 'item' : 'items'}`}
         actions={<Button href={`/admin/c/${slug}/new`}>New {def.name}</Button>}

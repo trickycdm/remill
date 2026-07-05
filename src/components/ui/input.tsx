@@ -9,6 +9,7 @@
  */
 
 import type { JSX } from 'hono/jsx/jsx-runtime';
+import { CONTROL_H, type ControlSize } from '@/components/ui/control';
 import { cx } from '@/components/ui/cx';
 
 interface InputProps {
@@ -17,6 +18,8 @@ interface InputProps {
   type?: 'text' | 'email' | 'password' | 'search' | 'url' | 'tel' | 'number' | 'date' | 'datetime-local' | 'time';
   value?: string | number;
   placeholder?: string;
+  /** Control height; share the same `size` as an adjacent Button (default md). */
+  size?: ControlSize;
   required?: boolean;
   disabled?: boolean;
   readonly?: boolean;
@@ -37,13 +40,13 @@ interface InputProps {
 export const INPUT_BASE =
   'w-full rounded-md border bg-surface px-3 text-sm text-ink shadow-xs transition-colors placeholder:text-ink-subtle focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 
-export function Input({ invalid, class: cls, ...rest }: InputProps): JSX.Element {
+export function Input({ invalid, size = 'md', class: cls, ...rest }: InputProps): JSX.Element {
   const stateClass = invalid
     ? 'border-danger focus-visible:outline-danger'
     : 'border-border-strong focus-visible:outline-ring';
   return (
     <input
-      class={cx(INPUT_BASE, 'h-10', stateClass, cls)}
+      class={cx(INPUT_BASE, CONTROL_H[size], stateClass, cls)}
       aria-invalid={invalid ? 'true' : undefined}
       {...(rest as Record<string, unknown>)}
     />

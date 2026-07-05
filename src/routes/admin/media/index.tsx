@@ -38,7 +38,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                 name="file"
                 type="file"
                 required
-                class="block text-sm text-ink file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-2 file:text-sm file:font-medium file:text-accent-fg hover:file:bg-accent-hover"
+                class="block h-10 w-full rounded-md border border-border-strong bg-surface text-sm text-ink shadow-xs file:mr-3 file:h-full file:cursor-pointer file:border-0 file:bg-accent file:px-3 file:text-sm file:font-medium file:text-accent-fg hover:file:bg-accent-hover"
               />
             </FormField>
             <FormField fieldId="alt" label="Alt text (required for images)">
@@ -75,10 +75,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                   {m.width && m.height ? `· ${m.width}×${m.height}` : ''}
                 </p>
                 <form method="post" action={`/admin/media/${m.id}/alt`} class="mt-2 flex items-center gap-2">
-                  <Input name="alt" type="text" value={m.alt ?? ''} placeholder="Alt text" class="text-xs" />
-                  <button type="submit" class="text-xs text-accent-text hover:underline">
+                  <Input name="alt" type="text" size="sm" value={m.alt ?? ''} placeholder="Alt text" />
+                  <Button type="submit" size="sm" variant="secondary">
                     Save
-                  </button>
+                  </Button>
                 </form>
                 <div class="mt-2 flex items-center justify-between">
                   <a href={`/media/${m.id}`} target="_blank" rel="noopener" class="font-mono text-xs text-ink-subtle hover:text-ink hover:underline">

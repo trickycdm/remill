@@ -24,11 +24,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
     <AdminShell user={user} current="collections">
       <PageHeader
         title={def.name}
-        eyebrow="Collections"
+        breadcrumb={[{ label: 'Collections', href: '/admin/collections' }, { label: def.name }]}
         actions={def.protected ? <Badge tone="warning">Protected</Badge> : undefined}
       />
 
-      <div class="mt-8 max-w-3xl">
+      <div class="max-w-3xl">
         <CollectionBuilder def={def} action={`/admin/collections/${slug}`} submitLabel="Save changes" />
 
         {!def.protected && (

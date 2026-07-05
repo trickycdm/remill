@@ -31,7 +31,7 @@
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import { listFieldTypeKeys, isIndexable } from '@/fields/registry';
 import { jsonForScript } from '@/lib/json-for-script';
-import { Button, Input, Select, Checkbox, FormField, Plus, Trash } from '@/components/ui';
+import { Button, Input, Select, Checkbox, Toggle, FormField, Plus, Trash } from '@/components/ui';
 
 type RawBody = Record<string, string | File | (string | File)[]>;
 
@@ -243,7 +243,8 @@ function FieldRow({
           aria-label={`Label for field ${n}`}
           data-attr:disabled={hiddenDisabled}
         />
-        <div class="flex items-center gap-3">
+        <fieldset class="flex items-center gap-3">
+          <legend class="sr-only">Flags for field {n}</legend>
           {checkboxes.map((cb) => (
             <label class="flex items-center gap-1.5 text-xs text-ink-muted">
               <Checkbox
@@ -255,7 +256,7 @@ function FieldRow({
               <span aria-hidden="true">{cb.label.slice(0, 3)}</span>
             </label>
           ))}
-        </div>
+        </fieldset>
       </div>
       <FieldOptionsEditor
         i={i}
@@ -351,14 +352,14 @@ export function CollectionBuilder({
           {isProtected ? <input type="hidden" name="shape" value={def?.shape} /> : null}
         </FormField>
 
-        <fieldset class="flex flex-col gap-2">
+        <fieldset class="flex flex-col gap-3">
           <legend class="text-sm font-medium text-ink">Options</legend>
-          <label class="flex items-center gap-2 text-sm text-ink-muted">
-            <Checkbox name="workflow_draft_publish" checked={def?.workflow?.draftPublish} />
+          <label class="flex items-center gap-2.5 text-sm text-ink-muted">
+            <Toggle name="workflow_draft_publish" checked={def?.workflow?.draftPublish} />
             Draft / publish workflow
           </label>
-          <label class="flex items-center gap-2 text-sm text-ink-muted">
-            <Checkbox name="access_public_read" checked={def?.access?.publicRead} />
+          <label class="flex items-center gap-2.5 text-sm text-ink-muted">
+            <Toggle name="access_public_read" checked={def?.access?.publicRead} />
             Public read access
           </label>
         </fieldset>
