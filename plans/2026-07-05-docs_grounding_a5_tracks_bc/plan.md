@@ -1,5 +1,11 @@
 # Plan — Docs grounding, A5 close-out, and corrected Tracks B & C
 
+**Status: COMPLETE — 2026-07-05** (every phase executed; per this plan's master-plan discipline the
+per-phase record lives in `plans/2026-07-05-platform_knowledge_publishing_roadmap/worklog.md`. B5
+stays deferred by design. One execution deviation: Phase 0b (commit A5) ran BEFORE Phase 0 — A5's
+working-tree diff touched `steering/ACCESS_CONTROL.md`, which Phase 0 also edited, so committing A5
+first kept both commits clean.)
+
 ## Context
 
 The approved 3-track roadmap (`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`)
@@ -35,7 +41,7 @@ real code (three deep read-only sweeps) and audited the documentation.
 
 ---
 
-## Phase 0 — Documentation grounding (one commit)
+## Phase 0 — Documentation grounding (one commit) — DONE (2dd5c54)
 
 Consolidation, not a new doc (a separate ARCHITECTURE.md would fragment identity further).
 
@@ -77,14 +83,14 @@ Consolidation, not a new doc (a separate ARCHITECTURE.md would fragment identity
    `plans/2026-07-05-snake_case_plan_summary_description…review_remediation_29_findings` →
    `plans/2026-07-05-review-remediation`; delete stray `plans/.tmp/ok-lets-create-a-indexed-bunny.md`.
 
-## Phase 0b — Commit A5, close Track A
+## Phase 0b — Commit A5, close Track A — DONE (4f7c115, ran before Phase 0)
 
 - Working tree already contains the full A5 diff (verified clean this session): `ACCESS_SCHEMA` →
   `z.strictObject({publicRead})`, `CollectionDefinition.access` tightened, reject-role-map test,
   ACCESS_CONTROL.md note, hardened axe sweep. Re-run type-check/lint/unit; commit; worklog row
   "A5 done + Track A complete". (e2e deferred by decision — note it in the worklog row.)
 
-## Phase 0c — Amend the roadmap plan.md in place (+ Revision Log + worklog RE-PLAN row)
+## Phase 0c — Amend the roadmap plan.md in place (+ Revision Log + worklog RE-PLAN row) — DONE (e051ced)
 
 Fold these 8 validated corrections into `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`:
 
@@ -134,7 +140,7 @@ Fold these 8 validated corrections into `plans/2026-07-05-platform_knowledge_pub
 Also amend the roadmap's per-phase "Docs/tests" lines: e2e items move to the final consolidated
 pass (user decision); unit tests stay per-phase.
 
-## Phases B1 → B3, B4, C1 → C3 — execute the amended roadmap
+## Phases B1 → B3, B4, C1 → C3 — execute the amended roadmap — DONE (6d560e0…07f28e4; B5 deferred)
 
 Follow the roadmap plan.md per phase (it already carries correct file:line detail, now corrected
 per Phase 0c). Summary of the execution chain, with the validated key facts:
@@ -187,7 +193,7 @@ ViewComponent seam, API_AND_MCP for B2/B3 shapes + tools, SECURITY for C1 XSS + 
 ACCESS_CONTROL for C3 link grants, DESIGN_SYSTEM/A11Y for C2 public layout). TECH_DECISIONS
 D21–D23 flip from "accepted" to "implemented" as they land. Worklog row + commit per phase.
 
-## Final phase — consolidated verification & e2e
+## Final phase — consolidated verification & e2e — DONE (5bec702)
 
 1. **Decide the e2e harness once, here** (deferred flake decision): recommend pointing Playwright
    `webServer` at a built preview (`wrangler dev` / `vite preview` on the Workers build) instead

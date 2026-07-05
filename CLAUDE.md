@@ -56,6 +56,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
+  Public ──────────▶ /:c/:slug   Rendered pages + /s/:token share links (anonymous)
 
   Routes / DOs → Services (src/services/) → Queries (src/db/queries/) → D1
                         ↑
@@ -70,8 +71,8 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   read/write; identity-scoped operations like `/admin/account` skip gating). Call queries, never D1.
 - **Queries** `src/db/queries/` — the **only** layer importing Drizzle; row↔domain mapping is private
   here; no Drizzle types leak upward.
-- **Fields** `src/fields/` — the FieldType registry; one module per type. The most important interface
-  in the codebase (SCHEMA_ENGINE.md).
+- **Fields** `src/fields/` — the FieldType registry; one module per type, including `relation.tsx`
+  (graph edges and backlinks). The most important interface in the codebase (SCHEMA_ENGINE.md).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
   (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
   invite a person via `users.tsx`, custom roles, token scoping, the `matrix/` overview); item-grant
@@ -80,8 +81,10 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
   module owning the MCP protocol surface (decision D18).
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
-  Person/Service/Agent display persona), `email/` (`EmailTransport` + console stub — logs, never
-  sends); **`src/components/`** Hono JSX; **`src/client/`** browser islands (CodeMirror, Uppy).
+  Person/Service/Agent display persona), `email/` (`EmailTransport` + console stub), `lifecycle.ts`
+  (hasLifecycle), `markdown/` (micromark, sanitized); **`src/components/`** Hono JSX with
+  `field-view.tsx` (ViewComponent), `document-view.tsx`, `layouts/public-shell.tsx` (read-only
+  render); **`src/client/`** browser islands.
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
 operations go through services → queries. All authorization goes through `authorize()` (except permission-free `getSettings()` reads on the render path, mirroring `collectionPublicRead`).

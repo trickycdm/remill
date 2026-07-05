@@ -1,5 +1,12 @@
 # remill — Platform & Knowledge Roadmap
 
+**Status: COMPLETE — 2026-07-05** (Tracks A, B, C all shipped and verified — 0 type / 0 lint /
+211 unit / 29/29 e2e ×2 on fresh D1 / build clean. The one open item is **Phase B5**, deferred by
+the 2026-07-05 re-plan as not needed by any acceptance flow — pick it up as its own piece of work.
+Commits: A1 8fa715b · A2 4e4f9fb · A3a b868d59 · A3b ff63552 · A4 5683a42 · A5 4f7c115 ·
+B1 6d560e0 · B2 8d48d98 · B3 159c795 · B4 9a5cd8c · C1 3b1f6ea · C2 0d12a20 · C3 07f28e4 ·
+verify 5bec702.)
+
 ## Context
 
 remill's storage-and-authorization **core** is excellent, but three of the user's
@@ -89,7 +96,7 @@ each phase.
 
 ---
 
-## TRACK A — Access legibility & management
+## TRACK A — Access legibility & management — DONE
 
 ### Phase A1 — Personas: `subtype` + persona-clear Access UI
 - **Migration:** add `principals.subtype TEXT` (nullable); `db:generate` + reviewed SQL
@@ -161,7 +168,7 @@ each phase.
 
 ---
 
-## TRACK B — Relational data & the knowledge graph
+## TRACK B — Relational data & the knowledge graph — DONE (B5 deferred)
 
 ### Phase B1 — Engine: multi-value index + relation field (the keystone)
 - **Engine change:** allow `toIndex` to return `Array<string|number>`
@@ -266,7 +273,7 @@ each phase.
 
 ---
 
-## TRACK C — Publish & connect (the render engine)
+## TRACK C — Publish & connect (the render engine) — DONE
 
 ### Phase C1 — Markdown→HTML renderer + field `ViewComponent`
 - **Renderer:** add a Workers-safe markdown renderer with **raw HTML disabled** +

@@ -113,6 +113,14 @@ Priority: **1** `getByRole` (buttons, links, headings, nav) → **2** `getByLabe
 XPath, and positional selectors are discouraged — brittle and they don't validate accessibility. New
 `data-testid`s use `<feature>-<element>` (e.g. `document-list`, `field-editor-body`).
 
+Two accessible-name traps in THIS codebase (each cost a failed run, 2026-07-05):
+
+- **`FormField` appends "(required)" to the accessible name** — `getByLabel('Name', { exact: true })`
+  misses a required field ("Name (required)"). Use an anchored regex: `getByLabel(/^Name/)`.
+- **Fixed-pool rows are numbered** (`Key for field 1` … `Key for field 12`, builder TD-10 idiom) —
+  non-exact `getByLabel('Key for field 1')` substring-matches fields 10–12 and trips strict mode.
+  Row-scoped aria-labels always take `{ exact: true }` (they carry no suffix, so exact is safe).
+
 ## Writing tests
 
 - Descriptive journey names (`'admin creates a collection and adds a text field'`), not technical

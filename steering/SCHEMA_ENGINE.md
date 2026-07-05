@@ -30,6 +30,10 @@ FieldType contract against all six surfaces before merging.
 - Per-collection **arbitrary-code hooks are banned** in v1. Common behaviors are declarative flags:
   `workflow.draftPublish`, slug config (`{ from: "title" }`), timestamps. If a behavior needs code,
   it belongs in a field type or the engine — never in collection data.
+- **Declarative flags live behind CLOSED Zod shapes.** `workflow` and `access` are validated by
+  `strictObject`s in the collections service (SEC-6) — a NEW flag is **rejected on write** until
+  `WORKFLOW_SCHEMA`/`ACCESS_SCHEMA` (and the `CollectionDefinition` type) are extended first. That
+  extension is step one of adding any flag, not an afterthought (B4 precedent).
 - **Lifecycle modes (B4).** `workflow` has three states: `{draftPublish: true}` (authored content —
   born draft, explicit publish step), absent/default (born published, publish/unpublish available),
   and `{lifecycle: 'none'}` (record-like data — born published, and the status column, status
