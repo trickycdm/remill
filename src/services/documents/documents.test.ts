@@ -110,6 +110,109 @@ describe('documents service — the save pipeline', () => {
     expect(after.map((r) => r.valueText)).toEqual(['doc_z9']);
   });
 
+  it('B2: read-expansion resolves {id, title, collection} — single, multi, dangling', async () => {
+    const AUTHORS: CollectionDefinition = {
+      slug: 'authors',
+      name: 'Authors',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+    };
+    const BOOKS: CollectionDefinition = {
+      slug: 'books',
+      name: 'Books',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'author', type: 'relation', config: { collection: 'authors' } },
+        { key: 'related', type: 'relation', config: { collection: 'books', multiple: true }, index: true },
+      ],
+    };
+    await collectionsService.createCollection(db, admin, AUTHORS, NOW);
+    await collectionsService.createCollection(db, admin, BOOKS, NOW);
+    const ada = await docs.createDocument(db, admin, 'authors', { name: 'Ada Lovelace' }, NOW);
+    const first = await docs.createDocument(db, admin, 'books', { title: 'Notes', author: ada.id }, NOW);
+    const sequel = await docs.createDocument(
+      db,
+      admin,
+      'books',
+      { title: 'Sequel', author: ada.id, related: [first.id, 'doc_gone'] },
+      NOW,
+    );
+
+    const read = await docs.getDocument(db, admin, 'books', sequel.id, NOW);
+    expect(read.relations?.author).toEqual({ id: ada.id, title: 'Ada Lovelace', collection: 'authors' });
+    expect(read.relations?.related).toEqual([
+      { id: first.id, title: 'Notes', collection: 'books' },
+      { id: 'doc_gone', title: null, collection: 'books' }, // dangling → graceful null
+    ]);
+    // data keeps the RAW ids — the write round-trip shape is untouched.
+    expect(read.data.author).toBe(ada.id);
+    expect(read.data.related).toEqual([first.id, 'doc_gone']);
+
+    const listed = await docs.listDocuments(db, admin, 'books', {}, NOW);
+    const row = listed.rows.find((r) => r.id === sequel.id);
+    expect(row?.relations?.author).toEqual({ id: ada.id, title: 'Ada Lovelace', collection: 'authors' });
+  });
+
+  it('B2: a configured titleField overrides the first-text-field default', async () => {
+    const TARGETS: CollectionDefinition = {
+      slug: 'targets',
+      name: 'Targets',
+      shape: 'collection',
+      fields: [
+        { key: 'code', type: 'text', required: true, index: true },
+        { key: 'display', type: 'text' },
+      ],
+    };
+    const SOURCES: CollectionDefinition = {
+      slug: 'sources',
+      name: 'Sources',
+      shape: 'collection',
+      fields: [
+        { key: 'name', type: 'text', required: true, index: true },
+        { key: 'target', type: 'relation', config: { collection: 'targets', titleField: 'display' } },
+      ],
+    };
+    await collectionsService.createCollection(db, admin, TARGETS, NOW);
+    await collectionsService.createCollection(db, admin, SOURCES, NOW);
+    const t = await docs.createDocument(db, admin, 'targets', { code: 'T-1', display: 'The One' }, NOW);
+    const s = await docs.createDocument(db, admin, 'sources', { name: 'S', target: t.id }, NOW);
+    const read = await docs.getDocument(db, admin, 'sources', s.id, NOW);
+    expect(read.relations?.target).toEqual({ id: t.id, title: 'The One', collection: 'targets' });
+  });
+
+  it('B2: expansion is permission-scoped — an unreadable target expands with title:null', async () => {
+    const SECRETS: CollectionDefinition = {
+      slug: 'secrets',
+      name: 'Secrets',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+      // NOT publicRead — the roleless reader below cannot read it.
+    };
+    const NOTES: CollectionDefinition = {
+      slug: 'notes',
+      name: 'Notes',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'about', type: 'relation', config: { collection: 'secrets' } },
+      ],
+      access: { publicRead: true }, // readable by anyone once published
+    };
+    await collectionsService.createCollection(db, admin, SECRETS, NOW);
+    await collectionsService.createCollection(db, admin, NOTES, NOW);
+    const secret = await docs.createDocument(db, admin, 'secrets', { name: 'Classified' }, NOW);
+    const note = await docs.createDocument(db, admin, 'notes', { title: 'N', about: secret.id }, NOW);
+
+    // Admin sees the resolved title…
+    const asAdmin = await docs.getDocument(db, admin, 'notes', note.id, NOW);
+    expect(asAdmin.relations?.about).toEqual({ id: secret.id, title: 'Classified', collection: 'secrets' });
+
+    // …the roleless reader sees the reference but NOT the gated title.
+    const asNobody = await docs.getDocument(db, nobody, 'notes', note.id, NOW);
+    expect(asNobody.relations?.about).toEqual({ id: secret.id, title: null, collection: 'secrets' });
+  });
+
   it('multi-valued relation: sort is rejected (non-deterministic across N rows)', async () => {
     const TEAMS: CollectionDefinition = {
       slug: 'teams',

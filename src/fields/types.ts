@@ -85,11 +85,23 @@ export interface FieldEditProps<Config = unknown, Value = unknown> {
   readonly signal: string;
 }
 
+/** What a referencing field's id(s) resolved to on the read path (B2): the
+ *  target's display title (null when dangling, unreadable, or untitled) plus
+ *  where it lives. Attached BESIDE data, never inside it — data keeps raw ids. */
+export interface ExpandedReference {
+  readonly id: string;
+  readonly title: string | null;
+  readonly collection: string;
+}
+
 export interface FieldCellProps<Config = unknown, Value = unknown> {
   readonly value: Value | undefined;
   /** The field's validated config — lets a cell render human labels (e.g. a
    *  `select`'s option label) rather than the raw stored value. */
   readonly config: Config;
+  /** The read path's expansion of a referencing field's value, when available
+   *  (list rows carry it; contexts without it fall back to the raw value). */
+  readonly expanded?: ExpandedReference | readonly ExpandedReference[];
 }
 
 /**
@@ -122,6 +134,12 @@ export interface FieldType<Config = unknown, Value = unknown> {
    *  subquery would pick an arbitrary row) — both enforced by the engine.
    *  Omit for always-scalar types. */
   readonly multiValued?: (cfg: Config) => boolean;
+
+  /** Declares that this field's value REFERENCES documents in another collection
+   *  (a `doc_…` id or id array). The documents read path batch-expands references
+   *  into `ExpandedReference`s attached beside data (B2). Return null when a
+   *  given config doesn't reference anything. Omit for non-referencing types. */
+  readonly references?: (cfg: Config) => { collection: string; titleField?: string } | null;
 
   /** transforms — Blogmill's fieldPreSave / preFieldRender, reborn. */
   readonly beforeSave?: (v: Value, ctx: SaveCtx) => Value | Promise<Value>;

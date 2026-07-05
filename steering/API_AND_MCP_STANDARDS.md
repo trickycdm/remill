@@ -58,6 +58,13 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   set exactly.
 - **publicRead**: a collection with `access.publicRead` allows the `anonymous` principal to GET
   **published** documents only. Drafts are never visible to anonymous, ever.
+- **Relation read-expansion (B2)**: document reads (get + list, REST and MCP alike) attach a
+  `relations` object BESIDE `data` — `{ [fieldKey]: { id, title, collection } | [...] }` — resolving
+  each referencing field's id(s) to the target's display title (`titleField` config, else the
+  target's first text/slug field). `data` keeps the raw ids so write round-trips are unaffected.
+  Titles are permission-gated: a dangling id or a target the reader cannot see expands with
+  `title: null` — never an error, and never a leak (the batch load applies the reader's compiled
+  filter in-query).
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
 - **Rate-limit headers** are stubbed in v1 (`X-RateLimit-*` present, not enforced). Wire real limits

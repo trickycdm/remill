@@ -9,7 +9,7 @@
  * document, its index, and its history never drift apart (DATABASE_STANDARDS.md).
  */
 
-import { and, eq, sql, desc, count, type SQL } from 'drizzle-orm';
+import { and, eq, sql, desc, count, inArray, type SQL } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { Database } from '@/db/client';
 import { documents, documentIndex, documentRevisions } from '@/db/schema';
@@ -201,6 +201,35 @@ export async function listDocuments(
 
   const totalRows = await db.select({ n: count() }).from(documents).where(baseWhere);
   return { rows: rows.map(toDomain), total: totalRows[0]?.n ?? 0 };
+}
+
+/** Batch-read documents by id within ONE collection, with the caller's compiled
+ *  access predicate applied in-query — ids the reader cannot see simply don't
+ *  come back (never post-filter). Used by relation read-expansion (B2). Chunked
+ *  to respect D1's per-statement bound-parameter budget. Witness required. */
+export async function getDocumentsByIds(
+  db: Database,
+  collection: string,
+  ids: readonly string[],
+  accessFilter: SQL | undefined,
+  _grant: Grant,
+): Promise<DocumentRecord[]> {
+  const CHUNK = 80;
+  const out: DocumentRecord[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const rows = await db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.collection, collection),
+          inArray(documents.id, [...ids.slice(i, i + CHUNK)]),
+          accessFilter,
+        ),
+      );
+    out.push(...rows.map(toDomain));
+  }
+  return out;
 }
 
 /** The next 1-based revision number for a document. */

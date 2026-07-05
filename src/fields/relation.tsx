@@ -69,6 +69,7 @@ export const relationField: FieldType<RelationConfig, string | string[]> = {
   valueSchema,
   toIndex: (v) => (Array.isArray(v) ? (v.length ? v : null) : (v ?? null)),
   multiValued: (cfg) => cfg.multiple === true,
+  references: (cfg) => ({ collection: cfg.collection, titleField: cfg.titleField }),
   beforeSave: (value, ctx) => {
     const cfg = (ctx.field.config ?? {}) as RelationConfig;
     if (!cfg.multiple) return value;
@@ -119,7 +120,20 @@ export const relationField: FieldType<RelationConfig, string | string[]> = {
       </FieldShell>
     );
   },
-  CellComponent: ({ value }) => {
+  CellComponent: ({ value, expanded }) => {
+    // With read-expansion available (B2), render resolved title links.
+    const refs = expanded ? (Array.isArray(expanded) ? expanded : [expanded]) : undefined;
+    if (refs?.length) {
+      return (
+        <span class="flex flex-wrap gap-x-2 gap-y-1">
+          {refs.map((r) => (
+            <a href={`/admin/c/${r.collection}/${r.id}`} class="text-accent-text hover:underline">
+              {r.title ?? r.id}
+            </a>
+          ))}
+        </span>
+      );
+    }
     if (Array.isArray(value)) {
       return value.length ? (
         <Badge>{value.length} linked</Badge>

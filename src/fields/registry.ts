@@ -63,6 +63,17 @@ export function isMultiValued(field: FieldDescriptor): boolean {
   return ft.multiValued(config as never);
 }
 
+/** What collection a DESCRIPTOR's value references (for read-expansion, B2),
+ *  or null for non-referencing fields. */
+export function referencesOf(
+  field: FieldDescriptor,
+): { collection: string; titleField?: string } | null {
+  const ft = REGISTRY.get(field.type);
+  if (!ft?.references) return null;
+  const config = ft.configSchema.parse(field.config ?? {});
+  return ft.references(config as never);
+}
+
 /**
  * Resolve a descriptor to its validated config and value validator. Throws if
  * the type is unknown or the config is invalid (bad definitions never reach the

@@ -12,8 +12,8 @@
 
 import { z } from 'zod';
 import type { Database } from '@/db/client';
-import type { CollectionDefinition, FieldDescriptor, SaveCtx } from '@/fields/types';
-import { resolveField, isMultiValued } from '@/fields/registry';
+import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference } from '@/fields/types';
+import { resolveField, isMultiValued, referencesOf } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
 import { getCollection } from '@/db/queries/collections';
 import { authorize, compileReadFilter, resolveAccess, type Principal } from '@/access';
@@ -24,11 +24,21 @@ import {
   NotFoundError,
   ConflictError,
   BadRequestError,
+  ForbiddenError,
   type ErrorDetails,
 } from '@/lib/errors';
 import type { DocumentRecord } from '@/db/queries/documents';
 
 export type { DocumentRecord } from '@/db/queries/documents';
+export type { ExpandedReference } from '@/fields/types';
+
+/** A read result: the raw document plus (when the collection has referencing
+ *  fields) the expansion of each reference into `{id, title, collection}`.
+ *  `relations` is a SIBLING of data — data keeps the raw ids, so round-trip
+ *  writes are unaffected (B2). */
+export type ExpandedDocument = DocumentRecord & {
+  readonly relations?: Readonly<Record<string, ExpandedReference | ExpandedReference[]>>;
+};
 
 async function loadCollection(db: Database, slug: string): Promise<CollectionDefinition> {
   const def = await getCollection(db, slug);
@@ -168,6 +178,94 @@ function initialStatus(def: CollectionDefinition): 'draft' | 'published' {
 }
 
 // ---------------------------------------------------------------------------
+// Relation read-expansion (B2)
+// ---------------------------------------------------------------------------
+
+/** The target's display-title field: the configured `titleField` when it exists
+ *  on the target, else the target's first text/slug field. */
+function pickTitleField(def: CollectionDefinition, configured?: string): string | undefined {
+  if (configured && def.fields.some((f) => f.key === configured)) return configured;
+  return def.fields.find((f) => f.type === 'text' || f.type === 'slug')?.key;
+}
+
+/**
+ * Expand every referencing field's id(s) into `{id, title, collection}`,
+ * batch-loading each target collection ONCE per call (no N+1). Titles are a
+ * permission-gated read: targets the reader cannot see — and dangling/deleted
+ * ids — expand with `title: null` (the raw ids were already visible in data;
+ * only the looked-up content is gated). Rows come back unchanged when the
+ * collection has no referencing fields.
+ */
+async function expandRelations(
+  db: Database,
+  principal: Principal,
+  def: CollectionDefinition,
+  rows: DocumentRecord[],
+  now: string,
+): Promise<ExpandedDocument[]> {
+  const refFields = def.fields
+    .map((field) => ({ field, ref: referencesOf(field) }))
+    .filter((x): x is { field: FieldDescriptor; ref: { collection: string; titleField?: string } } => x.ref !== null);
+  if (!refFields.length || !rows.length) return rows;
+
+  // Collect the referenced ids per target collection.
+  const wanted = new Map<string, Set<string>>();
+  for (const { field, ref } of refFields) {
+    const set = wanted.get(ref.collection) ?? new Set<string>();
+    wanted.set(ref.collection, set);
+    for (const row of rows) {
+      const v = row.data[field.key];
+      for (const id of Array.isArray(v) ? v : v == null ? [] : [v]) {
+        if (typeof id === 'string') set.add(id);
+      }
+    }
+  }
+
+  // Batch-load each target's READABLE docs (authorize + compiled filter — an
+  // unpublished target reads as title:null for a publicRead-only reader).
+  const loaded = new Map<string, { def: CollectionDefinition | null; docs: Map<string, DocumentRecord> }>();
+  for (const [target, ids] of wanted) {
+    const entry = { def: null as CollectionDefinition | null, docs: new Map<string, DocumentRecord>() };
+    loaded.set(target, entry);
+    if (!ids.size) continue;
+    entry.def = await getCollection(db, target);
+    if (!entry.def) continue; // target collection deleted → all titles null
+    try {
+      const resolved = await resolveAccess(db, principal.id, target);
+      const grant = await authorize(db, principal, 'read', { collection: target }, now, resolved);
+      const filter = await compileReadFilter(db, principal, target, now, resolved);
+      for (const doc of await dq.getDocumentsByIds(db, target, [...ids], filter, grant)) {
+        entry.docs.set(doc.id, doc);
+      }
+    } catch (e) {
+      // Reader can't read the target collection at all — expansion stays null.
+      if (!(e instanceof ForbiddenError)) throw e;
+    }
+  }
+
+  return rows.map((row) => {
+    const relations: Record<string, ExpandedReference | ExpandedReference[]> = {};
+    for (const { field, ref } of refFields) {
+      const v = row.data[field.key];
+      if (v == null) continue;
+      const entry = loaded.get(ref.collection);
+      const titleKey = entry?.def ? pickTitleField(entry.def, ref.titleField) : undefined;
+      const expand = (id: unknown): ExpandedReference => {
+        const target = typeof id === 'string' ? entry?.docs.get(id) : undefined;
+        const raw = target && titleKey ? target.data[titleKey] : undefined;
+        return {
+          id: String(id),
+          title: typeof raw === 'string' && raw.length ? raw : null,
+          collection: ref.collection,
+        };
+      };
+      relations[field.key] = Array.isArray(v) ? v.map(expand) : expand(v);
+    }
+    return Object.keys(relations).length ? { ...row, relations } : row;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Read
 // ---------------------------------------------------------------------------
 
@@ -177,11 +275,13 @@ export async function getDocument(
   collectionSlug: string,
   id: string,
   now: string,
-): Promise<DocumentRecord> {
+): Promise<ExpandedDocument> {
   const grant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
   const doc = await dq.getDocument(db, collectionSlug, id, grant);
   if (!doc) throw new NotFoundError('Document');
-  return doc;
+  const def = await loadCollection(db, collectionSlug);
+  const [expanded] = await expandRelations(db, principal, def, [doc], now);
+  return expanded;
 }
 
 export interface ListParams {
@@ -198,7 +298,7 @@ export interface ListParams {
 }
 
 export interface ListResult {
-  readonly rows: DocumentRecord[];
+  readonly rows: ExpandedDocument[];
   readonly total: number;
   readonly page: number;
   readonly pageSize: number;
@@ -248,13 +348,12 @@ export async function listDocuments(
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, params.pageSize ?? DEFAULT_PAGE_SIZE));
 
-  // Resolve filter/sort index kinds from the collection definition (COR-3): a
-  // number/boolean field indexes into value_num, everything else into value_text.
+  // The definition drives filter/sort index kinds (COR-3) and relation expansion.
+  const def = await loadCollection(db, collectionSlug);
   let filters: dq.ListFilter[] = [];
   let sort: dq.ListSort | undefined;
   const rawFilters = Object.entries(params.filters ?? {});
   if (rawFilters.length || params.sort) {
-    const def = await loadCollection(db, collectionSlug);
     filters = rawFilters.map(([fieldKey, value]) => {
       const field = assertIndexed(def, fieldKey, 'filter');
       const kind = indexKind(field);
@@ -294,7 +393,8 @@ export async function listDocuments(
   // A full page under the default sort implies there may be more → emit a cursor.
   const nextCursor =
     !sort && rows.length === pageSize ? encodeCursor(rows[rows.length - 1]) : undefined;
-  return { rows, total, page, pageSize, nextCursor };
+  const expanded = await expandRelations(db, principal, def, rows, now);
+  return { rows: expanded, total, page, pageSize, nextCursor };
 }
 
 export async function listRevisions(
