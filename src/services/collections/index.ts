@@ -17,7 +17,7 @@ import * as q from '@/db/queries/collections';
 import { authorize, type Principal } from '@/access';
 import { getPrincipalPermissions } from '@/db/queries/roles';
 import { InputValidationError, NotFoundError, ConflictError, ForbiddenError } from '@/lib/errors';
-import { RESERVED_FIELD_KEYS } from '@/config/constants';
+import { RESERVED_FIELD_KEYS, RESERVED_COLLECTION_SLUGS } from '@/config/constants';
 import type { ErrorDetails } from '@/lib/errors';
 
 const SLUG_RE = /^[a-z][a-z0-9-]*$/;
@@ -57,6 +57,11 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
 
   if (!SLUG_RE.test(input.slug)) {
     issues.push({ path: 'slug', message: 'Slug must be lowercase, start with a letter (a-z0-9-).' });
+  }
+  // A collection named after a static top-level route would be shadowed on the
+  // public surface (C2) — reject up front rather than 404 mysteriously later.
+  if ((RESERVED_COLLECTION_SLUGS as readonly string[]).includes(input.slug)) {
+    issues.push({ path: 'slug', message: `'${input.slug}' is a reserved path segment.` });
   }
   if (!input.name?.trim()) issues.push({ path: 'name', message: 'Name is required.' });
   if (input.shape !== 'collection' && input.shape !== 'singleton') {

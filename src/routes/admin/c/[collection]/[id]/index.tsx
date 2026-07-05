@@ -12,7 +12,7 @@ import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader } from '@/components/ui';
+import { PageHeader, Button } from '@/components/ui';
 import { GeneratedForm } from '@/components/admin/generated';
 import { EditorSidebar } from '@/components/admin/editor-sidebar';
 import { SharePanel } from '@/components/admin/share-panel';
@@ -63,6 +63,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           { label: docTitle },
         ]}
         title={docTitle}
+        actions={
+          <Button href={`/admin/c/${slug}/${id}/view`} variant="ghost" size="sm">
+            View
+          </Button>
+        }
       />
 
       <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">

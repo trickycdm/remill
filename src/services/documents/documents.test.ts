@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { documentIndex } from '@/db/schema';
 import * as collectionsService from '@/services/collections';
 import * as docs from '@/services/documents';
-import type { Principal } from '@/access';
+import { anonymousPrincipal, type Principal } from '@/access';
 import { seedRoles, makePrincipal } from '@/test/access';
 import type { CollectionDefinition } from '@/fields/types';
 import { InputValidationError, ConflictError, ForbiddenError, NotFoundError, BadRequestError } from '@/lib/errors';
@@ -152,6 +152,38 @@ describe('documents service — the save pipeline', () => {
     const listed = await docs.listDocuments(db, admin, 'books', {}, NOW);
     const row = listed.rows.find((r) => r.id === sequel.id);
     expect(row?.relations?.author).toEqual({ id: ada.id, title: 'Ada Lovelace', collection: 'authors' });
+  });
+
+  it('C2: getDocumentBySlug — anonymous resolves published publicRead docs only', async () => {
+    const PAGES: CollectionDefinition = {
+      slug: 'pages',
+      name: 'Pages',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'slug', type: 'slug', config: { from: 'title' }, unique: true, index: true },
+        { key: 'body', type: 'markdown' },
+      ],
+      workflow: { draftPublish: true },
+      access: { publicRead: true },
+    };
+    await collectionsService.createCollection(db, admin, PAGES, NOW);
+    const page = await docs.createDocument(db, admin, 'pages', { title: 'Hello World' }, NOW);
+    const anon = anonymousPrincipal('rest');
+
+    // Draft: invisible to anonymous (filter compiles to published-only)…
+    await expect(docs.getDocumentBySlug(db, anon, 'pages', 'hello-world', NOW)).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+    // …published: resolvable by its slug value.
+    await docs.setPublished(db, admin, 'pages', page.id, true, NOW);
+    const found = await docs.getDocumentBySlug(db, anon, 'pages', 'hello-world', NOW);
+    expect(found.id).toBe(page.id);
+
+    // A non-publicRead collection stays forbidden for anonymous (route → 404).
+    await expect(docs.getDocumentBySlug(db, anon, 'posts', 'anything', NOW)).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
   });
 
   it("B4: lifecycle 'none' — docs born published; publish/unpublish rejected", async () => {

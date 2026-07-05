@@ -469,6 +469,32 @@ export async function listDocuments(
   return { rows: expanded, total, page, pageSize, nextCursor };
 }
 
+/** Resolve a document by its indexed slug-field value (the public URL path,
+ *  C2). Reuses the GATED list path, so the caller's compiled filter applies —
+ *  anonymous readers resolve publicRead + published documents only. 404s when
+ *  the collection has no indexed slug field (id URLs still work). */
+export async function getDocumentBySlug(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  slugValue: string,
+  now: string,
+): Promise<ExpandedDocument> {
+  const def = await loadCollection(db, collectionSlug);
+  const slugField = def.fields.find((f) => f.type === 'slug' && f.index);
+  if (!slugField) throw new NotFoundError('Document');
+  const res = await listDocuments(
+    db,
+    principal,
+    collectionSlug,
+    { filters: { [slugField.key]: slugValue }, pageSize: 1 },
+    now,
+  );
+  const doc = res.rows[0];
+  if (!doc) throw new NotFoundError('Document');
+  return doc;
+}
+
 export async function listRevisions(
   db: Database,
   principal: Principal,

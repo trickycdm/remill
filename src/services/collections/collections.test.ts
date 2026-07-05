@@ -117,6 +117,14 @@ describe('collections service — definition validation', () => {
     );
   });
 
+  it('C2: rejects URL-reserved slugs (static route segments would shadow them)', async () => {
+    for (const slug of ['admin', 'api', 's', 'vendor']) {
+      await expect(svc.createCollection(db, admin, bad({ slug }), NOW)).rejects.toBeInstanceOf(
+        InputValidationError,
+      );
+    }
+  });
+
   it('rejects an unknown field type', async () => {
     await expect(
       svc.createCollection(db, admin, bad({ fields: [{ key: 'x', type: 'wormhole' }] }), NOW),
