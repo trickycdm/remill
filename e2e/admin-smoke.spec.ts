@@ -39,6 +39,26 @@ test.describe('Phase 1 — admin shell smoke + a11y', () => {
     await expect(html).toHaveAttribute('data-theme', after ?? '');
   });
 
+  test('user menu opens (disclosure) and signs out', async ({ page }) => {
+    await loginAsAdmin(page);
+    const trigger = page.locator('#rm-user-menu-trigger');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const menu = page.locator('#rm-user-menu');
+    await expect(menu.getByRole('menuitem', { name: /account settings/i })).toBeVisible();
+
+    // Escape closes it (window handler).
+    await page.keyboard.press('Escape');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    // Reopen and sign out via the menu → back to login.
+    await trigger.click();
+    await menu.getByRole('menuitem', { name: /sign out/i }).click();
+    await expect(page).toHaveURL(/\/admin\/login/);
+  });
+
   const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
   test('login page passes axe (WCAG 2.1 AA)', async ({ page }) => {

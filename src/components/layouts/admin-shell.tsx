@@ -34,6 +34,7 @@ import {
   Sun,
   Moon,
   LogOut,
+  ChevronDown,
 } from '@/components/ui';
 import { Wordmark } from '@/components/auth-shell';
 
@@ -97,9 +98,9 @@ export function AdminShell({
   return (
     <div
       class="min-h-dvh bg-canvas text-ink"
-      data-signals="{navOpen: false, theme: 'light'}"
+      data-signals="{navOpen: false, userMenuOpen: false, theme: 'light'}"
       data-init="$theme = document.documentElement.getAttribute('data-theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')"
-      data-on:keydown__window="evt.key === 'Escape' && ($navOpen = false)"
+      data-on:keydown__window="evt.key === 'Escape' && ($navOpen = false, $userMenuOpen = false)"
     >
       {/* Mobile drawer mechanics — scoped, robust, no Tailwind transform conflicts.
           Plain CSS (no <, >, & chars) so JSX text escaping is a no-op. */}
@@ -184,26 +185,72 @@ export function AdminShell({
 
           <div aria-hidden="true" class="mx-1 h-6 w-px bg-border" />
 
-          {/* Current user — name + role. */}
-          <div class="hidden min-w-0 flex-col items-end leading-tight sm:flex">
-            <span class="max-w-[12rem] truncate text-sm font-medium text-ink">{name}</span>
-            <Badge tone="neutral" class="mt-0.5 capitalize">
-              {user.role}
-            </Badge>
-          </div>
-
-          {/* Sign out. POSTs to /admin/logout — the route owner clears the session
-              and redirects (dsRedirect). Confirm the path if it differs. */}
-          <form method="post" action="/admin/logout" class="contents">
+          {/* User menu — a Datastar disclosure (not a modal): the trigger is the
+              user's name + chevron; the panel holds account + sign-out. Reuses the
+              shell's click-outside-backdrop + window-Escape idioms. Logout stays a
+              native form POST (the route redirects via dsRedirect). */}
+          <div class="relative">
             <button
-              type="submit"
+              type="button"
+              id="rm-user-menu-trigger"
+              aria-haspopup="menu"
+              aria-controls="rm-user-menu"
+              aria-expanded="false"
+              data-attr:aria-expanded="$userMenuOpen ? 'true' : 'false'"
+              data-on:click="$userMenuOpen = !$userMenuOpen"
               class="flex h-9 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-ink-muted transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
-              <LogOut class="size-[18px]" />
-              <span class="hidden md:inline">Sign out</span>
-              <span class="sr-only md:hidden">Sign out</span>
+              <span class="max-w-[10rem] truncate text-ink">{name}</span>
+              <ChevronDown class="size-4 shrink-0 transition-transform" data-class:rotate-180="$userMenuOpen" />
             </button>
-          </form>
+
+            {/* Click-outside catcher — transparent (a menu shouldn't dim the page). */}
+            <div
+              data-show="$userMenuOpen"
+              style="display:none"
+              data-on:click="$userMenuOpen = false"
+              aria-hidden="true"
+              class="fixed inset-0 z-30"
+            />
+
+            {/* Panel */}
+            <div
+              id="rm-user-menu"
+              role="menu"
+              aria-labelledby="rm-user-menu-trigger"
+              data-show="$userMenuOpen"
+              style="display:none"
+              class="rm-anim-rise absolute right-0 top-full z-40 mt-2 w-56 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg"
+            >
+              <div class="border-b border-border px-4 py-3">
+                <p class="truncate text-sm font-medium text-ink">{name}</p>
+                <p class="truncate font-mono text-xs text-ink-subtle">{user.email}</p>
+                <Badge tone="neutral" class="mt-1.5 capitalize">
+                  {user.role}
+                </Badge>
+              </div>
+              <div class="p-1">
+                <a
+                  href="/admin/account"
+                  role="menuitem"
+                  class="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-ink-muted transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <Settings class="size-[18px]" />
+                  Account settings
+                </a>
+                <form method="post" action="/admin/logout" class="contents">
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm text-ink-muted transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    <LogOut class="size-[18px]" />
+                    Sign out
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
         </header>
 
         <main id="main-content" class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:py-10">
