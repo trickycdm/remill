@@ -17,7 +17,7 @@ import type { Action, Principal, Resource } from '@/access/types';
 import { resourceKey } from '@/access/types';
 import { decide } from '@/access/permissions';
 import { appendAudit } from '@/db/queries/audit';
-import { getPrincipalPermissions, getPrincipalRoleSlugs } from '@/db/queries/roles';
+import { getPrincipalPermissions, getPrincipalRoleSlugs, type EffectivePermission } from '@/db/queries/roles';
 import { getApplicableGrants, getGrantedDocumentIds } from '@/db/queries/grants';
 import { getCollection } from '@/db/queries/collections';
 import { getDocumentMetaForAuth } from '@/db/queries/documents';
@@ -39,9 +39,35 @@ async function collectionPublicRead(db: Database, slug: string): Promise<boolean
   return def?.access?.publicRead === true;
 }
 
+/** The per-request access inputs shared by `authorize` and `compileReadFilter`:
+ *  the principal's effective permissions and the collection's publicRead flag. */
+export interface ResolvedAccess {
+  readonly permissions: readonly EffectivePermission[];
+  readonly publicRead: boolean;
+}
+
+/**
+ * Resolve `{permissions, publicRead}` for a principal + collection ONCE, so a read
+ * path (listDocuments) that calls both `authorize` and `compileReadFilter` doesn't
+ * resolve them twice (TD-3). Pass the result into both.
+ */
+export async function resolveAccess(
+  db: Database,
+  principalId: string,
+  collection: string,
+): Promise<ResolvedAccess> {
+  const [permissions, publicRead] = await Promise.all([
+    getPrincipalPermissions(db, principalId),
+    collectionPublicRead(db, collection),
+  ]);
+  return { permissions, publicRead };
+}
+
 /**
  * Authorize `principal` to perform `action` on `resource`. Writes an audit row
  * either way. Returns a Grant witness on allow; throws ForbiddenError on deny.
+ * Pass `preResolved` to reuse already-resolved permissions/publicRead (TD-3); it
+ * must be for `resource.collection`.
  */
 export async function authorize(
   db: Database,
@@ -49,9 +75,10 @@ export async function authorize(
   action: Action,
   resource: Resource,
   now: string,
+  preResolved?: ResolvedAccess,
 ): Promise<Grant> {
-  const permissions = await getPrincipalPermissions(db, principal.id);
-  const publicRead = await collectionPublicRead(db, resource.collection);
+  const permissions = preResolved?.permissions ?? (await getPrincipalPermissions(db, principal.id));
+  const publicRead = preResolved?.publicRead ?? (await collectionPublicRead(db, resource.collection));
 
   // For an item-level decision, resolve the document's status/owner if the caller
   // didn't supply them — otherwise the `own`/`published` conditions can't be
@@ -110,8 +137,9 @@ export async function compileReadFilter(
   principal: Principal,
   collection: string,
   now: string,
+  resolved?: ResolvedAccess,
 ): Promise<SQL | undefined> {
-  const permissions = await getPrincipalPermissions(db, principal.id);
+  const permissions = resolved?.permissions ?? (await getPrincipalPermissions(db, principal.id));
   const scope = principal.tokenScope;
   const scopeAllowsRead =
     !scope || scope.some((s) => s.action === 'read' && (s.collection === '*' || s.collection === collection));
@@ -125,7 +153,7 @@ export async function compileReadFilter(
   if (readPerms.some((p) => p.condition === null)) return undefined;
 
   const clauses: SQL[] = [];
-  const publicRead = await collectionPublicRead(db, collection);
+  const publicRead = resolved?.publicRead ?? (await collectionPublicRead(db, collection));
   if (publicRead || readPerms.some((p) => p.condition === 'published')) {
     clauses.push(sql`${documents.status} = 'published'`);
   }

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestD1 } from '@/test/d1';
 import { getDb, type Database } from '@/db/client';
-import { authorize, compileReadFilter, type Principal, type Action } from '@/access';
+import { authorize, compileReadFilter, resolveAccess, type Principal, type Action } from '@/access';
 import { Grant } from '@/access/grant';
+import { documents } from '@/db/schema';
 import { seedRoles, makePrincipal } from '@/test/access';
 import { recentAudit } from '@/db/queries/audit';
 import * as collectionsService from '@/services/collections';
@@ -162,6 +163,21 @@ describe('access control — the full model (Phase 3)', () => {
 
   it('compileReadFilter returns undefined for an unrestricted admin', async () => {
     expect(await compileReadFilter(db, admin, 'posts', NOW)).toBeUndefined();
+  });
+
+  it('TD-3: compileReadFilter is byte-identical with or without pre-resolved access', async () => {
+    // The read path now resolves {permissions, publicRead} once and threads it into
+    // both authorize() and compileReadFilter(). Prove the compiled predicate is
+    // unchanged whether or not the pre-resolved inputs are supplied.
+    const reader = await makePrincipal(db, NOW, { id: 'prn_rdr', role: 'reader' });
+    const resolved = await resolveAccess(db, reader.id, 'posts');
+
+    const filterUnresolved = await compileReadFilter(db, reader, 'posts', NOW);
+    const filterResolved = await compileReadFilter(db, reader, 'posts', NOW, resolved);
+
+    expect(filterUnresolved).toBeDefined(); // a reader IS restricted (not a no-op)
+    const render = (f: typeof filterUnresolved) => db.select().from(documents).where(f).toSQL();
+    expect(render(filterResolved)).toEqual(render(filterUnresolved));
   });
 
   it('audit — every allow and every deny is recorded with surface + principal', async () => {
