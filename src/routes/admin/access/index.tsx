@@ -218,14 +218,18 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         description="People, services, and agents — their roles and tokens, and the audit trail. Every actor is a first-class principal, least privilege by default."
       />
 
+      <div class="mb-8 flex flex-wrap gap-4 text-sm font-medium">
+        <a href="/admin/access/matrix" class="text-accent-text hover:underline">
+          Access overview (who can touch what) →
+        </a>
+        <a href="/admin/access/roles" class="text-accent-text hover:underline">
+          Manage roles →
+        </a>
+      </div>
+
       {/* Roles */}
       <section class="mb-10">
-        <div class="mb-3 flex items-baseline justify-between gap-4">
-          <h2 class="font-serif text-display-sm">Roles</h2>
-          <a href="/admin/access/roles" class="text-sm font-medium text-accent-text hover:underline">
-            Manage roles →
-          </a>
-        </div>
+        <h2 class="mb-3 font-serif text-display-sm">Roles</h2>
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {roles.map((r) => (
             <Card>

@@ -85,6 +85,19 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await expect(page.getByRole('button', { name: 'Delete' })).toBeVisible();
   });
 
+  test('access overview: the matrix shows principals and effective permissions', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/access');
+    await page.getByRole('link', { name: /Access overview/ }).click();
+    await expect(page).toHaveURL(/\/admin\/access\/matrix$/);
+
+    await expect(page.getByRole('heading', { name: 'Access overview' })).toBeVisible();
+    // The bootstrap admin appears in the matrix table (scoped — the name also shows
+    // in the top-bar user menu).
+    const matrix = page.getByRole('table').first();
+    await expect(matrix.getByText('Administrator')).toBeVisible();
+  });
+
   test('share: grant item-level access on a document, then revoke', async ({ page }) => {
     await loginAsAdmin(page);
 
@@ -193,11 +206,20 @@ test.describe('Phase 4 — schema builder + access UI', () => {
 
   test('axe: collections index, builder, and access pages pass WCAG 2.1 AA', async ({ page }) => {
     await loginAsAdmin(page);
-    for (const path of ['/admin/collections', '/admin/collections/new', '/admin/access', '/admin/access/roles', '/admin/settings']) {
+    for (const path of [
+      '/admin/collections',
+      '/admin/collections/new',
+      '/admin/access',
+      '/admin/access/roles',
+      '/admin/access/matrix',
+      '/admin/settings',
+    ]) {
       await page.goto(path);
-      await page.waitForLoadState('networkidle');
+      // Deterministic readiness: wait for the rendered main region rather than
+      // 'networkidle' (Playwright-discouraged; flaky once the suite grows).
+      await page.locator('#main-content').first().waitFor();
       const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
-      expect(r.violations, `axe on ${path}`).toEqual([]);
+      expect(r.violations, `axe on ${path}: ${r.violations.map((v) => v.id).join(',')}`).toEqual([]);
     }
   });
 });

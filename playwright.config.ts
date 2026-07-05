@@ -12,7 +12,10 @@ export default defineConfig({
   // collide on shared state (unique slugs, seeded rows). Correctness over speed.
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // One retry everywhere: the serial suite shares a single vite-dev server whose
+  // on-demand SSR compile can occasionally push a page load past a wait. A genuine
+  // failure still fails both attempts; this only absorbs the dev-server timing flake.
+  retries: 1,
   workers: 1,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'html',
 

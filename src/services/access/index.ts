@@ -179,6 +179,17 @@ export async function revokeItem(db: Database, principal: Principal, grantId: st
   await grantQ.revokeItemGrant(db, grantId);
 }
 
+/** Every item grant in the install (for the access overview). Requires install-wide
+ *  `manage_access`. */
+export async function listAllItemGrants(
+  db: Database,
+  principal: Principal,
+  now: string,
+): Promise<grantQ.ItemGrantRecord[]> {
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  return grantQ.listAllGrants(db);
+}
+
 /** List the item grants on a document (for the Share surface). Requires `manage_access`
  *  on that document — the same gate that grants/revokes them. */
 export async function listItemGrants(

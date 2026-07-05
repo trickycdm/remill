@@ -80,6 +80,12 @@ export async function getGrantedDocumentIds(
   return rows.map((r) => ({ documentId: r.documentId, actions: JSON.parse(r.actionsJson || '[]') as Action[] }));
 }
 
+/** Every item grant in the install (newest first) — for the access overview. */
+export async function listAllGrants(db: Database): Promise<ItemGrantRecord[]> {
+  const rows = await db.select().from(itemGrants).orderBy(itemGrants.createdAt);
+  return rows.map(toDomain);
+}
+
 /** All grants on a document (any subject), newest first — for the Share surface. */
 export async function listGrantsForDocument(db: Database, documentId: string): Promise<ItemGrantRecord[]> {
   const rows = await db
