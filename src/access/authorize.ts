@@ -111,6 +111,7 @@ export async function authorize(
         principal.id,
         await getPrincipalRoleSlugs(db, principal.id),
         now,
+        principal.linkId,
       )
     : [];
 
@@ -170,7 +171,7 @@ export async function compileReadFilter(
   }
 
   const roleSlugs = await getPrincipalRoleSlugs(db, principal.id);
-  const granted = await getGrantedDocumentIds(db, principal.id, roleSlugs, now);
+  const granted = await getGrantedDocumentIds(db, principal.id, roleSlugs, now, principal.linkId);
   const readableIds = granted.filter((g) => g.actions.includes('read')).map((g) => g.documentId);
   if (readableIds.length) clauses.push(inArray(documents.id, readableIds));
 

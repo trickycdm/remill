@@ -51,9 +51,15 @@ export function SharePanel({
           ) : (
             grants.map((g) => (
               <div class="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2">
-                <Badge tone={g.subjectKind === 'role' ? 'accent' : 'info'}>{g.subjectKind}</Badge>
+                <Badge tone={g.subjectKind === 'role' ? 'accent' : g.subjectKind === 'link' ? 'warning' : 'info'}>
+                  {g.subjectKind}
+                </Badge>
                 <span class="text-sm font-medium text-ink">
-                  {g.subjectKind === 'principal' ? (nameById.get(g.subjectId) ?? g.subjectId) : g.subjectId}
+                  {g.subjectKind === 'principal'
+                    ? (nameById.get(g.subjectId) ?? g.subjectId)
+                    : g.subjectKind === 'link'
+                      ? `link …${g.subjectId.slice(0, 8)}`
+                      : g.subjectId}
                 </span>
                 <span class="flex flex-wrap gap-1">
                   {g.actions.map((a) => (
@@ -109,6 +115,25 @@ export function SharePanel({
           </FormField>
           <Button type="submit" variant="secondary">
             Grant access
+          </Button>
+        </form>
+
+        {/* Share link (C3): grants READ to whoever holds the link — an outsider
+            needs no account. Plaintext shown once on the next page. */}
+        <form method="post" action={action} class="mt-5 flex flex-wrap items-end gap-3 border-t border-border pt-4">
+          <input type="hidden" name="op" value="link" />
+          <FormField
+            fieldId={`share-link-email-${id}`}
+            label="Share by link (optionally email it)"
+            description="Creates a read-only link anyone can open — no account needed. Email delivery is stubbed (logged, not sent)."
+          >
+            <Input id={`share-link-email-${id}`} name="email" type="email" placeholder="someone@example.com (optional)" />
+          </FormField>
+          <FormField fieldId={`share-link-expiry-${id}`} label="Expires (optional)">
+            <Input id={`share-link-expiry-${id}`} name="expiresAt" type="datetime-local" />
+          </FormField>
+          <Button type="submit" variant="secondary">
+            Create share link
           </Button>
         </form>
       </CardContent>

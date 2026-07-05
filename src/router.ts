@@ -44,6 +44,7 @@ import * as admin_settings_index from './routes/admin/settings';
 import * as api_collections_index from './routes/api/collections';
 import * as api_media from './routes/api/media';
 import * as media_id_index from './routes/media/[id]';
+import * as s_token_index from './routes/s/[token]';
 import * as admin_index from './routes/admin';
 import * as mcp from './routes/mcp';
 import * as index from './routes';
@@ -106,6 +107,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/api/collections', ...api_collections_index.onRequestPost);
 	app.post('/api/media', ...api_media.onRequestPost);
 	app.get('/media/:id', ...media_id_index.onRequestGet);
+	app.get('/s/:token', ...s_token_index.onRequestGet);
 	app.get('/:collection/:slug', ...collection_slug_index.onRequestGet);
 	app.get('/admin', ...admin_index.onRequestGet);
 	app.post('/mcp', ...mcp.onRequestPost);

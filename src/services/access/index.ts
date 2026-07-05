@@ -15,7 +15,7 @@ import * as principalQ from '@/db/queries/principals';
 import * as inviteQ from '@/db/queries/invites';
 import { getUserByEmail } from '@/db/queries/users';
 import { recentAudit } from '@/db/queries/audit';
-import { generateToken, hashToken } from '@/lib/token';
+import { generateToken, generateShareToken, hashToken } from '@/lib/token';
 import { hashPassword } from '@/lib/password';
 import type { PermissionSpec, RoleSpec } from '@/access/policy';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
@@ -177,6 +177,59 @@ export async function grantItem(
 export async function revokeItem(db: Database, principal: Principal, grantId: string, collection: string, documentId: string, now: string): Promise<void> {
   await authorize(db, principal, 'manage_access', { collection, documentId }, now);
   await grantQ.revokeItemGrant(db, grantId);
+}
+
+/**
+ * Create a SHARE LINK (C3): an item grant whose subject is the hashed link token
+ * (`subjectKind: 'link'`) — the same additive grant machinery as principals and
+ * roles, so expiry, revocation (the Share panel's revoke works unchanged), the
+ * access matrix, and audit all come free. Returns the plaintext token exactly
+ * once (API-token discipline); only its hash is stored.
+ */
+export async function createShareLink(
+  db: Database,
+  principal: Principal,
+  input: {
+    collection: string;
+    documentId: string;
+    actions: Action[];
+    expiresAt?: string;
+  },
+  now: string,
+): Promise<{ grantId: string; token: string }> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', { collection: input.collection, documentId: input.documentId }, now);
+  const bad = input.actions.filter((a) => !ACTIONS.includes(a));
+  if (bad.length) throw new InputValidationError(bad.map((a) => ({ path: 'actions', message: `Unknown action '${a}'.` })));
+  if (!input.actions.length) throw new InputValidationError([{ path: 'actions', message: 'Grant at least one action.' }]);
+  const token = generateShareToken();
+  const grantId = await grantQ.createItemGrant(
+    db,
+    {
+      subjectKind: 'link',
+      subjectId: await hashToken(token),
+      documentId: input.documentId,
+      actions: input.actions,
+      grantedBy: principal.id,
+      expiresAt: input.expiresAt ?? null,
+    },
+    now,
+  );
+  return { grantId, token };
+}
+
+/**
+ * Resolve a presented share-link token to its unexpired grant, or null for
+ * unknown/expired/revoked alike. Deliberately UN-GATED — the token IS the
+ * credential (invite-token precedent); the actual content read still runs
+ * through `authorize()` with the link identity on the principal.
+ */
+export async function resolveShareLink(
+  db: Database,
+  token: string,
+  now: string,
+): Promise<grantQ.ItemGrantRecord | null> {
+  return grantQ.findLinkGrantByHash(db, await hashToken(token), now);
 }
 
 /** Every item grant in the install (for the access overview). Requires install-wide

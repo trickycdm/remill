@@ -30,6 +30,12 @@ closes one of those, or a class like it. New code must comply; fix violations as
   `allowDangerousHtml`, and never render user/agent content with `dangerouslySetInnerHTML` except
   through this renderer or another escaping path. The `FieldView` fallback is escaped text — a
   field type must explicitly opt in to render markup.
+- **Share-link tokens follow API-token discipline (C3).** `rms_`-prefixed (never confusable with an
+  `rmk_` bearer key), 32 bytes of Web-Crypto entropy, SHA-256-hashed at rest (the hash is the
+  grant's `subjectId`), plaintext rendered exactly once at mint. Resolution returns the same null
+  for unknown/expired/revoked (no enumeration oracle), and consumption still runs through
+  `authorize()` — the token is a credential, not a bypass. Minting is human-only
+  (`refuseAgentEscalation`) and `manage_access`-gated per document.
 
 ## 1. Whitelist validation on EVERY write path (the anti-mass-assignment rule)
 

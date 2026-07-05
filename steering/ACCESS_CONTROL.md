@@ -39,12 +39,21 @@
      Never arbitrary code. Extending it requires a decision-log entry.
    - Role *assignments* are collection-scopable: `(principal, role, collection | *)` —
      "editor, but only of posts."
-2. **Item grants** — per-document tuples `(principal | role, document_id, actions, granted_by,
-   expires_at?)`. Precision layer: "agent `researcher` may `update` document X until Friday."
-   Surfaced (Share) on all three doors: the document edit view's **Share panel** (managers only —
-   install-wide `manage_access`), the REST `/api/c/:collection/:id/grants` endpoint (GET/POST/DELETE),
-   and the generated MCP `share_<slug>` tool (visible only with `manage_access`). All route through
-   `grantItem`/`revokeItem`/`listItemGrants`, each `authorize('manage_access', {collection, documentId})`-gated.
+2. **Item grants** — per-document tuples `(principal | role | link, document_id, actions,
+   granted_by, expires_at?)`. Precision layer: "agent `researcher` may `update` document X until
+   Friday." Surfaced (Share) on all three doors: the document edit view's **Share panel** (managers
+   only — install-wide `manage_access`), the REST `/api/c/:collection/:id/grants` endpoint
+   (GET/POST/DELETE), and the generated MCP `share_<slug>` tool (visible only with `manage_access`).
+   All route through `grantItem`/`revokeItem`/`listItemGrants`, each
+   `authorize('manage_access', {collection, documentId})`-gated.
+   - **`link` subjects are SHARE LINKS (C3):** `subjectId` is the SHA-256 hash of an `rms_…` token
+     (plaintext shown once at mint; `createShareLink`, human-only via `refuseAgentEscalation`). The
+     public `/s/:token` route resolves the hash to the grant and reads through the SAME
+     `authorize()` path, with the link identity carried as `Principal.linkId` — an EXPLICIT match
+     branch in the grant queries, never disguised as a principal id, so the matrix and audit stay
+     honest. Expiry and revocation are the ordinary item-grant mechanics; unknown/expired/revoked
+     all resolve identically (no enumeration oracle). A link grants its one document and nothing
+     else — additive, like every grant.
 
 There are **no negative rules**. If you can't express a policy additively, the policy is wrong for
 this system — do not add deny rules.

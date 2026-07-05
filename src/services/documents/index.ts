@@ -16,7 +16,7 @@ import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference 
 import { resolveField, isMultiValued, referencesOf } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
 import { getCollection, listCollections as listCollectionDefs } from '@/db/queries/collections';
-import { authorize, compileReadFilter, resolveAccess, type Principal } from '@/access';
+import { authorize, compileReadFilter, resolveAccess, anonymousPrincipal, type Principal } from '@/access';
 import { newId } from '@/lib/id';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
@@ -493,6 +493,26 @@ export async function getDocumentBySlug(
   const doc = res.rows[0];
   if (!doc) throw new NotFoundError('Document');
   return doc;
+}
+
+/**
+ * Read the document a resolved SHARE-LINK grant points at (C3), as an anonymous
+ * principal carrying the link identity — the read still runs through
+ * `authorize()`, which matches the link grant like any other grant. Returns the
+ * definition too (the share page renders through DocumentView). Throws
+ * NotFound/Forbidden for a dangling target or a grant without `read`.
+ */
+export async function getSharedDocument(
+  db: Database,
+  linkGrant: { documentId: string; subjectId: string },
+  now: string,
+): Promise<{ doc: ExpandedDocument; def: CollectionDefinition }> {
+  const collection = await dq.getDocumentCollection(db, linkGrant.documentId);
+  if (!collection) throw new NotFoundError('Document');
+  const principal: Principal = { ...anonymousPrincipal('rest'), linkId: linkGrant.subjectId };
+  const doc = await getDocument(db, principal, collection, linkGrant.documentId, now);
+  const def = await loadCollection(db, collection);
+  return { doc, def };
 }
 
 export async function listRevisions(

@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { documentIndex } from '@/db/schema';
 import * as collectionsService from '@/services/collections';
 import * as docs from '@/services/documents';
+import { createShareLink, resolveShareLink, revokeItem } from '@/services/access';
 import { anonymousPrincipal, type Principal } from '@/access';
 import { seedRoles, makePrincipal } from '@/test/access';
 import type { CollectionDefinition } from '@/fields/types';
@@ -152,6 +153,48 @@ describe('documents service — the save pipeline', () => {
     const listed = await docs.listDocuments(db, admin, 'books', {}, NOW);
     const row = listed.rows.find((r) => r.id === sequel.id);
     expect(row?.relations?.author).toEqual({ id: ada.id, title: 'Ada Lovelace', collection: 'authors' });
+  });
+
+  it('C3: a share link grants an outsider read of a NON-public doc; expiry + revoke honored', async () => {
+    // posts is not publicRead and this doc stays a draft — maximally private.
+    const doc = await docs.createDocument(db, admin, 'posts', { title: 'Secret Note' }, NOW);
+    await expect(
+      docs.getDocument(db, anonymousPrincipal('rest'), 'posts', doc.id, NOW),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    const { grantId, token } = await createShareLink(
+      db,
+      admin,
+      { collection: 'posts', documentId: doc.id, actions: ['read'] },
+      NOW,
+    );
+    expect(token.startsWith('rms_')).toBe(true); // never mistakable for an API key
+
+    // Token → grant → gated read as the link-carrying anonymous principal.
+    const grant = await resolveShareLink(db, token, NOW);
+    expect(grant?.documentId).toBe(doc.id);
+    const shared = await docs.getSharedDocument(db, grant!, NOW);
+    expect(shared.doc.id).toBe(doc.id);
+    expect(shared.def.slug).toBe('posts');
+
+    // The link identity adds ONE document — a different doc stays forbidden.
+    const other = await docs.createDocument(db, admin, 'posts', { title: 'Other' }, NOW);
+    await expect(
+      docs.getDocument(db, { ...anonymousPrincipal('rest'), linkId: grant!.subjectId }, 'posts', other.id, NOW),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // Unknown, expired, and revoked all resolve to the same null (no oracle).
+    expect(await resolveShareLink(db, 'rms_garbage', NOW)).toBeNull();
+    const { token: shortLived } = await createShareLink(
+      db,
+      admin,
+      { collection: 'posts', documentId: doc.id, actions: ['read'], expiresAt: '2026-07-04T13:00:00Z' },
+      NOW,
+    );
+    expect(await resolveShareLink(db, shortLived, NOW)).not.toBeNull();
+    expect(await resolveShareLink(db, shortLived, '2026-07-04T14:00:00Z')).toBeNull();
+    await revokeItem(db, admin, grantId, 'posts', doc.id, NOW);
+    expect(await resolveShareLink(db, token, NOW)).toBeNull();
   });
 
   it('C2: getDocumentBySlug — anonymous resolves published publicRead docs only', async () => {

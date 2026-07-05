@@ -99,6 +99,18 @@ export async function getSingletonData(
   return r ? (JSON.parse(r.dataJson || '{}') as Record<string, unknown>) : null;
 }
 
+/** The collection a document lives in, by id — metadata only, NO witness (the
+ *  share-link route needs the collection to route the gated read; content never
+ *  flows through here — getDocumentMetaForAuth precedent). */
+export async function getDocumentCollection(db: Database, id: string): Promise<string | null> {
+  const rows = await db
+    .select({ collection: documents.collection })
+    .from(documents)
+    .where(eq(documents.id, id))
+    .limit(1);
+  return rows[0]?.collection ?? null;
+}
+
 /** Read one document by id (scoped to a collection). Witness required. */
 export async function getDocument(
   db: Database,
