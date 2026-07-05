@@ -1,8 +1,8 @@
 # Testing & Verification
 
-> **STATUS: TARGET.** No test suite exists yet. The runner (**Vitest 3**) and the D1 harness land in
-> Phase 1; the schema-engine and access-control property tests land with their phases (2 and 3). These
-> rules govern every test written from the first one on.
+> **STATUS: IMPLEMENTED (in force).** **Vitest 3** + the D1 harness are live with a green suite
+> (`bun run test:run`); the schema-engine and access-control tests are in place. These rules govern
+> every test written.
 
 Write the test, prove it works, then check the diff before declaring victory. These three are one
 continuous discipline. **Every task in the plan carries a runnable verification** — the phase

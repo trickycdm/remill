@@ -1,9 +1,9 @@
 # Accessibility Standards
 
-> **STATUS: TARGET.** Target **WCAG 2.1 AA**. Every admin component and page meets these from the day
-> it is built (Phase 1 shell, Phase 4 generated surfaces). The axe sweep lands with the admin (Phase 4).
-> Concrete colour tokens live in `tailwind.css` `@theme` and are documented in DESIGN_SYSTEM.md — this
-> doc never restates hex values.
+> **STATUS: IMPLEMENTED (standing standard).** Target **WCAG 2.1 AA**. Every admin component and page
+> meets these from the day it is built; the axe sweep runs in e2e (`bun run e2e`). Concrete colour
+> tokens live in `tailwind.css` `@theme` and are documented in DESIGN_SYSTEM.md — this doc never
+> restates hex values.
 
 The admin is a designed product used daily, and its surfaces are **generated** from field descriptors —
 so accessibility is enforced at the primitive level (`Button`, `Input`, `Table`, `Drawer`, field

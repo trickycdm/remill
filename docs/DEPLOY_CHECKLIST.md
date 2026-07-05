@@ -19,7 +19,8 @@
 ## Database migration + seed
 
 - [ ] **Apply migrations remotely** — `bun run db:migrate:remote`. Includes `0003` (DB-backed `unique`
-      enforcement: `unique_key` column + partial unique indexes).
+      enforcement: `unique_key` column + partial unique indexes), `0004` (`principals.subtype` persona
+      column + backfill), and `0005` (`invite_tokens` — single-use, expiring set-password links).
 - [ ] **Seed system data** — `bun run db:seed:remote` (roles/permissions + protected `settings`/`media`
       collections). Contains NO credentials (safe for prod, C1).
 - [ ] **Bootstrap the first admin (C1)** — out of band, NOT via the seed:

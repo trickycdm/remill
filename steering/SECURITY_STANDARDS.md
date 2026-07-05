@@ -1,8 +1,10 @@
 # Security Standards
 
-> **STATUS: TARGET.** remill has no code yet. These standards bind every line written from Phase 1 on.
-> The Blogmill holes named below are the reason each rule exists — remill's mandate is to make them
-> *structurally impossible*, not merely avoided (success criterion §5 of the plan).
+> **STATUS: IMPLEMENTED (in force).** The built system enforces these standards — sessions + scrypt,
+> hashed scope-masked tokens, the one whitelist-validated pipeline, and the invite flow (single-use
+> expiring set-password tokens + the console `EmailTransport` stub) are live code. The Blogmill holes
+> named below are the reason each rule exists — remill's mandate is to make them *structurally
+> impossible*, not merely avoided (success criterion §5 of the brief).
 
 remill descends from Blogmill, whose implementation shipped real security holes: **mass assignment of
 the whole request body**, unescaped SQL identifiers, and a shared weak signing secret. Every rule here

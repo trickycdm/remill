@@ -1,22 +1,31 @@
 # Project Brief — remill
 
-> Descriptive reference (the *what* and *why*), distilled from the build plan §1. For prescriptive
-> rules see `steering/`; for the full plan see `plans/2026-07-04-cms-foundation/plan.md`.
+> Descriptive reference (the *what* and *why*) — the whole-system overview a fresh session should
+> read first. For prescriptive rules see `steering/`; for decision history see
+> `docs/TECH_DECISIONS.md`; for the active build plan see
+> `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`.
 
 ## What we are building
 
-A **single-tenant, lightweight, agent-native CMS** that runs on one Cloudflare Worker. It manages any
-type of content — text, images, video, audio, and arbitrary structured records — and exposes that
-content three ways:
+A **single-tenant, lightweight, agent-native headless data platform** that runs on one Cloudflare
+Worker. It manages any structured data — text, images, video, audio, arbitrary records, and the
+**relations between them** — and can **publish and securely share** that knowledge. Content is
+exposed four ways:
 
 1. A **styled management interface** (server-rendered, Datastar-driven) — a designed product, not a
    generated admin.
 2. A **JSON REST API** for programmatic and headless consumption.
-3. An **MCP server**, so AI agents are first-class clients: they can read, write, publish, and even
-   define new content types.
+3. An **MCP server**, so AI agents are first-class clients: they can read, write, publish, share,
+   and even define new content types.
+4. **Rendered public pages** *(in progress — roadmap Track C)*: published documents in public-read
+   collections served as sanitized HTML at `/{collection}/{slug}`, relations rendered as navigable
+   links; plus scoped **share links** that grant an outsider read access to a single non-public item.
 
-The public-facing website is **out of scope for v1**. The CMS is headless-first; a rendering/theme
-layer can be added later as just another API consumer.
+The system began as a v1 CMS (foundation complete and verified). It is being extended — almost
+entirely additively — into a general data platform along three tracks: **A. access legibility**
+(shipped), **B. relational data & the knowledge graph**, **C. publish & connect**. The secure core
+(one `authorize()` decision point, compile-time `Grant` witnesses, append-only audit, hashed scoped
+tokens) is preserved untouched.
 
 ## Why it exists — the Blogmill lineage
 
@@ -50,6 +59,10 @@ agent-bolted-on.
   their own identities, least-privilege roles, and audit trails — not users of a shared API key.
 - **Schema-driven everywhere**: if a feature can't be generated from the collection definition, question
   whether it belongs.
+- **Legible access**: every principal, role, grant, and token scope is visible and manageable in the
+  product — the access matrix answers "who/what can touch what" at a glance.
+- **Connected knowledge** *(Track B)*: records reference records via `relation` fields indexed as
+  first-class edges; backlinks make the graph traversable from every surface.
 - **Designed, not generated-looking**: the admin has a real visual identity, design tokens, and an owned
   component library.
 
@@ -64,19 +77,51 @@ agent-bolted-on.
 | 5 | REST API + OpenAPI | field `jsonSchema` |
 | 6 | MCP tools | field `jsonSchema` + collection labels |
 
-## Access model in one paragraph
+Track C adds a **render seam** to the same contract: an optional field `ViewComponent` (default: safe
+escaped text) drives read-only detail views and the public HTML pages — the seventh consumer of the
+one definition, not a parallel system.
 
-Every actor — human or agent — is a **principal**. Humans authenticate with sessions, agents with
-bearer tokens; both resolve to a principal before any authorization decision. Authorization is
-**default-deny, additive-only**: data-defined **roles** (RBAC, scoped assignments, a tiny closed
-condition enum) plus per-document **item grants**. One decision point (`authorize()`), enforced by
-witness types and SQL-compiled list filters so bypass is a compile error and paginated lists can't leak.
-Everything — every allow and every deny — is audited with principal, token, and surface.
+## Access model in two paragraphs
 
-## Non-goals (v1)
+Every actor — human or agent — is a **principal**. Security rides on `kind` (`user` = human session
+auth, `agent` = machine bearer token); a display-level **persona** (`subtype`: Person / Service /
+Agent) distinguishes humans, data-pulling systems, and AI agents in the UI without weakening the
+kind-based rules. Humans are invited through the product (single-use, expiring set-password links;
+email delivery is a console-logging stub until a provider is wired). Machine principals get hashed,
+scope-masked tokens — scopable per collection × action from the admin.
 
-Multi-tenancy/multi-site; public site rendering/themes; a plugin system; field-level access control
-(hook point reserved); localization/i18n; webhooks; realtime collaboration; video transcoding.
+Authorization is **default-deny, additive-only**: data-defined **roles** (RBAC, scoped assignments, a
+tiny closed condition enum — custom roles manageable in the admin) plus per-document **item grants**
+with optional expiry, managed from each document's Share panel (admin, REST `/grants`, MCP
+`share_<slug>`). One decision point (`authorize()`), enforced by witness types and SQL-compiled list
+filters so bypass is a compile error and paginated lists can't leak. The consolidated matrix at
+`/admin/access/matrix` shows effective permissions (principal × collection), token scopes, and active
+item grants. Everything — every allow and every deny — is audited with principal, token, and surface.
+
+## Current state & direction
+
+- **Foundation (phases 0–7): complete and verified** — the six surfaces, media pipeline, sessions +
+  tokens, the access engine, MCP endpoint (decision D18).
+- **Track A (access legibility): shipped** — personas, invite-a-person, custom-role CRUD,
+  per-collection token scoping, item-grant Share surface, the access matrix, and removal of the dead
+  per-collection access map (`publicRead` is the only collection-level access knob).
+- **Track B (relational data & the graph): next** — `relation` field type + multi-value indexing,
+  relation read-expansion on all surfaces, backlinks, per-collection lifecycle opt-out
+  (`lifecycle: 'none'` for record-like data that isn't draft/published), `repeater`/`object`
+  composites (deferred until after Track C).
+- **Track C (publish & connect)** — sanitized markdown→HTML rendering via `ViewComponent`, public
+  pages at `/{collection}/{slug}`, share links (`item_grants` with `subjectKind='link'`), email-share
+  via the stubbed transport.
+
+The roadmap with per-phase detail: `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`
+(+ `worklog.md` for what's landed).
+
+## Non-goals (current)
+
+Multi-tenancy/multi-site; a theme/template *system* (public pages are one owned layout, not a
+pluggable theme engine); a plugin system; field-level access control (hook point reserved);
+localization/i18n; webhooks; realtime collaboration; video transcoding; real email provider
+integration (transport is stubbed by decision D20 — logs, never sends).
 
 ## Success criteria
 
@@ -91,3 +136,9 @@ Multi-tenancy/multi-site; public site rendering/themes; a plugin system; field-l
 6. A least-privilege agent can draft but not publish; every action and denial is attributed in the
    audit log to that agent's principal, token, and surface.
 7. A fresh agent session, reading only steering, produces convention-conformant code on the first try.
+8. *(Track B)* Documents reference documents; the graph is traversable — backlinks — from admin, REST,
+   and MCP, respecting the reader's permissions.
+9. *(Track C)* A published document in a public-read collection renders as sanitized HTML at a public
+   URL with relations as working links; drafts and non-public collections 404 anonymously.
+10. *(Track C)* A share link grants an outsider scoped read of one non-public item; expiry and
+    revocation are honored; "share by email" logs through the stubbed transport.

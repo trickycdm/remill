@@ -1,8 +1,10 @@
 # remill
 
-A **single-tenant, lightweight, agent-native CMS** on Cloudflare Workers. It manages any content type
-— text, images, video, audio, structured records — and exposes it three ways: a styled Datastar SSR
-**admin**, a **JSON REST API**, and an **MCP server** where AI agents are first-class clients.
+A **single-tenant, lightweight, agent-native headless data platform** (grown from a CMS foundation)
+on Cloudflare Workers. It manages any structured data — text, images, video, audio, records, and the
+relations between them — and exposes it three ways: a styled Datastar SSR **admin**, a **JSON REST
+API**, and an **MCP server** where AI agents are first-class clients. (Roadmap Track C adds a fourth:
+rendered public pages + share links.)
 
 > **Before editing — read the relevant standard.** This file is a thin architectural map. Prescriptive
 > standards live in [`steering/`](steering); descriptive reference lives in [`docs/`](docs). The
@@ -11,10 +13,14 @@ A **single-tenant, lightweight, agent-native CMS** on Cloudflare Workers. It man
 
 > **Build status.** All 8 phases (0–7) of
 > [`plans/2026-07-04-cms-foundation/plan.md`](plans/2026-07-04-cms-foundation/plan.md) are **complete and
-> verified** (0 type errors, 0 lint, 66 unit + 16 e2e green, build OK). The `src/**` structure below is
-> real, not aspirational. Two logged deviations: media uses a dedicated `media` table (not the documents
-> pipeline); MCP is a direct streamable-HTTP JSON-RPC endpoint, not an `agents`-SDK DO (decision D18).
-> Each steering doc carries its own STATUS header; the worklog has the step-by-step record.
+> verified**, and **Track A of the platform roadmap has shipped** (access legibility: personas, invite
+> a person, custom-role CRUD, per-collection token scoping, item-grant Share surface, the access matrix
+> at `/admin/access/matrix`). The `src/**` structure below is real, not aspirational. Two logged
+> deviations: media uses a dedicated `media` table (not the documents pipeline); MCP is a direct
+> streamable-HTTP JSON-RPC endpoint, not an `agents`-SDK DO (decision D18). **Active work:** Tracks B
+> (relations/graph) and C (publish/share) of
+> [`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md).
+> Each steering doc carries its own STATUS header; the worklogs have the step-by-step record.
 
 ## The one idea
 
@@ -42,7 +48,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   **CodeMirror 6** markdown island and **Uppy** uploads — `src/client/init.ts` is an empty stub and
   the markdown/tags/media widgets are plain inputs in v1.
 
-## Architecture (TARGET layout)
+## Architecture
 
 ```
   Browser (admin) ─▶ /admin/**   Datastar SSR management UI
@@ -66,11 +72,15 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **Fields** `src/fields/` — the FieldType registry; one module per type. The most important interface
   in the codebase (SCHEMA_ENGINE.md).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
-  (ACCESS_CONTROL.md).
+  (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
+  invite a person via `users.tsx`, custom roles, token scoping, the `matrix/` overview); item-grant
+  sharing via `src/components/admin/share-panel.tsx`, the `/api/c/:collection/:id/grants` route, and
+  the MCP `share_<slug>` tools; public invite consumption at `src/routes/auth/set-password/[token].tsx`.
 - **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
   module owning the MCP protocol surface (decision D18).
-- **`src/lib/`** errors/validation/auth/logging/datastar-response; **`src/components/`** Hono JSX;
-  **`src/client/`** browser islands (CodeMirror, Uppy).
+- **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
+  Person/Service/Agent display persona), `email/` (`EmailTransport` + console stub — logs, never
+  sends); **`src/components/`** Hono JSX; **`src/client/`** browser islands (CodeMirror, Uppy).
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
 operations go through services → queries. All authorization goes through `authorize()` (except permission-free `getSettings()` reads on the render path, mirroring `collectionPublicRead`).
@@ -85,7 +95,7 @@ tokens, roles, and audit trail — never shared keys. Default-deny, additive-onl
 See [`steering/SECURITY_STANDARDS.md`](steering/SECURITY_STANDARDS.md) and
 [`steering/ACCESS_CONTROL.md`](steering/ACCESS_CONTROL.md).
 
-## Commands (TARGET — wired in Phase 1)
+## Commands
 
 ```bash
 bun run dev          # regenerate routes + Vite dev (Workers emulation)
@@ -123,6 +133,7 @@ When a rule here conflicts with existing code, flag it — the doc is usually ri
 
 ## Reference Documentation
 
-Background context in `docs/`, read on demand: `docs/PROJECT_BRIEF.md` (scope, the six surfaces, the
-Blogmill lineage) and `docs/TECH_DECISIONS.md` (the D1–D17 decision log). The full build plan and its
-worklog live in `plans/2026-07-04-cms-foundation/`.
+Background context in `docs/`, read on demand: `docs/PROJECT_BRIEF.md` (the whole-system overview —
+scope, the six surfaces, the Blogmill lineage, current state & direction) and `docs/TECH_DECISIONS.md`
+(the D1–D23 decision log). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
+the **active roadmap** (Tracks A–C) in `plans/2026-07-05-platform_knowledge_publishing_roadmap/`.

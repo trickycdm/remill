@@ -1,8 +1,8 @@
 # Coding Conventions
 
-> **STATUS: TARGET.** remill has no application code yet. The paths below (`src/services/`,
-> `src/db/queries/`, …) are the conventions to follow *when you write that code* — land in Phase 1
-> onward. The rules themselves are in force from the first line committed.
+> **STATUS: IMPLEMENTED (in force).** The full `src/**` layout exists and follows these conventions;
+> the paths below (`src/services/`, `src/db/queries/`, …) are real. The rules bind every
+> TypeScript/TSX change.
 
 The rules every TypeScript/TSX change must follow. remill is a **single standalone package** — not a
 monorepo. There is no turbo, no workspaces, no `surfaces/`; one `package.json` at the repo root, one

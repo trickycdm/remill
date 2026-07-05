@@ -65,8 +65,9 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
 
 ## MCP server (Phase 7)
 
-`McpAgent` (Cloudflare `agents` SDK) on a Durable Object, streamable HTTP at `/mcp`, authenticated
-with the **same bearer tokens** as REST.
+A direct streamable-HTTP JSON-RPC endpoint at `/mcp` (`src/mcp/handler.ts` + `tools.ts` — decision
+**D18**; not an `agents`-SDK `McpAgent` on a Durable Object), authenticated with the **same bearer
+tokens** as REST.
 
 - **Tools are generated per collection** from field descriptors (surface 6), not hand-listed:
   - Per collection: `list_<slug>`, `get_<slug>`, `create_<slug>`, `update_<slug>`, `publish_<slug>`,

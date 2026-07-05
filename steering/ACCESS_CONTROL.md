@@ -1,12 +1,14 @@
 # Access Control
 
-> **STATUS: IMPLEMENTED (Phase 3).** The choke point + `Grant` witness + audit landed in Phase 2
-> ("born authorized"); the full model — roles-as-data, scoped assignments, item grants with expiry,
-> token scope masks, conditions `own`/`published`, publicRead sugar, and SQL-compiled list filters —
-> landed in Phase 3. Code: `src/access/` (decision), `src/db/queries/roles.ts` + `grants.ts`,
-> `src/services/access/` (management). Seeded roles: `src/access/policy.ts` (mirrored in `seed.sql`).
-> Default-deny, additive-only, one decision point, everything audited. Expressiveness is deliberately
-> traded for auditability (decision D16).
+> **STATUS: IMPLEMENTED (Phase 3 engine + Track A management surfaces).** The choke point + `Grant`
+> witness + audit landed in Phase 2 ("born authorized"); the full model — roles-as-data, scoped
+> assignments, item grants with expiry, token scope masks, conditions `own`/`published`, publicRead
+> sugar, and SQL-compiled list filters — landed in Phase 3. Track A added the management UI: personas,
+> invite-a-person, custom-role CRUD, per-collection token scoping, the Share panel, and the access
+> matrix. Code: `src/access/` (decision), `src/db/queries/roles.ts` + `grants.ts`,
+> `src/services/access/` (management), `src/routes/admin/access/**` (UI). Seeded roles:
+> `src/access/policy.ts` (mirrored in `seed.sql`). Default-deny, additive-only, one decision point,
+> everything audited. Expressiveness is deliberately traded for auditability (decision D16).
 
 ## Principals: humans and agents are the same kind of actor
 
@@ -46,6 +48,11 @@
 
 There are **no negative rules**. If you can't express a policy additively, the policy is wrong for
 this system — do not add deny rules.
+
+**Legibility is part of the model.** The consolidated access overview at `/admin/access/matrix`
+renders the effective-permission matrix (principal × collection, from `getPrincipalPermissions` +
+role assignments) plus every active item grant and token scope — the read-only answer to "who/what
+can touch what." When you add a new grant kind or scope mechanism, it must show up there too.
 
 Media rides collection permissions (upload = `create` on the `media` collection). A collection's
 `access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`. **`publicRead`

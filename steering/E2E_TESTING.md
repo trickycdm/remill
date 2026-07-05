@@ -1,8 +1,8 @@
 # E2E Testing Standards
 
-> **STATUS: TARGET — the Playwright suite lands with the generated admin (Phase 4); a smoke + axe
-> sweep lands with the Phase 1 shell.** Playwright drives the styled admin end-to-end. Tests are
-> primarily authored and debugged by AI agents using the `playwright-cli` skill.
+> **STATUS: IMPLEMENTED.** The Playwright suite (+ axe sweeps) is live in `e2e/` (`bun run e2e`).
+> Playwright drives the styled admin end-to-end. Tests are primarily authored and debugged by AI
+> agents using the `playwright-cli` skill.
 
 ## Why E2E is not optional here (the load-bearing rationale)
 
