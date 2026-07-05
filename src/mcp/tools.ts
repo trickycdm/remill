@@ -7,11 +7,12 @@
  *
  * This module is SDK-agnostic and unit-testable: it returns plain tool descriptors
  * with async handlers that call the same services as admin/REST — one pipeline,
- * three doors. The thin `agents`-SDK wiring (src/mcp/agent.ts) registers them.
+ * three doors. The thin JSON-RPC transport (src/mcp/handler.ts) dispatches them
+ * (D18 — a direct streamable-HTTP endpoint, not an `agents`-SDK Durable Object).
  */
 
 import type { Database } from '@/db/client';
-import type { Principal, Action } from '@/access';
+import { scopeMatches, type Principal, type Action } from '@/access';
 // COR-6: the MCP surface must go through SERVICES, never the queries layer directly.
 import { getPrincipalPermissions } from '@/services/access';
 import { listCollections, getCollection, listCollectionsForDiscovery } from '@/services/collections';
@@ -40,9 +41,7 @@ function couldDo(
   publicRead: boolean,
 ): boolean {
   const scope = principal.tokenScope;
-  if (scope && !scope.some((s) => s.action === action && (s.collection === '*' || s.collection === collection))) {
-    return false;
-  }
+  if (scope && !scopeMatches(scope, action, collection)) return false;
   if (action === 'read' && publicRead) return true;
   return perms.some((p) => p.action === action && (p.collection === '*' || p.collection === collection));
 }

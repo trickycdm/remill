@@ -37,8 +37,9 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   (hashed at rest, scope-masked) for machine auth (REST + MCP).
 - **Cloudflare `agents` SDK** — `McpAgent` on a Durable Object at `/mcp`.
 - **Zod 4** validation (generated from field descriptors); **Vitest 3** + **Playwright** (+ axe);
-  **nanoid** IDs; **Tailwind v4** CSS-first `@theme` tokens; **Uppy** uploads; **CodeMirror 6**
-  markdown island.
+  **nanoid** IDs; **Tailwind v4** CSS-first `@theme` tokens. _Deferred / not yet wired:_ the
+  **CodeMirror 6** markdown island and **Uppy** uploads — `src/client/init.ts` is an empty stub and
+  the markdown/tags/media widgets are plain inputs in v1.
 
 ## Architecture (TARGET layout)
 

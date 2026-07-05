@@ -4,13 +4,12 @@ import { requireAuth, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
-import { getCollection } from '@/services/collections';
+import { getCollectionOrThrow } from '@/services/collections';
 import { listDocuments } from '@/services/documents';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Button } from '@/components/ui';
 import { GeneratedTable } from '@/components/admin/generated';
-import { NotFoundError } from '@/lib/errors';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -19,8 +18,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
   const db = getDb(c.env.DB);
   const slug = pathParam(c, 'collection');
-  const def = await getCollection(db, slug);
-  if (!def) throw new NotFoundError('Collection');
+  const def = await getCollectionOrThrow(db, slug);
 
   const principal = requirePrincipal(c);
   const page = Number(c.req.query('page') ?? '1') || 1;

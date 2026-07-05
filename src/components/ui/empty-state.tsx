@@ -8,7 +8,9 @@
  * from `@/components/ui/icon` (defaults to Inbox).
  */
 
+import type { JSX } from 'hono/jsx/jsx-runtime';
 import { Inbox } from '@/components/ui/icon';
+import { cx } from '@/components/ui/cx';
 
 export function EmptyState({
   title,
@@ -24,10 +26,13 @@ export function EmptyState({
   /** An action element (e.g. a primary <Button href="…">). */
   action?: unknown;
   class?: string;
-}) {
+}): JSX.Element {
   return (
     <div
-      class={`flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border-strong bg-surface/50 px-6 py-16 text-center${cls ? ` ${cls}` : ''}`}
+      class={cx(
+        'flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border-strong bg-surface/50 px-6 py-16 text-center',
+        cls,
+      )}
     >
       <span class="flex size-12 items-center justify-center rounded-full bg-accent-soft text-accent-text">
         {icon ?? <Inbox class="size-6" />}

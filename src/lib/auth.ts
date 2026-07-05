@@ -8,9 +8,11 @@
  * guards here never replace that; they gate on session presence and coarse role only.
  */
 
+import { z } from 'zod';
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Session } from 'hono-sessions';
 import { UnauthorizedError, ForbiddenError } from '@/lib/errors';
+import { SYSTEM_ROLES } from '@/lib/auth-constants';
 import type { SessionUser, SystemRole } from '@/lib/auth-constants';
 
 export type { SessionUser, SystemRole } from '@/lib/auth-constants';
@@ -19,20 +21,35 @@ export type { SessionUser, SystemRole } from '@/lib/auth-constants';
 // Session read/write helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * The session cookie is attacker-influenceable at rest (encrypted, but still
+ * external input), so every value read out of it is `unknown` and MUST be validated
+ * rather than cast (SECURITY_STANDARDS.md — validate at boundaries). A missing/blank
+ * `userId` means "not logged in"; a malformed `email`/`displayName` degrades to '';
+ * an unrecognised `role` degrades to the least-privileged `reader`.
+ */
+const SESSION_SCHEMA = z.object({
+  userId: z.string().min(1),
+  email: z.string().catch(''),
+  displayName: z.string().catch(''),
+  role: z.enum([...SYSTEM_ROLES] as [SystemRole, ...SystemRole[]]).catch('reader'),
+});
+
 /** Extract the authenticated user from the session cookie, or null. */
 export function getSessionUser(c: Context): SessionUser | null {
   const session = c.get('session') as Session | undefined;
   if (!session) return null;
 
-  const userId = session.get('userId') as string | null;
-  if (!userId) return null;
+  const parsed = SESSION_SCHEMA.safeParse({
+    userId: session.get('userId'),
+    email: session.get('email'),
+    displayName: session.get('displayName'),
+    role: session.get('role'),
+  });
+  if (!parsed.success) return null; // no valid userId → not authenticated
 
-  return {
-    id: userId,
-    email: (session.get('email') as string | null) ?? '',
-    displayName: (session.get('displayName') as string | null) ?? '',
-    role: (session.get('role') as SystemRole | null) ?? 'reader',
-  };
+  const { userId, email, displayName, role } = parsed.data;
+  return { id: userId, email, displayName, role };
 }
 
 /** Write authenticated user data into the session after a successful login. */

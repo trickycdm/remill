@@ -38,7 +38,14 @@ function conditionSatisfied(condition: Condition | null, resource: Resource, pri
   return false;
 }
 
-function scopeAllows(scope: readonly TokenScopeEntry[], action: Action, collection: string): boolean {
+/**
+ * Whether a token scope mask permits `action` on `collection` (a `*` collection
+ * entry matches any). The ONE narrowing predicate shared by `decide()` here, the
+ * read-filter compiler (authorize.ts), and MCP tool visibility (mcp/tools.ts) —
+ * TD-5. Token-scope narrowing is security-critical, so it must not drift between
+ * hand-copied variants.
+ */
+export function scopeMatches(scope: readonly TokenScopeEntry[], action: Action, collection: string): boolean {
   return scope.some((s) => s.action === action && (s.collection === '*' || s.collection === collection));
 }
 
@@ -46,7 +53,7 @@ export function decide(input: Decision): boolean {
   const { principal, action, resource, permissions, grants, publicRead, tokenScope } = input;
 
   // Token scope mask narrows everything below.
-  if (tokenScope && !scopeAllows(tokenScope, action, resource.collection)) return false;
+  if (tokenScope && !scopeMatches(tokenScope, action, resource.collection)) return false;
 
   const isItem = !!resource.documentId;
 

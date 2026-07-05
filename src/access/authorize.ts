@@ -13,9 +13,9 @@ import { sql, inArray, type SQL } from 'drizzle-orm';
 import { documents } from '@/db/schema';
 import type { Database } from '@/db/client';
 import { Grant } from '@/access/grant';
-import type { Action, Principal, Resource } from '@/access/types';
+import type { Action, Principal, Resource, Surface } from '@/access/types';
 import { resourceKey } from '@/access/types';
-import { decide } from '@/access/permissions';
+import { decide, scopeMatches } from '@/access/permissions';
 import { appendAudit } from '@/db/queries/audit';
 import { getPrincipalPermissions, getPrincipalRoleSlugs, type EffectivePermission } from '@/db/queries/roles';
 import { getApplicableGrants, getGrantedDocumentIds } from '@/db/queries/grants';
@@ -32,6 +32,15 @@ export { ACTIONS, resourceKey } from '@/access/types';
  *  token scope). Its permissions are resolved from principal_roles by authorize. */
 export function principalFromSession(user: SessionUser): Principal {
   return { id: user.id, kind: 'user', surface: 'admin' };
+}
+
+/** The unauthenticated principal for a given `surface`. It carries no token and no
+ *  scope; its permissions still resolve from principal_roles (anonymous holds none
+ *  by default), so it is default-denied everywhere except explicit publicRead. One
+ *  factory (TD-5) so the REST, media, and MCP doors can't drift on its shape — the
+ *  caller passes the surface it arrived on so audit attribution stays correct. */
+export function anonymousPrincipal(surface: Surface): Principal {
+  return { id: 'anonymous', kind: 'user', surface };
 }
 
 async function collectionPublicRead(db: Database, slug: string): Promise<boolean> {
@@ -141,8 +150,7 @@ export async function compileReadFilter(
 ): Promise<SQL | undefined> {
   const permissions = resolved?.permissions ?? (await getPrincipalPermissions(db, principal.id));
   const scope = principal.tokenScope;
-  const scopeAllowsRead =
-    !scope || scope.some((s) => s.action === 'read' && (s.collection === '*' || s.collection === collection));
+  const scopeAllowsRead = !scope || scopeMatches(scope, 'read', collection);
   if (!scopeAllowsRead) return sql`1 = 0`; // token can't read this collection at all
 
   const readPerms = permissions.filter(

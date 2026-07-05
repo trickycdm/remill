@@ -9,7 +9,9 @@
  */
 
 import { ChevronDown } from '@/components/ui/icon';
+import type { JSX } from 'hono/jsx/jsx-runtime';
 import { INPUT_BASE } from '@/components/ui/input';
+import { cx } from '@/components/ui/cx';
 
 interface SelectProps {
   children: unknown;
@@ -26,14 +28,14 @@ interface SelectProps {
   readonly [dataAttr: `data-${string}`]: unknown;
 }
 
-export function Select({ children, invalid, class: cls, ...rest }: SelectProps) {
+export function Select({ children, invalid, class: cls, ...rest }: SelectProps): JSX.Element {
   const stateClass = invalid
     ? 'border-danger focus-visible:outline-danger'
     : 'border-border-strong focus-visible:outline-ring';
   return (
-    <div class={`relative${cls ? ` ${cls}` : ''}`}>
+    <div class={cx('relative', cls)}>
       <select
-        class={`${INPUT_BASE} h-10 appearance-none pr-9 ${stateClass}`}
+        class={cx(INPUT_BASE, 'h-10 appearance-none pr-9', stateClass)}
         aria-invalid={invalid ? 'true' : undefined}
         {...(rest as Record<string, unknown>)}
       >

@@ -96,9 +96,19 @@ onto the record — any field an attacker named got written. remill's fix, from 
 
 - Set security headers on all responses: `Strict-Transport-Security`, `X-Frame-Options: DENY`,
   `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a
-  Content-Security-Policy. CSP needs `script-src 'self' 'unsafe-inline'` (inline islands +
-  `data-signals`; the Datastar client loads as a module from CDN) and `style-src 'self' 'unsafe-inline'`
-  (Tailwind). Media serving needs `img-src 'self' data:` (extend per media host as needed).
+  Content-Security-Policy. The real policy (`src/main.tsx`) is
+  `script-src 'self' 'unsafe-inline' 'unsafe-eval'`. **`'unsafe-eval'` is a required, justified
+  exception, not an oversight:** Datastar v1 compiles its `data-*` attribute expressions with the
+  `Function` constructor, which CSP classifies as eval — the admin cannot run without it. `'unsafe-inline'`
+  covers the theme-init snippet and the `data-signals` bootstrap. Datastar is **vendored same-origin
+  (`'self'`), not loaded from a CDN.** `style-src 'self' 'unsafe-inline'` covers Tailwind; media serving
+  uses `img-src 'self' data:` (publicRead assets are additionally designed for cross-origin embedding).
+- **SEC-5 — public collection discovery is a deliberate, bounded exception** to the no-enumeration
+  posture: discovery stays public (remill is agent-native), but an unauthenticated or unprivileged
+  caller receives a **public-safe projection** that omits the internal `access`/`workflow` config —
+  only `manage_schema` principals see the full definition. All three discovery surfaces (REST
+  `/api/collections`, MCP `list_collections`, and the admin) share the one projection in
+  `src/services/collections`.
 - **CSRF**: `SameSite=Lax` session cookies + same-origin form/Datastar posts cover the admin. For
   state-changing non-form JS calls, require the `Datastar-Request` header or an explicit CSRF check.
   Token-authenticated REST/MCP is not cookie-authenticated, so it is not CSRF-exposed.

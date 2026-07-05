@@ -8,6 +8,9 @@
  * roles, counts.
  */
 
+import type { JSX } from 'hono/jsx/jsx-runtime';
+import { cx } from '@/components/ui/cx';
+
 type BadgeTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 
 const TONE: Record<BadgeTone, string> = {
@@ -38,12 +41,16 @@ export function Badge({
   tone?: BadgeTone;
   dot?: boolean;
   class?: string;
-}) {
+}): JSX.Element {
   return (
     <span
-      class={`inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium leading-5 whitespace-nowrap${cls ? ` ${cls}` : ''} ${TONE[tone]}`}
+      class={cx(
+        'inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium leading-5 whitespace-nowrap',
+        cls,
+        TONE[tone],
+      )}
     >
-      {dot ? <span class={`size-1.5 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden="true" /> : null}
+      {dot ? <span class={cx('size-1.5 shrink-0 rounded-full', DOT[tone])} aria-hidden="true" /> : null}
       {children}
     </span>
   );

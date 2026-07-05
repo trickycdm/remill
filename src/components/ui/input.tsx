@@ -8,6 +8,9 @@
  * `<Input data-bind="title" />` or `<Input data-attr:disabled="$busy" />` work.
  */
 
+import type { JSX } from 'hono/jsx/jsx-runtime';
+import { cx } from '@/components/ui/cx';
+
 interface InputProps {
   id?: string;
   name?: string;
@@ -34,13 +37,13 @@ interface InputProps {
 export const INPUT_BASE =
   'w-full rounded-md border bg-surface px-3 text-sm text-ink shadow-xs transition-colors placeholder:text-ink-subtle focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 
-export function Input({ invalid, class: cls, ...rest }: InputProps) {
+export function Input({ invalid, class: cls, ...rest }: InputProps): JSX.Element {
   const stateClass = invalid
     ? 'border-danger focus-visible:outline-danger'
     : 'border-border-strong focus-visible:outline-ring';
   return (
     <input
-      class={`${INPUT_BASE} h-10 ${stateClass}${cls ? ` ${cls}` : ''}`}
+      class={cx(INPUT_BASE, 'h-10', stateClass, cls)}
       aria-invalid={invalid ? 'true' : undefined}
       {...(rest as Record<string, unknown>)}
     />

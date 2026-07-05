@@ -31,7 +31,7 @@
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import { listFieldTypeKeys, isIndexable } from '@/fields/registry';
 import { jsonForScript } from '@/lib/json-for-script';
-import { Button, Input, Select, FormField, Plus, Trash } from '@/components/ui';
+import { Button, Input, Select, Checkbox, FormField, Plus, Trash } from '@/components/ui';
 
 type RawBody = Record<string, string | File | (string | File)[]>;
 
@@ -246,13 +246,11 @@ function FieldRow({
         <div class="flex items-center gap-3">
           {checkboxes.map((cb) => (
             <label class="flex items-center gap-1.5 text-xs text-ink-muted">
-              <input
-                type="checkbox"
+              <Checkbox
                 name={`field_${i}_${cb.key}`}
                 checked={cb.on}
                 aria-label={`${cb.label} for field ${n}`}
                 data-attr:disabled={hiddenDisabled}
-                class="size-4 rounded border-border-strong text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               />
               <span aria-hidden="true">{cb.label.slice(0, 3)}</span>
             </label>
@@ -356,21 +354,11 @@ export function CollectionBuilder({
         <fieldset class="flex flex-col gap-2">
           <legend class="text-sm font-medium text-ink">Options</legend>
           <label class="flex items-center gap-2 text-sm text-ink-muted">
-            <input
-              type="checkbox"
-              name="workflow_draft_publish"
-              checked={def?.workflow?.draftPublish}
-              class="size-4 rounded border-border-strong text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            />
+            <Checkbox name="workflow_draft_publish" checked={def?.workflow?.draftPublish} />
             Draft / publish workflow
           </label>
           <label class="flex items-center gap-2 text-sm text-ink-muted">
-            <input
-              type="checkbox"
-              name="access_public_read"
-              checked={def?.access?.publicRead}
-              class="size-4 rounded border-border-strong text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            />
+            <Checkbox name="access_public_read" checked={def?.access?.publicRead} />
             Public read access
           </label>
         </fieldset>
