@@ -17,6 +17,8 @@
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import type { CollectionDefinition } from '@/fields/types';
 import type { DocumentRecord } from '@/services/documents';
+import type { SiteSettings } from '@/services/settings';
+import { formatDate } from '@/lib/format-date';
 import { Button, Badge, Card, CardHeader, CardTitle, CardContent, Dialog } from '@/components/ui';
 
 type Revision = { readonly revision: number; readonly savedAt: string };
@@ -28,6 +30,7 @@ type EditorSidebarProps =
       submitLabel: string;
       cancelHref: string;
       def: CollectionDefinition;
+      settings?: SiteSettings;
     }
   | {
       mode: 'edit';
@@ -39,12 +42,8 @@ type EditorSidebarProps =
       id: string;
       doc: DocumentRecord;
       revisions: readonly Revision[];
+      settings?: SiteSettings;
     };
-
-/** Compact timestamp for the Details card (Phase 4 will honor settings timezone). */
-function fmtDate(ts: string): string {
-  return ts.slice(0, 16).replace('T', ' ');
-}
 
 /** One `<dl>` row: a mono-caps label and its value. */
 function MetaRow({ label, children }: { label: string; children: unknown }): JSX.Element {
@@ -104,9 +103,9 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
                 <MetaRow label="Status">
                   <Badge tone={props.doc.status === 'published' ? 'success' : 'neutral'}>{props.doc.status}</Badge>
                 </MetaRow>
-                <MetaRow label="Updated">{fmtDate(props.doc.updatedAt)}</MetaRow>
-                <MetaRow label="Created">{fmtDate(props.doc.createdAt)}</MetaRow>
-                {props.doc.publishedAt ? <MetaRow label="Published">{fmtDate(props.doc.publishedAt)}</MetaRow> : null}
+                <MetaRow label="Updated">{formatDate(props.doc.updatedAt, props.settings)}</MetaRow>
+                <MetaRow label="Created">{formatDate(props.doc.createdAt, props.settings)}</MetaRow>
+                {props.doc.publishedAt ? <MetaRow label="Published">{formatDate(props.doc.publishedAt, props.settings)}</MetaRow> : null}
                 <MetaRow label="Author">{props.doc.createdBy ?? '—'}</MetaRow>
                 <MetaRow label="ID">
                   <code class="font-mono text-xs">{props.doc.id}</code>

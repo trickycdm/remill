@@ -6,6 +6,7 @@ import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
 import { getDocument, updateDocument, listRevisions } from '@/services/documents';
+import { getSettings } from '@/services/settings';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
@@ -29,6 +30,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const now = nowIso();
   const doc = await getDocument(db, principal, slug, id, now);
   const revisions = await listRevisions(db, principal, slug, id, now);
+  const settings = await getSettings(db);
 
   // Title the page by the document's primary display value (its first list field),
   // falling back to a generic edit label for an untitled doc.
@@ -69,6 +71,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           id={id}
           doc={doc}
           revisions={revisions}
+          settings={settings}
         />
       </div>
     </AdminShell>,

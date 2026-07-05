@@ -6,6 +6,7 @@ import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
 import { listDocuments } from '@/services/documents';
+import { getSettings } from '@/services/settings';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Button } from '@/components/ui';
@@ -21,8 +22,16 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const def = await getCollectionOrThrow(db, slug);
 
   const principal = requirePrincipal(c);
+  const settings = await getSettings(db);
   const page = Number(c.req.query('page') ?? '1') || 1;
-  const { rows, total, pageSize } = await listDocuments(db, principal, slug, { page }, nowIso());
+  // Site-configured page size (falls back to the service default when unset).
+  const { rows, total, pageSize } = await listDocuments(
+    db,
+    principal,
+    slug,
+    { page, pageSize: settings.defaultPageSize },
+    nowIso(),
+  );
   const pages = Math.max(1, Math.ceil(total / pageSize));
 
   return c.render(
@@ -33,7 +42,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         description={`${total} ${total === 1 ? 'item' : 'items'}`}
         actions={<Button href={`/admin/c/${slug}/new`}>New {def.name}</Button>}
       />
-      <GeneratedTable def={def} rows={rows} />
+      <GeneratedTable def={def} rows={rows} settings={settings} />
       {pages > 1 && (
         <nav aria-label="Pagination" class="mt-6 flex items-center justify-center gap-2 text-sm">
           {page > 1 && (

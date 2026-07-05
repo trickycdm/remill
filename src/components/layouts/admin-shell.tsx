@@ -62,12 +62,13 @@ const NAV_ITEMS: readonly NavItem[] = [
 /**
  * Which nav items a coarse role may see — the UI-hiding half of permission-aware
  * navigation (server-side authorize() is the real enforcement). Managing schema
- * (Collections) and access (Access) are admin-only; anyone who can read sees
- * Content/Media/Dashboard. Unknown/custom roles fall back to the reader set.
+ * (Collections), access (Access), and instance Settings are admin-only; anyone who
+ * can read sees Content/Media/Dashboard. Unknown/custom roles fall back to the
+ * reader set. (Per-user Account settings live off the top-bar menu, not the nav.)
  */
 const NAV_BY_ROLE: Record<string, readonly string[]> = {
   admin: ['dashboard', 'content', 'media', 'collections', 'access', 'settings'],
-  editor: ['dashboard', 'content', 'media', 'settings'],
+  editor: ['dashboard', 'content', 'media'],
   author: ['dashboard', 'content', 'media'],
   reader: ['dashboard', 'content', 'media'],
 };

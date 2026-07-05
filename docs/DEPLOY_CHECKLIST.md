@@ -26,6 +26,15 @@
       `ADMIN_BOOTSTRAP_EMAIL=you@site.com ADMIN_BOOTSTRAP_PASSWORD='…≥16 chars…' bun run db:bootstrap:remote`
       (omit the password to auto-generate + print one once). The script refuses weak/known passwords
       against `--remote`. Force a password change on first login.
+- [ ] **Re-apply the expanded `settings` singleton on an ALREADY-seeded DB (Phase 4)** — `seed.sql` uses
+      `INSERT OR IGNORE`, so a DB seeded before the settings expansion keeps its old 3-field, unlabeled
+      `settings` definition; a plain re-run will NOT update it. To pick up the new fields/labels
+      (`siteUrl`, `timezone`, `dateFormat`, `defaultPageSize`, `logo` + labels), run a one-off UPDATE with
+      the current `fields_json` from `src/db/seed.sql`:
+      `wrangler d1 execute remill --remote --command "UPDATE collections SET fields_json='…' WHERE slug='settings';"`
+      (or, on a throwaway DB, re-seed). No migration is involved — settings are schema-as-data, and the
+      account surface reuses existing `users`/`principals` columns. Existing saved settings documents are
+      unaffected; unset new fields simply read as their defaults.
 
 ## Security posture to confirm before go-live
 

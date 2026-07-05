@@ -1,11 +1,12 @@
 import { createFactory } from 'hono/factory';
 import type { Context } from 'hono';
 import type { Env } from '@/types';
-import { requireAuth, getUser } from '@/lib/auth';
+import { requireRole, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { getCollection } from '@/services/collections';
 import { listDocuments, createDocument, updateDocument } from '@/services/documents';
+import { getSettings } from '@/services/settings';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
@@ -24,21 +25,31 @@ async function loadSingleton(c: Context<{ Bindings: Env }>) {
   return { db, def, doc: rows[0] };
 }
 
-/** GET /admin/settings — the singleton editor for the `settings` collection. */
-export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
+/**
+ * GET /admin/settings — the singleton editor for the `settings` collection.
+ *
+ * Admin-only (requireRole('admin')): instance configuration is a schema/access-tier
+ * concern, matching how Collections and Access are gated. The `editor` role no longer
+ * sees Settings in the nav, and this guard denies a direct hit (401 no session / 403
+ * wrong role).
+ */
+export const onRequestGet = factory.createHandlers(requireRole('admin'), async (c) => {
   const user = getUser(c);
-  const { def, doc } = await loadSingleton(c);
+  const { db, def, doc } = await loadSingleton(c);
+  const settings = await getSettings(db);
+  // Echo the saved site name so the surface visibly reflects a stored value.
+  const description = `Configure ${settings.siteName || 'your site'}.`;
   if (!def) {
     return c.render(
       <AdminShell user={user} current="settings">
-        <PageHeader title="Settings" description="Site-wide configuration." />
+        <PageHeader title="Settings" description={description} />
         <EmptyState title="Settings collection missing" description="Re-seed the database to restore it." />
       </AdminShell>,
     );
   }
   return c.render(
     <AdminShell user={user} current="settings">
-      <PageHeader title="Settings" description="Site-wide configuration." />
+      <PageHeader title="Settings" description={description} />
       <div class="max-w-2xl">
         <GeneratedForm def={def} doc={doc} action="/admin/settings" submitLabel="Save settings" />
       </div>
@@ -47,7 +58,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 });
 
 /** POST /admin/settings — create the singleton on first save, update thereafter. */
-export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
+export const onRequestPost = factory.createHandlers(requireRole('admin'), async (c) => {
   const { db, def, doc } = await loadSingleton(c);
   if (!def) return dsRedirect(c, '/admin/settings');
   // all: true so a <select multiple> posts repeated keys as an array (COR-4).

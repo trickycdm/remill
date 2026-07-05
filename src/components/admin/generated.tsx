@@ -10,6 +10,8 @@ import { resolveField } from '@/fields/registry';
 import { fieldLabel } from '@/lib/humanize';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import type { DocumentRecord } from '@/services/documents';
+import type { SiteSettings } from '@/services/settings';
+import { formatDate } from '@/lib/format-date';
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, EmptyState } from '@/components/ui';
 
 type EditProps = { field: FieldDescriptor; config: unknown; value: unknown; signal: string };
@@ -84,13 +86,16 @@ export function GeneratedForm({
   );
 }
 
-/** The generated list view: columns from `showInList` fields (or the first field). */
+/** The generated list view: columns from `showInList` fields (or the first field).
+ *  `settings` (optional) tunes the "Updated" timestamp's timezone/format. */
 export function GeneratedTable({
   def,
   rows,
+  settings,
 }: {
   def: CollectionDefinition;
   rows: DocumentRecord[];
+  settings?: SiteSettings;
 }) {
   const columns = def.fields.filter((f) => f.admin?.showInList);
   const cols = columns.length ? columns : def.fields.slice(0, 1);
@@ -134,7 +139,7 @@ export function GeneratedTable({
               <Badge tone={doc.status === 'published' ? 'success' : 'neutral'}>{doc.status}</Badge>
             </TableCell>
             <TableCell>
-              <span class="font-mono text-xs text-ink-subtle">{doc.updatedAt.slice(0, 10)}</span>
+              <span class="font-mono text-xs text-ink-subtle">{formatDate(doc.updatedAt, settings)}</span>
             </TableCell>
           </TableRow>
         ))}

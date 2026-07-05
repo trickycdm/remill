@@ -77,6 +77,28 @@ export async function getDocumentMetaForAuth(
   return r ? { status: r.status as 'draft' | 'published', createdBy: r.createdBy } : null;
 }
 
+/**
+ * Read a singleton collection's stored `data` (the first/only document), parsed,
+ * or null when the singleton has never been saved. NO witness: site configuration
+ * (the `settings` singleton) is a rendering concern read on many requests without a
+ * principal — the same un-gated posture `getCollection` takes for collection
+ * metadata. It exposes ONLY the settings singleton's data via the settings service;
+ * never widen this into a general content read (those keep the Grant witness).
+ */
+export async function getSingletonData(
+  db: Database,
+  collection: string,
+): Promise<Record<string, unknown> | null> {
+  const rows = await db
+    .select({ dataJson: documents.dataJson })
+    .from(documents)
+    .where(eq(documents.collection, collection))
+    .orderBy(documents.createdAt, documents.id)
+    .limit(1);
+  const r = rows[0];
+  return r ? (JSON.parse(r.dataJson || '{}') as Record<string, unknown>) : null;
+}
+
 /** Read one document by id (scoped to a collection). Witness required. */
 export async function getDocument(
   db: Database,
