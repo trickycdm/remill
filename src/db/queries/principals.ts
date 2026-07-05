@@ -109,18 +109,28 @@ export async function revokeToken(db: Database, id: string): Promise<void> {
   await db.delete(apiTokens).where(eq(apiTokens.id, id));
 }
 
-/** Resolve a token by its hash (for REST/MCP auth in Phase 6/7). Updates last_used. */
-export async function findTokenByHash(db: Database, tokenHash: string, now: string) {
+/**
+ * Resolve a token by its hash (for REST/MCP auth). READ-ONLY: it does NOT stamp
+ * `last_used_at`. Stamping happens via `stampTokenUsed` only AFTER the caller has
+ * confirmed the token is valid (not expired) and its principal is active (SEC-7) —
+ * otherwise a matched-but-invalid token would leak a usage signal. (`_now` is
+ * accepted-but-ignored, retained only for existing call-site arity.)
+ */
+export async function findTokenByHash(db: Database, tokenHash: string, _now?: string) {
   const rows = await db.select().from(apiTokens).where(eq(apiTokens.tokenHash, tokenHash)).limit(1);
   const t = rows[0];
   if (!t) return null;
-  await db.update(apiTokens).set({ lastUsedAt: now }).where(eq(apiTokens.id, t.id));
   return {
     id: t.id,
     principalId: t.principalId,
     scope: t.scopeJson ? (JSON.parse(t.scopeJson) as { collection: string; action: string }[]) : null,
     expiresAt: t.expiresAt,
   };
+}
+
+/** Stamp a token's `last_used_at` — call ONLY after validity + active checks pass. */
+export async function stampTokenUsed(db: Database, id: string, now: string): Promise<void> {
+  await db.update(apiTokens).set({ lastUsedAt: now }).where(eq(apiTokens.id, id));
 }
 
 /** True if the principal exists and is not disabled. */
