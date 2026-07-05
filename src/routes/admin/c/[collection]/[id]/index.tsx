@@ -4,7 +4,7 @@ import { requireAuth, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
-import { getCollection } from '@/services/collections';
+import { getCollectionOrThrow } from '@/services/collections';
 import { getDocument, updateDocument, listRevisions } from '@/services/documents';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
@@ -12,7 +12,6 @@ import { dsRedirect, jsLiteral } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Button, Badge, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 import { GeneratedForm } from '@/components/admin/generated';
-import { NotFoundError } from '@/lib/errors';
 import { renderSaveError } from '@/lib/save-error';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -23,8 +22,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const db = getDb(c.env.DB);
   const slug = pathParam(c, 'collection');
   const id = pathParam(c, 'id');
-  const def = await getCollection(db, slug);
-  if (!def) throw new NotFoundError('Collection');
+  const def = await getCollectionOrThrow(db, slug);
 
   const principal = requirePrincipal(c);
   const now = nowIso();
@@ -104,8 +102,7 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   const db = getDb(c.env.DB);
   const slug = pathParam(c, 'collection');
   const id = pathParam(c, 'id');
-  const def = await getCollection(db, slug);
-  if (!def) throw new NotFoundError('Collection');
+  const def = await getCollectionOrThrow(db, slug);
 
   // all: true so a <select multiple> posts repeated keys as an array (COR-4).
   const body = await c.req.parseBody({ all: true });

@@ -11,9 +11,8 @@ import type { Database } from '@/db/client';
 import { findTokenByHash, isPrincipalActive, stampTokenUsed } from '@/db/queries/principals';
 import { hashToken } from '@/lib/token';
 import { UnauthorizedError } from '@/lib/errors';
+import { anonymousPrincipal } from '@/access';
 import type { Action, Principal, Surface } from '@/access';
-
-export const ANONYMOUS_PRINCIPAL: Principal = { id: 'anonymous', kind: 'user', surface: 'rest' };
 
 function bearer(c: Context): string | null {
   const h = c.req.header('Authorization');
@@ -34,7 +33,7 @@ export async function resolvePrincipal(
   now: string,
 ): Promise<Principal> {
   const token = bearer(c);
-  if (!token) return { ...ANONYMOUS_PRINCIPAL, surface };
+  if (!token) return anonymousPrincipal(surface);
 
   const rec = await findTokenByHash(db, await hashToken(token));
   if (!rec) throw new UnauthorizedError('Invalid token.');

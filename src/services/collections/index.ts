@@ -35,6 +35,16 @@ const ACCESS_SCHEMA = z
 export const listCollections = q.listCollections;
 export const getCollection = q.getCollection;
 
+/** Load a collection by slug or throw `NotFoundError('Collection')`. The shared
+ *  form of the `getCollection(...) → if (!def) throw` guard the admin routes each
+ *  hand-repeated (TD-5). Returns the FULL definition — use `getCollectionForDiscovery`
+ *  for the access-omitting public projection on discovery surfaces. */
+export async function getCollectionOrThrow(db: Database, slug: string): Promise<CollectionDefinition> {
+  const def = await q.getCollection(db, slug);
+  if (!def) throw new NotFoundError('Collection');
+  return def;
+}
+
 /** Validate + normalize a definition, or throw InputValidationError. */
 export function validateDefinition(input: CollectionDefinition): CollectionDefinition {
   const issues: ErrorDetails[] = [];

@@ -8,12 +8,9 @@ import type { Context } from 'hono';
 import type { Env } from '@/types';
 import { getDb } from '@/db/client';
 import { getMediaForServe } from '@/services/media';
-import { principalFromSession } from '@/access';
+import { principalFromSession, anonymousPrincipal } from '@/access';
 import { getSessionUser } from '@/lib/auth';
 import { nowIso } from '@/lib/now';
-import type { Principal } from '@/access';
-
-const ANONYMOUS: Principal = { id: 'anonymous', kind: 'user', surface: 'admin' };
 
 /** Parse a single `bytes=start-end` range against a known size, or null. */
 function parseRange(header: string | undefined, size: number): { start: number; end: number } | null {
@@ -42,7 +39,9 @@ function parseRange(header: string | undefined, size: number): { start: number; 
 export async function serveMedia(c: Context<{ Bindings: Env }>, id: string): Promise<Response> {
   const db = getDb(c.env.DB);
   const user = getSessionUser(c);
-  const principal = user ? principalFromSession(user) : ANONYMOUS;
+  // Media serving is an admin-surface read (session or anonymous), so attribute the
+  // anonymous case to 'admin' — preserving this door's prior surface (TD-5).
+  const principal = user ? principalFromSession(user) : anonymousPrincipal('admin');
   const rec = await getMediaForServe(db, principal, id, nowIso());
 
   const cacheHeaders: Record<string, string> = {
