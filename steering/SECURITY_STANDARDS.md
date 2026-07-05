@@ -24,6 +24,12 @@ closes one of those, or a class like it. New code must comply; fix violations as
 - **Parameterized queries only.** Drizzle builds prepared statements; values are never
   string-interpolated into SQL. No raw `sql` template with unsanitised user input, and **never
   interpolate an identifier** (table/column) from user input — that was a Blogmill hole.
+- **Rendered markdown is sanitized by construction (C1, D23).** All markdown→HTML goes through
+  `src/lib/markdown` (micromark defaults): raw HTML in the source is ESCAPED (never emitted as
+  markup) and `javascript:`/`data:` link destinations are stripped. NEVER pass
+  `allowDangerousHtml`, and never render user/agent content with `dangerouslySetInnerHTML` except
+  through this renderer or another escaping path. The `FieldView` fallback is escaped text — a
+  field type must explicitly opt in to render markup.
 
 ## 1. Whitelist validation on EVERY write path (the anti-mass-assignment rule)
 

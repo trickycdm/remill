@@ -55,6 +55,8 @@ interface FieldType<Config, Value> {
   beforeRender?: (v: Value, ctx: RenderCtx) => unknown | Promise<unknown>
   EditComponent: FC<FieldEditProps<Config, Value>>   // (4) Datastar-wired form widget
   CellComponent?: FC<FieldCellProps<Value>>          // (3) list-view cell (fallback: text render)
+  ViewComponent?: FC<FieldViewProps<Config, Value>>  // read-only detail/public render (C1, D23);
+                                                     // fallback: SAFE ESCAPED TEXT
   jsonSchema: (cfg: Config) => JSONSchema            // (5) OpenAPI + (6) MCP input schemas
 }
 ```
@@ -75,6 +77,12 @@ Rules:
   `{ collection, multiple?, titleField? }`, value = `doc_…` id (or id array when `multiple`).
   Validation is FORMAT-ONLY (media precedent) — target existence resolves on read, so a dangling
   reference degrades gracefully rather than blocking saves.
+- **The render seam (C1, D23):** `ViewComponent` drives the read-only detail and public surfaces,
+  dispatched by `FieldView` (`src/components/field-view.tsx`). Unsafe-by-default is impossible:
+  the fallback is escaped text, so only a type that explicitly opts in renders markup. `markdown`
+  renders through the sanitizing renderer (`src/lib/markdown` — raw HTML escaped, dangerous
+  protocols stripped; NEVER enable `allowDangerousHtml`); `relation` renders title links (public
+  vs admin URLs by `surface`); `media` an `<img>`. Storage always keeps the raw source (D3).
 - Transforms (`beforeSave`/`beforeRender`) must be pure with respect to the context given — no
   reaching into globals, no direct DB access. They receive what they need via ctx.
 - Field-level access control is **deferred post-v1**, but the hook point is reserved: a field

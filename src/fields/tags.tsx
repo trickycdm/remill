@@ -78,4 +78,14 @@ export const tagsField: FieldType<TagsConfig, string[]> = {
       ))}
     </span>
   ),
+  ViewComponent: ({ value }) => {
+    const tags = Array.isArray(value) ? value : [];
+    return tags.length ? (
+      <span class="flex flex-wrap gap-1">
+        {tags.map((t) => (
+          <Badge>{t}</Badge>
+        ))}
+      </span>
+    ) : null;
+  },
 };

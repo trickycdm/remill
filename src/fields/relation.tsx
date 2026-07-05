@@ -147,6 +147,31 @@ export const relationField: FieldType<RelationConfig, string | string[]> = {
       <span class="text-ink-subtle">—</span>
     );
   },
+  // Detail/public render: resolved title links — public URLs on the public
+  // surface (the public route resolves ids as well as slugs), admin URLs inside.
+  ViewComponent: ({ config, value, expanded, surface }) => {
+    const refs = expanded
+      ? Array.isArray(expanded)
+        ? expanded
+        : [expanded]
+      : (Array.isArray(value) ? value : value ? [value] : []).map((id) => ({
+          id: String(id),
+          title: null,
+          collection: config.collection,
+        }));
+    if (!refs.length) return null;
+    const href = (r: { collection: string; id: string }) =>
+      surface === 'public' ? `/${r.collection}/${r.id}` : `/admin/c/${r.collection}/${r.id}`;
+    return (
+      <span class="flex flex-wrap gap-x-2 gap-y-1">
+        {refs.map((r) => (
+          <a href={href(r)} class="text-accent-text hover:underline">
+            {r.title ?? r.id}
+          </a>
+        ))}
+      </span>
+    );
+  },
   // Explicit machine schema (surfaces 5/6): a clean id-string (or id-array) shape
   // rather than the derived union the comma-string edit affordance would produce.
   jsonSchema: (cfg) => {

@@ -108,6 +108,17 @@ export interface FieldCellProps<Config = unknown, Value = unknown> {
   readonly expanded?: ExpandedReference | readonly ExpandedReference[];
 }
 
+/** Props for the read-only render seam (C1): the admin detail view and the
+ *  public pages. `surface` lets a type route links appropriately (admin URLs
+ *  vs public URLs); `expanded` carries the read path's relation expansion. */
+export interface FieldViewProps<Config = unknown, Value = unknown> {
+  readonly field: FieldDescriptor;
+  readonly config: Config;
+  readonly value: Value | undefined;
+  readonly expanded?: ExpandedReference | readonly ExpandedReference[];
+  readonly surface: 'admin' | 'public';
+}
+
 /**
  * The field-type contract. Every module in src/fields/ exports one of these.
  * `Config` = the shape of the per-field `config`; `Value` = the stored value.
@@ -153,6 +164,12 @@ export interface FieldType<Config = unknown, Value = unknown> {
    *  to a text render). Composed by the generated admin (Phase 4). */
   readonly EditComponent: FC<FieldEditProps<Config, Value>>;
   readonly CellComponent?: FC<FieldCellProps<Config, Value>>;
+
+  /** Read-only render for detail/public surfaces (C1, D23). OPTIONAL — the
+   *  engine's default is safe escaped text, so a type renders rich output only
+   *  by explicitly opting in (markdown → sanitized HTML, relation → title link,
+   *  media → <img>). Composed by FieldView (src/components/field-view.tsx). */
+  readonly ViewComponent?: FC<FieldViewProps<Config, Value>>;
 
   /** (5) OpenAPI + (6) MCP input schema. Defaults to deriving from valueSchema
    *  via Zod's toJSONSchema when omitted (see registry.deriveJsonSchema). */

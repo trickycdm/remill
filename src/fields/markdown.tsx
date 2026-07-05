@@ -7,6 +7,7 @@
 import { z } from 'zod';
 import { Textarea } from '@/components/ui';
 import { FieldShell, controlProps, requiredNonEmpty } from '@/fields/field-shell';
+import { renderMarkdown } from '@/lib/markdown';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
 
 /** Fallback cap when a markdown field declares no `maxLength` — generous for long
@@ -49,4 +50,8 @@ export const markdownField: FieldType<MarkdownConfig, string> = {
     </FieldShell>
   ),
   CellComponent: ({ value }) => <span>{value ? value.slice(0, 80) : ''}</span>,
+  // Read/detail surfaces render the SOURCE through the sanitizing renderer
+  // (raw HTML escaped, dangerous protocols stripped — src/lib/markdown, D23).
+  ViewComponent: ({ value }) =>
+    value ? <div class="rm-prose" dangerouslySetInnerHTML={{ __html: renderMarkdown(value) }} /> : null,
 };
