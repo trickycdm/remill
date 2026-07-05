@@ -27,11 +27,20 @@ export interface DocumentRecord {
   readonly publishedAt: string | null;
 }
 
+/** Which document_index column a field's values live in: number/boolean field
+ *  types index into `value_num`, everything else into `value_text`. Threaded from
+ *  the service (which knows the field type) so filter/sort target the right column
+ *  (COR-3). */
+export type IndexKind = 'num' | 'text';
+
 /** One document_index row to write (documentId + collection filled by the query). */
 export interface IndexValue {
   readonly fieldKey: string;
   readonly valueText: string | null;
   readonly valueNum: number | null;
+  /** `${collection}:${fieldKey}` for fields declared `unique`, else null — the
+   *  DB-level uniqueness backing (COR-8). See document_index in schema.ts. */
+  readonly uniqueKey: string | null;
 }
 
 type Row = typeof documents.$inferSelect;
@@ -85,17 +94,32 @@ export async function getDocument(
 
 export interface ListFilter {
   readonly fieldKey: string;
+  readonly kind: IndexKind;
+  /** Raw filter value; coerced to a number by the query when `kind === 'num'`. */
   readonly value: string;
 }
 
 export interface ListSort {
   readonly fieldKey: string;
+  readonly kind: IndexKind;
   readonly dir: 'asc' | 'desc';
+}
+
+/** Keyset position for cursor pagination on the DEFAULT sort (createdAt, id). */
+export interface ListCursor {
+  readonly createdAt: string;
+  readonly id: string;
 }
 
 export interface ListOptions {
   readonly limit: number;
-  readonly offset: number;
+  /** Keyset cursor on (createdAt, id) — the performant list path
+   *  (DATABASE_STANDARDS §Query performance). When set (and no custom `sort`), the
+   *  page is fetched by keyset instead of scanning with OFFSET. */
+  readonly cursor?: ListCursor;
+  /** Legacy 0-based offset for page-number navigation. Retained for the page-based
+   *  callers (admin/REST/MCP); prefer `cursor`. Ignored when `cursor` applies. */
+  readonly offset?: number;
   /** Access predicate compiled from the principal's permissions (applied INSIDE
    *  the query — never post-filter). undefined = no restriction (admin). */
   readonly accessFilter?: SQL;
@@ -107,38 +131,53 @@ export interface ListOptions {
   readonly sort?: ListSort;
 }
 
-/** Predicate: documents whose indexed `fieldKey` equals `value` (in this collection). */
+/** Predicate: documents whose indexed `fieldKey` equals `value` (in this collection).
+ *  number/boolean fields (kind 'num') compare `value_num` (text is NULL for them),
+ *  everything else compares `value_text` (COR-3). */
 function indexFilter(collection: string, f: ListFilter): SQL {
-  return sql`${documents.id} IN (SELECT ${documentIndex.documentId} FROM ${documentIndex} WHERE ${documentIndex.collection} = ${collection} AND ${documentIndex.fieldKey} = ${f.fieldKey} AND ${documentIndex.valueText} = ${f.value})`;
+  const col = f.kind === 'num' ? documentIndex.valueNum : documentIndex.valueText;
+  const val: string | number = f.kind === 'num' ? Number(f.value) : f.value;
+  return sql`${documents.id} IN (SELECT ${documentIndex.documentId} FROM ${documentIndex} WHERE ${documentIndex.collection} = ${collection} AND ${documentIndex.fieldKey} = ${f.fieldKey} AND ${col} = ${val})`;
+}
+
+/** Keyset predicate for the default order (createdAt DESC, id DESC): rows strictly
+ *  "after" the cursor. */
+function cursorPredicate(c: ListCursor): SQL {
+  return sql`(${documents.createdAt} < ${c.createdAt} OR (${documents.createdAt} = ${c.createdAt} AND ${documents.id} < ${c.id}))`;
 }
 
 /** List documents in a collection with the access predicate applied in-query.
- *  Returns rows for the page plus the total matching the SAME filter (so counts
- *  and pagination can never leak — D17). Witness required. */
+ *  Returns rows for the page plus the total matching the SAME filter — the count
+ *  excludes the pagination cursor so it always reflects the full filtered set (so
+ *  counts and pagination can never leak — D17). Witness required. */
 export async function listDocuments(
   db: Database,
   collection: string,
   opts: ListOptions,
   _grant: Grant,
 ): Promise<{ rows: DocumentRecord[]; total: number }> {
-  const where = and(
+  // The full-filter WHERE (no pagination) — used verbatim for the total count.
+  const baseWhere = and(
     eq(documents.collection, collection),
     opts.status ? eq(documents.status, opts.status) : undefined,
     opts.accessFilter,
     ...(opts.filters ?? []).map((f) => indexFilter(collection, f)),
   );
-  // Sort by an indexed field via a correlated subquery, else newest-first.
+  // Keyset only applies to the default order; a custom sort falls back to offset.
+  const useCursor = !!opts.cursor && !opts.sort;
+  const rowsWhere = useCursor ? and(baseWhere, cursorPredicate(opts.cursor!)) : baseWhere;
+
+  // Sort by an indexed field via a correlated subquery (right column per kind),
+  // else newest-first.
   const orderBy = opts.sort
-    ? sql`(SELECT ${documentIndex.valueText} FROM ${documentIndex} WHERE ${documentIndex.documentId} = ${documents.id} AND ${documentIndex.fieldKey} = ${opts.sort.fieldKey}) ${opts.sort.dir === 'asc' ? sql`ASC` : sql`DESC`}`
+    ? sql`(SELECT ${opts.sort.kind === 'num' ? documentIndex.valueNum : documentIndex.valueText} FROM ${documentIndex} WHERE ${documentIndex.documentId} = ${documents.id} AND ${documentIndex.fieldKey} = ${opts.sort.fieldKey}) ${opts.sort.dir === 'asc' ? sql`ASC` : sql`DESC`}`
     : sql`${documents.createdAt} DESC, ${documents.id} DESC`;
-  const rows = await db
-    .select()
-    .from(documents)
-    .where(where)
-    .orderBy(orderBy)
-    .limit(opts.limit)
-    .offset(opts.offset);
-  const totalRows = await db.select({ n: count() }).from(documents).where(where);
+
+  let q = db.select().from(documents).where(rowsWhere).orderBy(orderBy).limit(opts.limit).$dynamic();
+  if (!useCursor && opts.offset) q = q.offset(opts.offset);
+  const rows = await q;
+
+  const totalRows = await db.select({ n: count() }).from(documents).where(baseWhere);
   return { rows: rows.map(toDomain), total: totalRows[0]?.n ?? 0 };
 }
 
@@ -152,14 +191,21 @@ export async function nextRevisionNumber(db: Database, documentId: string): Prom
 }
 
 /** Whether a value already exists for an indexed+unique field (excluding one id).
- *  Used by the documents service to enforce `unique` before writing. */
+ *  Used by the documents service as a friendly pre-check before writing; the DB
+ *  unique index is the race-proof guard (COR-8). Compares the column matching the
+ *  field's index kind so numeric uniques are checked correctly. */
 export async function isIndexValueTaken(
   db: Database,
   collection: string,
   fieldKey: string,
-  valueText: string,
+  value: string | number,
+  kind: IndexKind,
   excludeDocumentId?: string,
 ): Promise<boolean> {
+  const valueMatch =
+    kind === 'num'
+      ? eq(documentIndex.valueNum, Number(value))
+      : eq(documentIndex.valueText, String(value));
   const rows = await db
     .select({ id: documentIndex.documentId })
     .from(documentIndex)
@@ -167,7 +213,7 @@ export async function isIndexValueTaken(
       and(
         eq(documentIndex.collection, collection),
         eq(documentIndex.fieldKey, fieldKey),
-        eq(documentIndex.valueText, valueText),
+        valueMatch,
         excludeDocumentId ? sql`${documentIndex.documentId} <> ${excludeDocumentId}` : undefined,
       ),
     )
@@ -186,6 +232,7 @@ function indexInserts(db: Database, documentId: string, collection: string, valu
       fieldKey: v.fieldKey,
       valueText: v.valueText,
       valueNum: v.valueNum,
+      uniqueKey: v.uniqueKey,
     }),
   );
 }
