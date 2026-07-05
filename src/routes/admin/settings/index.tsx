@@ -50,7 +50,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
   const { db, def, doc } = await loadSingleton(c);
   if (!def) return dsRedirect(c, '/admin/settings');
-  const input = coerceAdminForm(def, await c.req.parseBody());
+  // all: true so a <select multiple> posts repeated keys as an array (COR-4).
+  const input = coerceAdminForm(def, await c.req.parseBody({ all: true }));
   try {
     if (doc) await updateDocument(db, requirePrincipal(c), 'settings', doc.id, input, nowIso());
     else await createDocument(db, requirePrincipal(c), 'settings', input, nowIso());
