@@ -60,7 +60,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `bun run routes` regenerates `src/router.ts`; `src/main.tsx` only wires global middleware, `onError`,
   `loadRoutes`, `notFound` — never register routes there by hand.
 - **Services** `src/services/` — all business logic **and all authorization** (`authorize()` before any
-  read/write). Call queries, never D1.
+  read/write; identity-scoped operations like `/admin/account` skip gating). Call queries, never D1.
 - **Queries** `src/db/queries/` — the **only** layer importing Drizzle; row↔domain mapping is private
   here; no Drizzle types leak upward.
 - **Fields** `src/fields/` — the FieldType registry; one module per type. The most important interface
@@ -73,7 +73,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   **`src/client/`** browser islands (CodeMirror, Uppy).
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
-operations go through services → queries. All authorization goes through `authorize()`.
+operations go through services → queries. All authorization goes through `authorize()` (except permission-free `getSettings()` reads on the render path, mirroring `collectionPublicRead`).
 
 ## Security posture (why this project exists)
 

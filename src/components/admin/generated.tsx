@@ -7,8 +7,11 @@
 
 import type { FC } from 'hono/jsx';
 import { resolveField } from '@/fields/registry';
+import { fieldLabel } from '@/lib/humanize';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import type { DocumentRecord } from '@/services/documents';
+import type { SiteSettings } from '@/services/settings';
+import { formatDate } from '@/lib/format-date';
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, EmptyState } from '@/components/ui';
 
 type EditProps = { field: FieldDescriptor; config: unknown; value: unknown; signal: string };
@@ -34,20 +37,28 @@ function FieldCell({ field, value }: { field: FieldDescriptor; value: unknown })
   return <span>{value == null ? '' : String(value)}</span>;
 }
 
-/** The generated edit/create form for a collection. Posts via Datastar to `action`. */
+/** The generated edit/create form for a collection. Posts via Datastar to `action`.
+ *  Pass `id` to associate an external submit (the EditorSidebar's Save button, item
+ *  4). `renderActions={false}` omits the inline footer + #form-result so the sidebar
+ *  owns them; leave it true for a standalone form. */
 export function GeneratedForm({
   def,
   doc,
   action,
   submitLabel,
+  id,
+  renderActions = true,
 }: {
   def: CollectionDefinition;
   doc?: DocumentRecord;
   action: string;
   submitLabel: string;
+  id?: string;
+  renderActions?: boolean;
 }) {
   return (
     <form
+      id={id}
       class="flex flex-col gap-6"
       data-signals="{busy: false}"
       data-on:submit={`@post('${action}', {contentType: 'form'})`}
@@ -57,27 +68,34 @@ export function GeneratedForm({
           <FieldEditor field={field} value={doc?.data[field.key]} />
         ))}
       </div>
-      {/* Morph target for the inline save-error fragment (200, #form-result). */}
-      <div id="form-result" />
-      <div class="flex items-center gap-3">
-        <Button type="submit" busy="$busy">
-          {submitLabel}
-        </Button>
-        <a href={`/admin/c/${def.slug}`} class="text-sm text-ink-muted hover:text-ink hover:underline">
-          Cancel
-        </a>
-      </div>
+      {renderActions ? (
+        <>
+          {/* Morph target for the inline save-error fragment (200, #form-result). */}
+          <div id="form-result" />
+          <div class="flex items-center gap-3">
+            <Button type="submit" busy="$busy">
+              {submitLabel}
+            </Button>
+            <a href={`/admin/c/${def.slug}`} class="text-sm text-ink-muted hover:text-ink hover:underline">
+              Cancel
+            </a>
+          </div>
+        </>
+      ) : null}
     </form>
   );
 }
 
-/** The generated list view: columns from `showInList` fields (or the first field). */
+/** The generated list view: columns from `showInList` fields (or the first field).
+ *  `settings` (optional) tunes the "Updated" timestamp's timezone/format. */
 export function GeneratedTable({
   def,
   rows,
+  settings,
 }: {
   def: CollectionDefinition;
   rows: DocumentRecord[];
+  settings?: SiteSettings;
 }) {
   const columns = def.fields.filter((f) => f.admin?.showInList);
   const cols = columns.length ? columns : def.fields.slice(0, 1);
@@ -97,7 +115,7 @@ export function GeneratedTable({
       <TableHead>
         <TableRow>
           {cols.map((f) => (
-            <TableHeaderCell>{f.label ?? f.key}</TableHeaderCell>
+            <TableHeaderCell>{fieldLabel(f)}</TableHeaderCell>
           ))}
           <TableHeaderCell>Status</TableHeaderCell>
           <TableHeaderCell>Updated</TableHeaderCell>
@@ -121,7 +139,7 @@ export function GeneratedTable({
               <Badge tone={doc.status === 'published' ? 'success' : 'neutral'}>{doc.status}</Badge>
             </TableCell>
             <TableCell>
-              <span class="font-mono text-xs text-ink-subtle">{doc.updatedAt.slice(0, 10)}</span>
+              <span class="font-mono text-xs text-ink-subtle">{formatDate(doc.updatedAt, settings)}</span>
             </TableCell>
           </TableRow>
         ))}

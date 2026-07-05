@@ -8,6 +8,7 @@
  */
 
 export * from '@/components/ui/cx';
+export * from '@/components/ui/control';
 export * from '@/components/ui/icon';
 export * from '@/components/ui/button';
 export * from '@/components/ui/badge';
@@ -17,6 +18,8 @@ export * from '@/components/ui/input';
 export * from '@/components/ui/select';
 export * from '@/components/ui/textarea';
 export * from '@/components/ui/checkbox';
+export * from '@/components/ui/toggle';
+export * from '@/components/ui/breadcrumb';
 export * from '@/components/ui/field';
 export * from '@/components/ui/table';
 export * from '@/components/ui/empty-state';

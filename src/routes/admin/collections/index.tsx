@@ -42,7 +42,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         }
       />
 
-      <div class="mt-8">
+      <div>
         {defs.length === 0 ? (
           <EmptyState
             icon={<Boxes class="size-6" />}

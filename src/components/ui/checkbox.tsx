@@ -25,8 +25,11 @@ interface CheckboxProps {
   readonly [dataAttr: `data-${string}`]: string | number | boolean | undefined;
 }
 
+// `accent-accent` (NOT `text-accent`) is what a native checkbox paints its check
+// from — the CSS `accent-color` property. `text-accent` set `color`, which a native
+// checkbox ignores, so the check rendered in system-blue instead of iris (item 5).
 const CHECKBOX_BASE =
-  'size-4 rounded border-border-strong text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'size-4 shrink-0 rounded-sm border border-border-strong bg-surface accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 export function Checkbox({ class: cls, ...rest }: CheckboxProps): JSX.Element {
   return <input type="checkbox" class={cx(CHECKBOX_BASE, cls)} {...(rest as Record<string, unknown>)} />;

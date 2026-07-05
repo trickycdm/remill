@@ -81,6 +81,15 @@ code. The audit log is itself readable only with `manage_access`.
   without `publish` never sees `publish_<slug>`. Capability discovery IS permission discovery.
 - "Agent proposes, human approves" is expressed with the permission model (grant `create` + `update`
   with condition `own`, withhold `publish`) — never build a parallel workflow engine.
+- **Identity-scoped self-service edits skip `authorize()`/`Grant`** — the identity IS the
+  authorization. `/admin/account` (a human editing their own profile/password) operates strictly on
+  the session principal (`getUser(c).id`), **never a body-supplied id**, so there is no cross-principal
+  access to gate. Editing *other* principals stays under `manage_access`. (Password change: verify the
+  current password first — SECURITY_STANDARDS §4.)
+- **Un-gated reads are a narrow, explicit exception** for render-path config that non-readers still
+  need: `getSettings()` reads the `settings` singleton's non-sensitive display fields via a witness-free
+  query (mirroring `collectionPublicRead`). WRITES to settings still run the full `authorize()`-gated
+  document pipeline. Do not widen this to document content.
 
 ## Deferred: field-level access
 

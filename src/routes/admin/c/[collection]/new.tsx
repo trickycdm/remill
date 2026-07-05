@@ -12,6 +12,7 @@ import { dsRedirect } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader } from '@/components/ui';
 import { GeneratedForm } from '@/components/admin/generated';
+import { EditorSidebar } from '@/components/admin/editor-sidebar';
 import { renderSaveError } from '@/lib/save-error';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -24,9 +25,31 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
   return c.render(
     <AdminShell user={user} current="content">
-      <PageHeader title={`New ${def.name}`} eyebrow={def.name} />
-      <div class="max-w-2xl">
-        <GeneratedForm def={def} action={`/admin/c/${slug}/new`} submitLabel={`Create ${def.name}`} />
+      <PageHeader
+        breadcrumb={[
+          { label: 'Content', href: '/admin/c' },
+          { label: def.name, href: `/admin/c/${slug}` },
+          { label: `New ${def.name}` },
+        ]}
+        title={`New ${def.name}`}
+      />
+      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div class="max-w-2xl">
+          <GeneratedForm
+            def={def}
+            action={`/admin/c/${slug}/new`}
+            submitLabel={`Create ${def.name}`}
+            id="editor-form"
+            renderActions={false}
+          />
+        </div>
+        <EditorSidebar
+          mode="create"
+          formId="editor-form"
+          submitLabel={`Create ${def.name}`}
+          cancelHref={`/admin/c/${slug}`}
+          def={def}
+        />
       </div>
     </AdminShell>,
   );

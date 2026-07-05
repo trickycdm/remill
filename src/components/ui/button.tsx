@@ -18,6 +18,7 @@
 
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import { Spinner } from '@/components/ui/icon';
+import { CONTROL_H } from '@/components/ui/control';
 import { cx } from '@/components/ui/cx';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'link';
@@ -33,10 +34,12 @@ const VARIANT: Record<ButtonVariant, string> = {
   link: 'bg-transparent text-accent-text underline decoration-1 underline-offset-4 hover:decoration-2 px-0 h-auto',
 };
 
+// Height comes from the shared CONTROL_H so a Button can never drift out of
+// alignment with an Input/Select beside it (item 7); px/text/gap stay per-size.
 const SIZE: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-[13px] gap-1.5',
-  md: 'h-10 px-4 text-sm gap-2',
-  lg: 'h-11 px-6 text-[15px] gap-2',
+  sm: `${CONTROL_H.sm} px-3 text-[13px] gap-1.5`,
+  md: `${CONTROL_H.md} px-4 text-sm gap-2`,
+  lg: `${CONTROL_H.lg} px-6 text-[15px] gap-2`,
   icon: 'size-10 p-0',
 };
 

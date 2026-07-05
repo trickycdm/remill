@@ -1,5 +1,7 @@
 # remill — Admin UX Improvements (7 items)
 
+**Status: COMPLETE — 2026-07-05** · all 5 phases shipped on `feature/admin-ux` (6 commits, `156a03b`→`1b0073d`). Verified: 0 type errors, 0 lint, **174 unit tests**, **20 Playwright e2e** (+ axe), production build clean. Not merged/pushed. See the Revision Log for the two minor deviations.
+
 ## Context
 
 Following the code-review remediation, the user flagged 7 admin UI/UX issues. Four read-only
@@ -36,7 +38,7 @@ WCAG 2.1 AA, all built on existing primitives and tokens.
 
 ---
 
-## Phase 0 — Foundations (shared primitives; build first)
+## Phase 0 — Foundations (shared primitives; build first) — ✅ DONE (`156a03b`)
 
 1. **`control.ts` sizing source of truth** (item 7). New `src/components/ui/control.ts`:
    `export const CONTROL_H = { sm:'h-8', md:'h-10', lg:'h-11' }`. Canonical control height = `md`
@@ -62,7 +64,7 @@ WCAG 2.1 AA, all built on existing primitives and tokens.
    rendered above the eyebrow. Remove the now-redundant ad-hoc `mt-8` on the three `collections/*`
    pages.
 
-## Phase 1 — Consistency & adoption (items 7, 5, 6, 1)
+## Phase 1 — Consistency & adoption (items 7, 5, 6, 1) — ✅ DONE (`b50da8a`)
 
 - **Control sizing (item 7):** source `Button` height from `CONTROL_H` (`button.tsx:36-41`); add
   `size?: ControlSize` to `Input`/`Select` (default `md`); extend `Select` with `multiple?` so
@@ -79,7 +81,7 @@ WCAG 2.1 AA, all built on existing primitives and tokens.
   (route params + `def.name` + doc title); omit on depth-1 pages. Drop the redundant `eyebrow={def.name}`
   where a breadcrumb now carries the parent.
 
-## Phase 2 — Admin shell user menu (item 2)
+## Phase 2 — Admin shell user menu (item 2) — ✅ DONE (`b5221cf`)
 
 Replace the top-bar name/badge/sign-out (`admin-shell.tsx:185-206`) with a Datastar **disclosure menu**
 (not a modal): add a `userMenuOpen` signal (`:100`) + extend the Escape handler (`:102`); trigger =
@@ -90,7 +92,7 @@ verbatim (unchanged behavior) **plus an Account link** (`/admin/account`, lands 
 baseline = disclosure (button + `aria-expanded` + Esc + real focusable items); note APG roving-tabindex
 as optional. **Update `admin-smoke.spec.ts`** if it selects the sign-out control.
 
-## Phase 3 — Content editor action hierarchy (item 4)
+## Phase 3 — Content editor action hierarchy (item 4) — ✅ DONE (`6fa9d98`)
 
 Consolidate all actions + metadata into a **sticky right sidebar**; the form becomes content-only.
 - **New `src/components/admin/editor-sidebar.tsx`** taking `mode: 'create'|'edit'` — renders cards:
@@ -111,7 +113,7 @@ Consolidate all actions + metadata into a **sticky right sidebar**; the form bec
   Restore controls move — re-point selectors (still by role/name) to the sidebar; keep the full
   lifecycle assertions.
 
-## Phase 4 — Settings & Account overhaul (item 3, full)
+## Phase 4 — Settings & Account overhaul (item 3, full) — ✅ DONE (`a41fa0a`, `1b0073d`)
 
 **Instance settings** (`/admin/settings`, admin-only):
 - **Expand** the `settings` singleton `fields_json` (`db/seed.sql:52-61`) with a curated, labeled set —
@@ -195,3 +197,22 @@ green at the end of every phase before starting the next.
 - **Fixes to raw controls:** `routes/admin/access/index.tsx`, `routes/admin/media/index.tsx`.
 - **Tests:** `e2e/{admin-content,admin-schema-access,admin-smoke}.spec.ts` (update), `e2e/account.spec.ts`
   (new), unit tests for humanize/formatDate/account service.
+
+---
+
+## Revision Log
+
+- **2026-07-05: Executed as planned across 5 phases, one commit each (Phase 4 in two).** All 7 items
+  shipped; 66→174 unit tests, 20 e2e. Two logged deviations, both minor:
+  1. **`siteName` in the global `<title>`/masthead was deferred** (Phase 4 consumption). The plan
+     listed it, but wiring it needs cross-cutting `layouts.tsx`/`admin-shell.tsx` plumbing (a
+     per-request settings read threaded into the layout), out of scope for the route-local consumption
+     pass. Settings ARE consumed where it was clean — `defaultPageSize` (list size) and `formatDate`
+     (timestamps in the list + editor Details) — plus the settings page echoes the saved `siteName`.
+     Follow-up: a small settings-context middleware if the title/masthead should reflect `siteName`.
+  2. **`renderSaveError` was generalized with an optional `targetId`** (not in the plan) so the two
+     account forms (Profile / Security) morph errors into distinct `#profile-result` / `#security-result`
+     targets instead of a single shared `#form-result`. Clean extension of the existing pattern.
+- Discovered-and-fixed during Phase 4 e2e: `dsRedirect` to the *same* URL is a no-op for
+  `waitForURL`, which raced the account sign-out/restore; the spec now waits on the reloaded form.
+- Not merged/pushed — awaiting the user's visual review + merge decision.

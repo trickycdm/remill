@@ -49,6 +49,11 @@ export async function setPrincipalDisabled(db: Database, id: string, disabled: b
   await db.update(principals).set({ disabled: disabled ? 1 : 0 }).where(eq(principals.id, id));
 }
 
+/** Update a principal's display name (the human's shown name / an agent's label). */
+export async function updatePrincipalName(db: Database, id: string, name: string): Promise<void> {
+  await db.update(principals).set({ name }).where(eq(principals.id, id));
+}
+
 // ---------------------------------------------------------------------------
 // Tokens
 // ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@
 import { ChevronDown } from '@/components/ui/icon';
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import { INPUT_BASE } from '@/components/ui/input';
+import { CONTROL_H, type ControlSize } from '@/components/ui/control';
 import { cx } from '@/components/ui/cx';
 
 interface SelectProps {
@@ -18,6 +19,11 @@ interface SelectProps {
   id?: string;
   name?: string;
   value?: string;
+  /** Control height; share the same `size` as an adjacent Button (default md).
+   *  Ignored when `multiple` (a multi-select sizes to its rows). */
+  size?: ControlSize;
+  /** A multi-select list box. Sizes to its option rows; no chevron overlay. */
+  multiple?: boolean;
   required?: boolean;
   disabled?: boolean;
   invalid?: boolean;
@@ -28,14 +34,30 @@ interface SelectProps {
   readonly [dataAttr: `data-${string}`]: unknown;
 }
 
-export function Select({ children, invalid, class: cls, ...rest }: SelectProps): JSX.Element {
+export function Select({ children, invalid, multiple, size = 'md', class: cls, ...rest }: SelectProps): JSX.Element {
   const stateClass = invalid
     ? 'border-danger focus-visible:outline-danger'
     : 'border-border-strong focus-visible:outline-ring';
+
+  // A multi-select is a list box: it opts out of the fixed control height and the
+  // single-select chevron, but keeps the shared INPUT_BASE (border/padding/focus).
+  if (multiple) {
+    return (
+      <select
+        multiple
+        class={cx(INPUT_BASE, 'min-h-24 py-2 leading-relaxed', stateClass, cls)}
+        aria-invalid={invalid ? 'true' : undefined}
+        {...(rest as Record<string, unknown>)}
+      >
+        {children}
+      </select>
+    );
+  }
+
   return (
     <div class={cx('relative', cls)}>
       <select
-        class={cx(INPUT_BASE, 'h-10 appearance-none pr-9', stateClass)}
+        class={cx(INPUT_BASE, CONTROL_H[size], 'appearance-none pr-9', stateClass)}
         aria-invalid={invalid ? 'true' : undefined}
         {...(rest as Record<string, unknown>)}
       >

@@ -18,8 +18,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), (c) => {
   const user = getUser(c);
   return c.render(
     <AdminShell user={user} current="collections">
-      <PageHeader title="New collection" eyebrow="Collections" />
-      <div class="mt-8 max-w-3xl">
+      <PageHeader
+        title="New collection"
+        breadcrumb={[{ label: 'Collections', href: '/admin/collections' }, { label: 'New collection' }]}
+      />
+      <div class="max-w-3xl">
         <CollectionBuilder action="/admin/collections/new" submitLabel="Create collection" />
       </div>
     </AdminShell>,

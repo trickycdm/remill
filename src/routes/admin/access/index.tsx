@@ -101,7 +101,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             <FormField fieldId="agent-name" label="New agent identity">
               <Input id="agent-name" name="name" type="text" placeholder="researcher-bot" required />
             </FormField>
-            <Button type="submit" size="sm">
+            <Button type="submit">
               Create agent
             </Button>
           </form>
@@ -156,7 +156,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                   <FormField fieldId={`scope-${p.id}`} label="Scope">
                     <Input id={`scope-${p.id}`} name="collection" type="text" value="*" placeholder="* or a slug" />
                   </FormField>
-                  <Button type="submit" size="sm" variant="secondary">
+                  <Button type="submit" variant="secondary">
                     Assign
                   </Button>
                 </form>
@@ -193,7 +193,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                           <option value="read,create,update">write (no publish/delete)</option>
                         </Select>
                       </FormField>
-                      <Button type="submit" size="sm" variant="secondary">
+                      <Button type="submit" variant="secondary">
                         Issue token
                       </Button>
                     </form>

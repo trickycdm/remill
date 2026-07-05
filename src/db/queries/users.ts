@@ -43,3 +43,14 @@ export async function getUserByEmail(db: Database, email: string): Promise<UserR
     disabled: row.disabled === 1,
   };
 }
+
+/** Update a user's login email. Caller normalizes (trim+lowercase) and checks
+ *  uniqueness first; the `users_email_unique` index is the race-proof backstop. */
+export async function updateUserEmail(db: Database, principalId: string, email: string): Promise<void> {
+  await db.update(users).set({ email }).where(eq(users.principalId, principalId));
+}
+
+/** Update a user's stored scrypt password hash (`saltHex:hashHex`). */
+export async function updateUserPassword(db: Database, principalId: string, passwordHash: string): Promise<void> {
+  await db.update(users).set({ passwordHash }).where(eq(users.principalId, principalId));
+}

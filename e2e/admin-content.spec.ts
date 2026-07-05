@@ -49,10 +49,12 @@ test.describe('Phase 4 — generated document admin', () => {
     await expect(page.getByRole('cell', { name: 'My First Post', exact: false }).first()).toBeVisible();
 
     // Whitelist guard is invisible to the UI but enforced server-side; here we just
-    // confirm the happy path renders. Clean up by deleting.
+    // confirm the happy path renders. Clean up by deleting via the confirm Dialog.
     await page.getByRole('link', { name: 'My First Post' }).first().click();
-    page.once('dialog', (d) => d.accept());
-    await page.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('button', { name: /^Delete/ }).click(); // "Delete…" opens the dialog
+    const del = page.getByRole('dialog');
+    await expect(del).toBeVisible();
+    await del.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts$/);
   });
 

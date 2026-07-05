@@ -6,12 +6,14 @@ import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
 import { getDocument, updateDocument, listRevisions } from '@/services/documents';
+import { getSettings } from '@/services/settings';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
-import { dsRedirect, jsLiteral } from '@/lib/datastar-response';
+import { dsRedirect } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, Button, Badge, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
+import { PageHeader } from '@/components/ui';
 import { GeneratedForm } from '@/components/admin/generated';
+import { EditorSidebar } from '@/components/admin/editor-sidebar';
 import { renderSaveError } from '@/lib/save-error';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -28,70 +30,49 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const now = nowIso();
   const doc = await getDocument(db, principal, slug, id, now);
   const revisions = await listRevisions(db, principal, slug, id, now);
-  const published = doc.status === 'published';
+  const settings = await getSettings(db);
+
+  // Title the page by the document's primary display value (its first list field),
+  // falling back to a generic edit label for an untitled doc.
+  const titleField = def.fields.find((f) => f.admin?.showInList) ?? def.fields[0];
+  const rawTitle = titleField ? doc.data[titleField.key] : undefined;
+  const docTitle = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle : `Edit ${def.name}`;
 
   return c.render(
     <AdminShell user={user} current="content">
       <PageHeader
-        title={`Edit ${def.name}`}
-        eyebrow={def.name}
-        actions={
-          <div class="flex items-center gap-3">
-            <Badge tone={published ? 'success' : 'neutral'}>{doc.status}</Badge>
-            {def.workflow?.draftPublish && (
-              <form method="post" action={`/admin/c/${slug}/${id}/publish`} class="contents">
-                <input type="hidden" name="publish" value={published ? '0' : '1'} />
-                <Button type="submit" variant={published ? 'secondary' : 'primary'}>
-                  {published ? 'Unpublish' : 'Publish'}
-                </Button>
-              </form>
-            )}
-          </div>
-        }
+        breadcrumb={[
+          { label: 'Content', href: '/admin/c' },
+          { label: def.name, href: `/admin/c/${slug}` },
+          { label: docTitle },
+        ]}
+        title={docTitle}
       />
 
-      <div class="grid gap-8 lg:grid-cols-[1fr_18rem]">
+      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div class="max-w-2xl">
-          <GeneratedForm def={def} doc={doc} action={`/admin/c/${slug}/${id}`} submitLabel="Save changes" />
-
-          <form
-            method="post"
-            action={`/admin/c/${slug}/${id}/delete`}
-            class="mt-8 border-t border-border pt-6"
-            onsubmit={`return confirm('Delete this ${jsLiteral(def.name.toLowerCase())}? This cannot be undone.')`}
-          >
-            <Button type="submit" variant="danger" size="sm">
-              Delete
-            </Button>
-          </form>
+          <GeneratedForm
+            def={def}
+            doc={doc}
+            action={`/admin/c/${slug}/${id}`}
+            submitLabel="Save changes"
+            id="editor-form"
+            renderActions={false}
+          />
         </div>
 
-        <aside>
-          <Card>
-            <CardHeader>
-              <CardTitle>Revisions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ol class="flex flex-col gap-2 text-sm">
-                {revisions.map((r) => (
-                  <li class="flex items-center justify-between gap-2">
-                    <span class="font-mono text-xs text-ink-subtle">
-                      #{r.revision} · {r.savedAt.slice(0, 16).replace('T', ' ')}
-                    </span>
-                    {r.revision !== revisions[0]?.revision && (
-                      <form method="post" action={`/admin/c/${slug}/${id}/restore`} class="contents">
-                        <input type="hidden" name="revision" value={String(r.revision)} />
-                        <button type="submit" class="text-xs text-accent-text hover:underline">
-                          Restore
-                        </button>
-                      </form>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
-        </aside>
+        <EditorSidebar
+          mode="edit"
+          formId="editor-form"
+          submitLabel="Save changes"
+          cancelHref={`/admin/c/${slug}`}
+          def={def}
+          slug={slug}
+          id={id}
+          doc={doc}
+          revisions={revisions}
+          settings={settings}
+        />
       </div>
     </AdminShell>,
   );

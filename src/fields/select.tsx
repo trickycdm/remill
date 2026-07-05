@@ -56,16 +56,9 @@ export const selectField: FieldType<SelectConfig, SelectValue> = {
     return (
       <FieldShell field={field} signal={signal}>
         {config.multiple ? (
-          <select
-            id={signal}
-            name={field.key}
-            multiple
-            required={field.required}
-            data-bind={signal}
-            class="w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-ink shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
+          <Select id={signal} name={field.key} multiple required={field.required} data-bind={signal}>
             {options}
-          </select>
+          </Select>
         ) : (
           <Select id={signal} name={field.key} required={field.required} data-bind={signal}>
             {field.required ? null : <option value="">—</option>}
