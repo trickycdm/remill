@@ -50,11 +50,10 @@ export interface CollectionDefinition {
   readonly shape: CollectionShape;
   readonly fields: readonly FieldDescriptor[];
   readonly workflow?: { readonly draftPublish?: boolean };
-  readonly access?: {
-    readonly publicRead?: boolean;
-    // A full role→action map is also allowed (§4); parsed by the access module.
-    readonly [role: string]: unknown;
-  };
+  // `publicRead` is the ONLY collection-level access knob. Collection-scoped
+  // permissions live in `role_permissions` (the authorizer's single source);
+  // an inline role→action map is rejected on write (see collections service).
+  readonly access?: { readonly publicRead?: boolean };
   readonly protected?: boolean;
 }
 

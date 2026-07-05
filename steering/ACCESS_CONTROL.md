@@ -48,7 +48,11 @@ There are **no negative rules**. If you can't express a policy additively, the p
 this system — do not add deny rules.
 
 Media rides collection permissions (upload = `create` on the `media` collection). A collection's
-`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`.
+`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`. **`publicRead`
+is the only collection-level access field** — collection-scoped permissions are expressed with
+`role_permissions` + collection-scoped `principal_roles`, the single mechanism the authorizer consumes.
+An inline `access: { <role>: [actions] }` map is rejected on write (it was once stored and silently
+ignored — a removed security smell).
 
 ## Tables (fixed, Drizzle-migrated)
 

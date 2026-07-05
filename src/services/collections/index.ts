@@ -14,7 +14,7 @@ import type { Database } from '@/db/client';
 import type { CollectionDefinition } from '@/fields/types';
 import { requireFieldType, isIndexable } from '@/fields/registry';
 import * as q from '@/db/queries/collections';
-import { authorize, ACTIONS, type Principal } from '@/access';
+import { authorize, type Principal } from '@/access';
 import { getPrincipalPermissions } from '@/db/queries/roles';
 import { InputValidationError, NotFoundError, ConflictError, ForbiddenError } from '@/lib/errors';
 import { RESERVED_FIELD_KEYS } from '@/config/constants';
@@ -24,13 +24,14 @@ const SLUG_RE = /^[a-z][a-z0-9-]*$/;
 const KEY_RE = /^[a-z][a-z0-9_]*$/;
 
 // SEC-6: `access` and `workflow` are persisted verbatim, so they MUST be validated
-// before they reach the database. `workflow` is a closed shape; `access` allows the
-// `publicRead` sugar plus an optional role→actions map (each value a list of the
-// closed action vocabulary).
+// before they reach the database. Both are CLOSED shapes. `access` carries ONLY the
+// `publicRead` sugar — collection-scoped permissions live in `role_permissions`
+// (`principal_roles` assignments scoped to a collection), the single mechanism the
+// authorizer actually consumes. An earlier `.catchall(role→actions)` map was accepted,
+// stored, and silently ignored by `decide()` — a security smell (it looked like it
+// granted access but did nothing). It is now rejected outright (strictObject).
 const WORKFLOW_SCHEMA = z.strictObject({ draftPublish: z.boolean().optional() });
-const ACCESS_SCHEMA = z
-  .object({ publicRead: z.boolean().optional() })
-  .catchall(z.array(z.enum(ACTIONS)));
+const ACCESS_SCHEMA = z.strictObject({ publicRead: z.boolean().optional() });
 
 export const listCollections = q.listCollections;
 export const getCollection = q.getCollection;

@@ -41,6 +41,16 @@ describe('collections service — definition validation', () => {
     expect(await svc.getCollection(db, 'articles')).not.toBeNull();
   });
 
+  it('accepts publicRead but rejects an inline role→action access map (dead config removed)', async () => {
+    // publicRead is the only collection access knob — accepted.
+    await svc.createCollection(db, admin, bad({ slug: 'pub', access: { publicRead: true } }), NOW);
+    // A role→action map (once accepted, stored, and silently ignored) is now rejected.
+    const roleMap = { editor: ['read', 'update'] } as unknown as { publicRead?: boolean };
+    await expect(
+      svc.createCollection(db, admin, bad({ slug: 'roled', access: roleMap }), NOW),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
   it('rejects a bad slug', async () => {
     await expect(svc.createCollection(db, admin, bad({ slug: 'Bad Slug' }), NOW)).rejects.toBeInstanceOf(
       InputValidationError,
@@ -165,9 +175,7 @@ describe('collections service — discovery projection (SEC-5) + access/workflow
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 
-  it('SEC-6: accepts publicRead plus a valid role→actions map', async () => {
-    await expect(
-      svc.createCollection(db, admin, { ...posts, slug: 'ok-acc', access: { publicRead: true, editor: ['read', 'create'] } }, NOW),
-    ).resolves.toBeTruthy();
-  });
+  // (The former "SEC-6 accepts a role→actions map" test was removed: that map was
+  // dead config — stored but never consumed by the authorizer — and is now rejected.
+  // See "rejects an inline role→action access map" above.)
 });

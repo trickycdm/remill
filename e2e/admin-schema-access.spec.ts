@@ -205,6 +205,9 @@ test.describe('Phase 4 — schema builder + access UI', () => {
   });
 
   test('axe: collections index, builder, and access pages pass WCAG 2.1 AA', async ({ page }) => {
+    // Six full axe analyses over data-heavy admin pages (the access matrix grows as the
+    // suite accumulates principals/grants) — give the sweep headroom past the 30s default.
+    test.setTimeout(90_000);
     await loginAsAdmin(page);
     for (const path of [
       '/admin/collections',
@@ -214,9 +217,10 @@ test.describe('Phase 4 — schema builder + access UI', () => {
       '/admin/access/matrix',
       '/admin/settings',
     ]) {
-      await page.goto(path);
-      // Deterministic readiness: wait for the rendered main region rather than
-      // 'networkidle' (Playwright-discouraged; flaky once the suite grows).
+      // 'domcontentloaded' returns as soon as the SSR HTML is parsed — resilient to a
+      // late/slow resource when the shared vite-dev server is degraded near the end of
+      // the suite. axe only needs the parsed DOM; wait on #main-content for readiness.
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
       await page.locator('#main-content').first().waitFor();
       const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
       expect(r.violations, `axe on ${path}: ${r.violations.map((v) => v.id).join(',')}`).toEqual([]);
