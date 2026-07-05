@@ -3,13 +3,14 @@ import type { Env } from '@/types';
 import { apiPrincipal, apiJson } from '@/lib/api';
 import { getDb } from '@/db/client';
 import { uploadMedia } from '@/services/media';
+import { rateLimit, UPLOAD_RATE_LIMIT } from '@/middleware/rate-limit';
 import { nowIso } from '@/lib/now';
 import { BadRequestError } from '@/lib/errors';
 
 const factory = createFactory<{ Bindings: Env }>();
 
 /** POST /api/media — multipart upload → sniff → R2 → metadata (scope: write). */
-export const onRequestPost = factory.createHandlers(async (c) => {
+export const onRequestPost = factory.createHandlers(rateLimit('upload', UPLOAD_RATE_LIMIT), async (c) => {
   const now = nowIso();
   const body = await c.req.parseBody();
   const file = body.file;

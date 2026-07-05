@@ -31,6 +31,14 @@
       "bucket_name": "remill-media"
     }
   ],
+  // KV namespace backing the fixed-window rate limiter (SEC-2). Create with
+  // `wrangler kv namespace create RATE_LIMIT` and paste the returned id below.
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
   // MCP server (Phase 7) binds an McpAgent Durable Object here.
   // "durable_objects": { "bindings": [{ "name": "MCP", "class_name": "RemillMcp" }] },
   "env": {
@@ -51,6 +59,12 @@
         {
           "binding": "MEDIA",
           "bucket_name": "remill-media-preview"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "RATE_LIMIT",
+          "id": "00000000000000000000000000000000"
         }
       ]
     }

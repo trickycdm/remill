@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
+import { secureHeaders } from 'hono/secure-headers';
 import type { Env } from '@/types';
 import { RootLayout } from '@/layouts';
 import { sessionSetup } from '@/middleware/session';
+import { rateLimit, GLOBAL_RATE_LIMIT } from '@/middleware/rate-limit';
 import { AppError, ForbiddenError } from '@/lib/errors';
 import { dsRedirect, dsError } from '@/lib/datastar-response';
 import { getDb } from '@/db/client';
@@ -16,6 +18,42 @@ const app = new Hono<{ Bindings: Env }>();
 // ---------------------------------------------------------------------------
 
 app.use(logger());
+
+// Security response headers (SECURITY_STANDARDS.md §8, SEC-3). The CSP is crafted
+// to keep the admin working: Datastar is vendored same-origin (`'self'`) and
+// compiles its `data-*` expressions with the `Function` constructor, so
+// `script-src` MUST allow `'unsafe-eval'`; `'unsafe-inline'` covers the theme-init
+// snippet + `data-signals` bootstrap and Tailwind's inline styles. `connect-src
+// 'self'` permits Datastar SSE and Vite's same-origin HMR websocket in dev.
+app.use(
+  '*',
+  secureHeaders({
+    contentSecurityPolicy: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+      fontSrc: ["'self'"],
+      connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+    strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+    xFrameOptions: 'DENY',
+    xContentTypeOptions: 'nosniff',
+    referrerPolicy: 'strict-origin-when-cross-origin',
+    // publicRead media is designed to be embedded/consumed cross-origin, so we do
+    // NOT emit Cross-Origin-Resource-Policy (its `same-origin` default would block
+    // hotlinking of /media assets). Other secure-headers defaults are kept.
+    crossOriginResourcePolicy: false,
+  }),
+);
+
+// Soft site-wide rate limit (SEC-2). No-ops without the KV binding (tests).
+app.use('*', rateLimit('global', GLOBAL_RATE_LIMIT));
+
 app.use('*', sessionSetup()); // must run before any auth-reading route
 app.use('*', RootLayout);
 

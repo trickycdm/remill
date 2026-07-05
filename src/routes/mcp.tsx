@@ -2,6 +2,7 @@ import { createFactory } from 'hono/factory';
 import type { Env } from '@/types';
 import { getDb } from '@/db/client';
 import { resolvePrincipal } from '@/lib/api-auth';
+import { assertBodyWithinLimit } from '@/lib/api';
 import { handleMcp } from '@/mcp/handler';
 import { nowIso } from '@/lib/now';
 import { BadRequestError } from '@/lib/errors';
@@ -15,6 +16,7 @@ const factory = createFactory<{ Bindings: Env }>();
  * src/mcp/handler.ts.
  */
 export const onRequestPost = factory.createHandlers(async (c) => {
+  assertBodyWithinLimit(c); // SEC-4: reject oversized JSON-RPC bodies before parsing.
   const db = getDb(c.env.DB);
   const principal = await resolvePrincipal(db, c, 'mcp', nowIso());
 
