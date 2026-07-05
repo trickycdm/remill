@@ -17,6 +17,7 @@
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "preview": "vite preview --host 127.0.0.1 --port 3100",
     "e2e": "bun run db:migrate && bun run db:seed && bun run db:seed:e2e && PLAYWRIGHT_HTML_OPEN=never playwright test",
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",

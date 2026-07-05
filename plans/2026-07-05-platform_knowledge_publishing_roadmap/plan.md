@@ -384,6 +384,14 @@ plus REST/MCP:**
 ---
 
 ## Revision Log
+- 2026-07-05 (final): Tracks B & C complete (B1 6d560e0, B2 8d48d98, B3 159c795, B4 9a5cd8c,
+  C1 3b1f6ea, C2 0d12a20, C3 07f28e4); B5 remains deferred. Consolidated verification done:
+  0 type / 0 lint / 211 unit / **29/29 e2e twice on a fresh D1** / build clean. E2e harness
+  switched to a built preview (workerd via `vite preview`) per the re-plan recommendation —
+  and the "axe-sweep flake" root cause was finally identified as the **SEC-2 login rate
+  limiter** (10 logins/min/IP; the file's 9 logins + retries tipped it), not vite-dev
+  degradation: fixed by giving the sweep its own CF-Connecting-IP bucket. E2E_TESTING.md
+  rewritten to match the real harness.
 - 2026-07-05: Track A complete (A1–A5, commits 8fa715b…4f7c115). Re-planned Tracks B/C
   after a three-agent code validation + docs audit: added B1 sort/unique guards and the
   builder-config work item; added the B2 `getDocumentsByIds` batch loader; corrected B3

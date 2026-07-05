@@ -38,34 +38,25 @@ Add `"Bash(playwright-cli:*)"` to `.claude/settings.local.json` `permissions.all
 `playwright-cli` skill (`playwright-cli install --skills`) — it teaches the snapshot workflow, element
 targeting, and debugging patterns and is required for AI-driven test development.
 
-`playwright.config.ts` at the repo root. The dev server is Vite + Cloudflare Workers emulation on
-`http://localhost:3000` (`bun run dev`):
+`playwright.config.ts` at the repo root is authoritative. The load-bearing choices (don't relearn
+these):
 
-```ts
-export default defineConfig({
-  testDir: './e2e',
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
-  use: { baseURL: 'http://localhost:3000', trace: 'on-first-retry', screenshot: 'only-on-failure',
-         actionTimeout: 10_000, navigationTimeout: 15_000 },
-  projects: [
-    { name: 'setup', testMatch: /global-setup\.ts/, teardown: 'teardown' },
-    { name: 'teardown', testMatch: /global-teardown\.ts/ },
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], storageState: '.auth/admin.json' },
-      dependencies: ['setup'] },
-    { name: 'mobile', use: { ...devices['Pixel 7'], storageState: '.auth/admin.json' },
-      dependencies: ['setup'] },
-  ],
-  webServer: { command: 'bun run dev', url: 'http://localhost:3000',
-               reuseExistingServer: !process.env.CI, timeout: 30_000 },
-});
-```
+- **The suite runs against a BUILT PREVIEW** (`bun run build && bun run preview` → workerd on
+  `http://127.0.0.1:3100`), NOT `vite dev`. The dev server's on-demand SSR compile degrades under a
+  long serial suite; the preview serves the production bundle from the same `.wrangler/state` local
+  D1 the seed scripts populate, and halved the suite's wall-clock (2026-07-05).
+- **Serial, one worker.** All specs share one server + one local D1; parallel workers collide on
+  shared state (unique slugs, seeded rows). Correctness over speed.
+- **Every spec file sets its own `CF-Connecting-IP`** (`test.use({ extraHTTPHeaders })`, distinct
+  203.0.113.x per file) so the SEC-2 login limiter (10/min/IP) buckets files separately — and a
+  file with ~10+ `loginAsAdmin` calls must give login-heavy tests a nested-describe bucket of their
+  own. **The long-standing "late-suite axe flake" was this limiter, not a11y and not timing** —
+  when a login-dependent test fails late in a fast suite, check the 429 path FIRST (2026-07-05).
+- **Not idempotent.** Reset before a full run: kill any server on :3100, `rm -rf
+  .wrangler/state/v3/d1`, then `bun run e2e` (which migrates + seeds + runs).
 
-Prerequisites: the Vite dev server running, and the local D1 seeded (`bun run db:migrate` + seed
-script — first admin user, `settings` + `media` collections, seeded roles).
+Prerequisites are wrapped by `bun run e2e`: local D1 migrated + seeded (first admin, `settings` +
+`media` collections, roles, e2e fixtures).
 
 ## Directory structure
 

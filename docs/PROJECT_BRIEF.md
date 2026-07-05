@@ -17,9 +17,9 @@ exposed four ways:
 2. A **JSON REST API** for programmatic and headless consumption.
 3. An **MCP server**, so AI agents are first-class clients: they can read, write, publish, share,
    and even define new content types.
-4. **Rendered public pages** *(in progress — roadmap Track C)*: published documents in public-read
-   collections served as sanitized HTML at `/{collection}/{slug}`, relations rendered as navigable
-   links; plus scoped **share links** that grant an outsider read access to a single non-public item.
+4. **Rendered public pages**: published documents in public-read collections served as sanitized
+   HTML at `/{collection}/{slug}`, relations rendered as navigable links; plus scoped **share
+   links** (`/s/:token`) that grant an outsider read access to a single non-public item.
 
 The system began as a v1 CMS (foundation complete and verified). It is being extended — almost
 entirely additively — into a general data platform along three tracks: **A. access legibility**
@@ -105,13 +105,14 @@ item grants. Everything — every allow and every deny — is audited with princ
 - **Track A (access legibility): shipped** — personas, invite-a-person, custom-role CRUD,
   per-collection token scoping, item-grant Share surface, the access matrix, and removal of the dead
   per-collection access map (`publicRead` is the only collection-level access knob).
-- **Track B (relational data & the graph): next** — `relation` field type + multi-value indexing,
-  relation read-expansion on all surfaces, backlinks, per-collection lifecycle opt-out
-  (`lifecycle: 'none'` for record-like data that isn't draft/published), `repeater`/`object`
-  composites (deferred until after Track C).
-- **Track C (publish & connect)** — sanitized markdown→HTML rendering via `ViewComponent`, public
-  pages at `/{collection}/{slug}`, share links (`item_grants` with `subjectKind='link'`), email-share
-  via the stubbed transport.
+- **Track B (relational data & the graph): shipped** — `relation` field type + multi-value
+  indexing, relation read-expansion on all surfaces, backlinks (admin panel, REST, MCP),
+  per-collection lifecycle opt-out (`lifecycle: 'none'` for record-like data that isn't
+  draft/published). `repeater`/`object` composites remain deferred.
+- **Track C (publish & connect): shipped** — sanitized markdown→HTML rendering via `ViewComponent`,
+  public pages at `/{collection}/{slug}` (+ the admin read-only detail view), share links
+  (`item_grants` with `subjectKind='link'`, public `/s/:token`), email-share via the stubbed
+  transport.
 
 The roadmap with per-phase detail: `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`
 (+ `worklog.md` for what's landed).

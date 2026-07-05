@@ -204,26 +204,31 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
   });
 
-  test('axe: collections index, builder, and access pages pass WCAG 2.1 AA', async ({ page }) => {
-    // Six full axe analyses over data-heavy admin pages (the access matrix grows as the
-    // suite accumulates principals/grants) — give the sweep headroom past the 30s default.
-    test.setTimeout(90_000);
-    await loginAsAdmin(page);
-    for (const path of [
-      '/admin/collections',
-      '/admin/collections/new',
-      '/admin/access',
-      '/admin/access/roles',
-      '/admin/access/matrix',
-      '/admin/settings',
-    ]) {
-      // 'domcontentloaded' returns as soon as the SSR HTML is parsed — resilient to a
-      // late/slow resource when the shared vite-dev server is degraded near the end of
-      // the suite. axe only needs the parsed DOM; wait on #main-content for readiness.
-      await page.goto(path, { waitUntil: 'domcontentloaded' });
-      await page.locator('#main-content').first().waitFor();
-      const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
-      expect(r.violations, `axe on ${path}: ${r.violations.map((v) => v.id).join(',')}`).toEqual([]);
-    }
+  // Own client IP: this file's ~9 logins share one SEC-2 bucket (10/min per
+  // CF-Connecting-IP), and this LAST login is the one that tips it — the
+  // long-standing "late-suite flake" was the login limiter, not a11y. A separate
+  // bucket keeps the sweep deterministic while SEC-2 stays exercised elsewhere.
+  test.describe('axe sweep (own rate-limit bucket)', () => {
+    test.use({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.112' } });
+
+    test('axe: collections index, builder, and access pages pass WCAG 2.1 AA', async ({ page }) => {
+      // Six full axe analyses over data-heavy admin pages (the access matrix grows
+      // as the suite accumulates principals/grants) — headroom past the 30s default.
+      test.setTimeout(90_000);
+      await loginAsAdmin(page);
+      for (const path of [
+        '/admin/collections',
+        '/admin/collections/new',
+        '/admin/access',
+        '/admin/access/roles',
+        '/admin/access/matrix',
+        '/admin/settings',
+      ]) {
+        await page.goto(path, { waitUntil: 'domcontentloaded' });
+        await page.locator('#main-content').first().waitFor();
+        const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
+        expect(r.violations, `axe on ${path}: ${r.violations.map((v) => v.id).join(',')}`).toEqual([]);
+      }
+    });
   });
 });

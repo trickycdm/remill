@@ -17,10 +17,11 @@ rendered public pages + share links.)
 > a person, custom-role CRUD, per-collection token scoping, item-grant Share surface, the access matrix
 > at `/admin/access/matrix`). The `src/**` structure below is real, not aspirational. Two logged
 > deviations: media uses a dedicated `media` table (not the documents pipeline); MCP is a direct
-> streamable-HTTP JSON-RPC endpoint, not an `agents`-SDK DO (decision D18). **Active work:** Tracks B
-> (relations/graph) and C (publish/share) of
-> [`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md).
-> Each steering doc carries its own STATUS header; the worklogs have the step-by-step record.
+> streamable-HTTP JSON-RPC endpoint, not an `agents`-SDK DO (decision D18). **Tracks B
+> (relations/graph/lifecycle) and C (render/public pages/share links) of
+> [`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md)
+> have also shipped** (B5 composites deferred). Each steering doc carries its own STATUS header;
+> the worklogs have the step-by-step record.
 
 ## The one idea
 
