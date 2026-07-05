@@ -5,8 +5,13 @@
  */
 
 import { z } from 'zod';
-import { Textarea, FormField } from '@/components/ui';
+import { Textarea } from '@/components/ui';
+import { FieldShell, controlProps, requiredNonEmpty } from '@/fields/field-shell';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
+
+/** Fallback cap when a markdown field declares no `maxLength` — generous for long
+ *  documents but bounded (SEC-4). A configured `maxLength` stays authoritative. */
+const MARKDOWN_DEFAULT_MAX_LENGTH = 1_000_000;
 
 const configSchema = z
   .object({
@@ -17,9 +22,8 @@ const configSchema = z
 type MarkdownConfig = z.infer<typeof configSchema>;
 
 function valueSchema(cfg: MarkdownConfig, field: FieldDescriptor) {
-  let s = z.string();
-  if (cfg.maxLength !== undefined) s = s.max(cfg.maxLength);
-  return field.required ? s.min(1) : s.optional();
+  const s = z.string().max(cfg.maxLength ?? MARKDOWN_DEFAULT_MAX_LENGTH);
+  return requiredNonEmpty(s, field);
 }
 
 /** Crudely strip common Markdown syntax to a searchable plain-text preview. */
@@ -40,22 +44,9 @@ export const markdownField: FieldType<MarkdownConfig, string> = {
   // A searchable plain-text lead-in (value_text). Not the full document.
   toIndex: (v) => (v ? toPlainText(v).slice(0, 200) : null),
   EditComponent: ({ field, value, signal }) => (
-    <FormField
-      fieldId={signal}
-      label={field.label ?? field.key}
-      required={field.required}
-      description={field.admin?.help}
-    >
-      <Textarea
-        id={signal}
-        name={field.key}
-        value={value ?? ''}
-        rows={12}
-        required={field.required}
-        placeholder={field.admin?.placeholder}
-        data-bind={signal}
-      />
-    </FormField>
+    <FieldShell field={field} signal={signal}>
+      <Textarea {...controlProps({ field, signal })} value={value ?? ''} rows={12} />
+    </FieldShell>
   ),
   CellComponent: ({ value }) => <span>{value ? value.slice(0, 80) : ''}</span>,
 };

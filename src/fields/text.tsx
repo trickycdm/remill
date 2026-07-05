@@ -4,13 +4,19 @@
  */
 
 import { z } from 'zod';
-import { Input, FormField } from '@/components/ui';
+import { Input } from '@/components/ui';
+import { FieldShell, controlProps, requiredNonEmpty } from '@/fields/field-shell';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
 
 interface TextConfig {
   readonly minLength?: number;
   readonly maxLength?: number;
 }
+
+/** Fallback cap when a text field declares no `maxLength` — a single-line value
+ *  is never legitimately this long, so it bounds an unbounded storage/DoS vector
+ *  (SEC-4) without capping realistic content. Configured limits stay authoritative. */
+const TEXT_DEFAULT_MAX_LENGTH = 10_000;
 
 const configSchema = z
   .object({
@@ -22,9 +28,8 @@ const configSchema = z
 function valueSchema(cfg: TextConfig, field: FieldDescriptor) {
   let s = z.string();
   if (cfg.minLength !== undefined) s = s.min(cfg.minLength);
-  if (cfg.maxLength !== undefined) s = s.max(cfg.maxLength);
-  // A required field must be non-empty; an optional one may be omitted.
-  return field.required ? s.min(Math.max(1, cfg.minLength ?? 1)) : s.optional();
+  s = s.max(cfg.maxLength ?? TEXT_DEFAULT_MAX_LENGTH);
+  return requiredNonEmpty(s, field);
 }
 
 export const textField: FieldType<TextConfig, string> = {
@@ -33,17 +38,9 @@ export const textField: FieldType<TextConfig, string> = {
   valueSchema,
   toIndex: (v) => v ?? null,
   EditComponent: ({ field, value, signal }) => (
-    <FormField fieldId={signal} label={field.label ?? field.key} required={field.required}>
-      <Input
-        id={signal}
-        name={field.key}
-        type="text"
-        value={value ?? ''}
-        required={field.required}
-        placeholder={field.admin?.placeholder}
-        data-bind={signal}
-      />
-    </FormField>
+    <FieldShell field={field} signal={signal}>
+      <Input {...controlProps({ field, signal })} type="text" value={value ?? ''} />
+    </FieldShell>
   ),
   CellComponent: ({ value }) => <span>{value ?? ''}</span>,
 };

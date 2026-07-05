@@ -4,7 +4,8 @@
  */
 
 import { z } from 'zod';
-import { Input, FormField } from '@/components/ui';
+import { Input } from '@/components/ui';
+import { FieldShell, controlProps } from '@/fields/field-shell';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
 
 const configSchema = z
@@ -30,25 +31,16 @@ export const numberField: FieldType<NumberConfig, number> = {
   valueSchema,
   toIndex: (v) => v ?? null,
   EditComponent: ({ field, value, signal, config }) => (
-    <FormField
-      fieldId={signal}
-      label={field.label ?? field.key}
-      required={field.required}
-      description={field.admin?.help}
-    >
+    <FieldShell field={field} signal={signal}>
       <Input
-        id={signal}
-        name={field.key}
+        {...controlProps({ field, signal })}
         type="number"
         value={value ?? ''}
-        required={field.required}
-        placeholder={field.admin?.placeholder}
         min={config?.min}
         max={config?.max}
         step={config?.integer ? 1 : 'any'}
-        data-bind={signal}
       />
-    </FormField>
+    </FieldShell>
   ),
   CellComponent: ({ value }) => (
     <span>{typeof value === 'number' ? value.toLocaleString() : ''}</span>

@@ -6,7 +6,7 @@
  */
 
 import type { FC } from 'hono/jsx';
-import { requireFieldType, resolveField } from '@/fields/registry';
+import { resolveField } from '@/fields/registry';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import type { DocumentRecord } from '@/services/documents';
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, EmptyState } from '@/components/ui';
@@ -22,12 +22,14 @@ export function FieldEditor({ field, value }: { field: FieldDescriptor; value: u
   return <Edit field={field} config={config} value={value} signal={field.key} />;
 }
 
-/** Render one list cell using the field type's CellComponent (or a text fallback). */
+/** Render one list cell using the field type's CellComponent (or a text fallback).
+ *  Resolves the field's config (via resolveField) so cells can render human labels
+ *  (e.g. select's option label) rather than the raw stored value (TD-2). */
 function FieldCell({ field, value }: { field: FieldDescriptor; value: unknown }) {
-  const ft = requireFieldType(field.type);
+  const { ft, config } = resolveField(field);
   if (ft.CellComponent) {
-    const Cell = ft.CellComponent as unknown as FC<{ value: unknown }>;
-    return <Cell value={value} />;
+    const Cell = ft.CellComponent as unknown as FC<{ value: unknown; config: unknown }>;
+    return <Cell value={value} config={config} />;
   }
   return <span>{value == null ? '' : String(value)}</span>;
 }

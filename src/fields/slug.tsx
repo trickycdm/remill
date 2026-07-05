@@ -5,7 +5,8 @@
  */
 
 import { z } from 'zod';
-import { Input, FormField } from '@/components/ui';
+import { Input } from '@/components/ui';
+import { FieldShell, controlProps, requiredNonEmpty } from '@/fields/field-shell';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
 
 interface SlugConfig {
@@ -14,6 +15,13 @@ interface SlugConfig {
 }
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** Max length of the raw (pre-normalisation) input the widget accepts — generous
+ *  so a pasted title still normalises, but bounded (SEC-4). */
+const SLUG_INPUT_MAX_LENGTH = 512;
+/** Max length of the stored slug. beforeSave truncates to this so a long derived
+ *  source (e.g. a huge title) can't produce an unbounded slug. */
+const SLUG_MAX_LENGTH = 200;
 
 /** Normalize any string into a slug: lowercase, non-alphanumerics → hyphens. */
 export function slugify(input: string): string {
@@ -30,7 +38,7 @@ const configSchema = z.object({ from: z.string().optional() }).strict();
 // Lenient at validation time (the user may type free text); beforeSave produces
 // the canonical slug. An optional field may be omitted entirely.
 function valueSchema(_cfg: SlugConfig, field: FieldDescriptor) {
-  return field.required ? z.string().min(1) : z.string().optional();
+  return requiredNonEmpty(z.string().max(SLUG_INPUT_MAX_LENGTH), field);
 }
 
 export const slugField: FieldType<SlugConfig, string> = {
@@ -45,7 +53,9 @@ export const slugField: FieldType<SlugConfig, string> = {
       const source = ctx.data[cfg.from];
       if (typeof source === 'string') raw = source;
     }
-    const slug = slugify(raw);
+    // Normalize, then bound the stored length (a trailing hyphen can appear after
+    // the slice, so strip it again).
+    const slug = slugify(raw).slice(0, SLUG_MAX_LENGTH).replace(/-+$/, '');
     if (!slug && ctx.field.required) {
       throw new Error(
         `Cannot derive a slug for '${ctx.field.key}': provide a value or a non-empty '${cfg.from ?? '(source)'}'.`,
@@ -54,22 +64,18 @@ export const slugField: FieldType<SlugConfig, string> = {
     return slug;
   },
   EditComponent: ({ field, value, signal }) => (
-    <FormField
-      fieldId={signal}
-      label={field.label ?? field.key}
-      required={field.required}
-      description={field.admin?.help ?? 'Lowercase, hyphen-separated. Auto-generated if left blank.'}
+    <FieldShell
+      field={field}
+      signal={signal}
+      help="Lowercase, hyphen-separated. Auto-generated if left blank."
     >
       <Input
-        id={signal}
-        name={field.key}
+        {...controlProps({ field, signal }, { placeholder: 'my-post-slug', required: false })}
         type="text"
         value={value ?? ''}
-        placeholder="my-post-slug"
         pattern={SLUG_RE.source}
-        data-bind={signal}
       />
-    </FormField>
+    </FieldShell>
   ),
   CellComponent: ({ value }) => <code class="font-mono text-sm">{value ?? ''}</code>,
 };

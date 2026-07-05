@@ -5,7 +5,8 @@
  */
 
 import { z } from 'zod';
-import { FormField, Input } from '@/components/ui';
+import { Input } from '@/components/ui';
+import { FieldShell, controlProps } from '@/fields/field-shell';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
 
 interface MediaConfig {
@@ -18,7 +19,8 @@ const configSchema = z
   .strict();
 
 function valueSchema(_cfg: MediaConfig, field: FieldDescriptor) {
-  const id = z.string().regex(/^med_[A-Za-z0-9_-]+$/, 'Must be a media id');
+  // Media ids are prefixed nanoids; a generous length cap bounds the value (SEC-4).
+  const id = z.string().max(64).regex(/^med_[A-Za-z0-9_-]+$/, 'Must be a media id');
   return field.required ? id : id.optional();
 }
 
@@ -28,22 +30,25 @@ export const mediaField: FieldType<MediaConfig, string> = {
   valueSchema,
   toIndex: (v) => v ?? null,
   EditComponent: ({ field, value, signal }) => (
-    <FormField
-      fieldId={signal}
-      label={field.label ?? field.key}
-      required={field.required}
-      description="Upload in the Media library, then paste the media id here."
+    <FieldShell
+      field={field}
+      signal={signal}
+      help="Upload in the Media library, then paste the media id here."
     >
       <div class="flex items-center gap-3">
         {value ? (
           <img src={`/media/${value}`} alt="" class="size-12 rounded-md object-cover" />
         ) : null}
-        <Input id={signal} name={field.key} type="text" value={value ?? ''} placeholder="med_…" data-bind={signal} />
+        <Input
+          {...controlProps({ field, signal }, { placeholder: 'med_…', required: false })}
+          type="text"
+          value={value ?? ''}
+        />
         <a href="/admin/media" target="_blank" rel="noopener" class="whitespace-nowrap text-sm text-accent-text hover:underline">
           Media library ↗
         </a>
       </div>
-    </FormField>
+    </FieldShell>
   ),
   CellComponent: ({ value }) =>
     value ? <img src={`/media/${value}`} alt="" class="size-8 rounded object-cover" /> : <span class="text-ink-subtle">—</span>,

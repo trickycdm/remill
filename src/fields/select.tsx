@@ -5,7 +5,8 @@
  */
 
 import { z } from 'zod';
-import { Select, FormField } from '@/components/ui';
+import { Select } from '@/components/ui';
+import { FieldShell } from '@/fields/field-shell';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
 
 const configSchema = z
@@ -50,13 +51,10 @@ export const selectField: FieldType<SelectConfig, SelectValue> = {
         {o.label}
       </option>
     ));
+    // select owns its control wiring (two widget shapes, no shared value/
+    // placeholder), so it uses FieldShell only for the labelled wrapper.
     return (
-      <FormField
-        fieldId={signal}
-        label={field.label ?? field.key}
-        required={field.required}
-        description={field.admin?.help}
-      >
+      <FieldShell field={field} signal={signal}>
         {config.multiple ? (
           <select
             id={signal}
@@ -74,12 +72,18 @@ export const selectField: FieldType<SelectConfig, SelectValue> = {
             {options}
           </Select>
         )}
-      </FormField>
+      </FieldShell>
     );
   },
-  // CellComponent receives only the value (no config), so it renders the stored
-  // option value(s); the human label lives in config, unavailable to the cell.
-  CellComponent: ({ value }) => (
-    <span>{Array.isArray(value) ? value.join(', ') : (value ?? '')}</span>
-  ),
+  // The cell now receives config (TD-2), so it renders each stored value's human
+  // label from the option list — falling back to the raw value if unmapped.
+  CellComponent: ({ value, config }) => {
+    const labelFor = (v: string) => config.options.find((o) => o.value === v)?.label ?? v;
+    const labels = Array.isArray(value)
+      ? value.map(labelFor)
+      : value != null
+        ? [labelFor(value)]
+        : [];
+    return <span>{labels.join(', ')}</span>;
+  },
 };
