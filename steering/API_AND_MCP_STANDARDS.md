@@ -47,7 +47,8 @@ validation or authorization step that lives only in one surface.
 ## REST API (Phase 6)
 
 Routes (plan §5b): collections list/create/update; documents list/get/create/update/delete/publish;
-revisions; media upload; `/media/:id[/:variant]` serving.
+revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing** at
+`/api/c/:collection/:id/grants` (GET list / POST grant / DELETE revoke, all `manage_access`-gated).
 
 - **Listing** supports `?filter[field]=`, `?sort=`, `?page=`, `?status=`. Filtering and sorting are
   only allowed on **indexed** fields (those with `index: true`, present in `document_index`).
@@ -68,7 +69,8 @@ revisions; media upload; `/media/:id[/:variant]` serving.
 with the **same bearer tokens** as REST.
 
 - **Tools are generated per collection** from field descriptors (surface 6), not hand-listed:
-  - Per collection: `list_<slug>`, `get_<slug>`, `create_<slug>`, `update_<slug>`, `publish_<slug>`
+  - Per collection: `list_<slug>`, `get_<slug>`, `create_<slug>`, `update_<slug>`, `publish_<slug>`,
+    `share_<slug>` (item grant; visible only with `manage_access`)
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
   - Schema management: `list_collections`, `create_collection`, `update_collection`
     (require `manage_schema`).

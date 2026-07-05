@@ -39,6 +39,10 @@
      "editor, but only of posts."
 2. **Item grants** — per-document tuples `(principal | role, document_id, actions, granted_by,
    expires_at?)`. Precision layer: "agent `researcher` may `update` document X until Friday."
+   Surfaced (Share) on all three doors: the document edit view's **Share panel** (managers only —
+   install-wide `manage_access`), the REST `/api/c/:collection/:id/grants` endpoint (GET/POST/DELETE),
+   and the generated MCP `share_<slug>` tool (visible only with `manage_access`). All route through
+   `grantItem`/`revokeItem`/`listItemGrants`, each `authorize('manage_access', {collection, documentId})`-gated.
 
 There are **no negative rules**. If you can't express a policy additively, the policy is wrong for
 this system — do not add deny rules.

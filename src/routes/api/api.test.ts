@@ -27,6 +27,7 @@ describe('REST API — integration through the Hono app', () => {
   let db: Database;
   let env: { DB: D1Database; MEDIA: R2Bucket; SESSION_SECRET: string; BASE_URL: string };
   let admin: Principal;
+  let adminToken: string;
   let editorToken: string;
   let readerToken: string;
 
@@ -53,11 +54,59 @@ describe('REST API — integration through the Hono app', () => {
     const readerId = await access.createAgent(db, admin, 'reader-bot', NOW);
     await access.assignRole(db, admin, readerId, 'reader', '*', NOW);
     readerToken = (await access.issueToken(db, admin, { principalId: readerId, name: 't' }, NOW)).token;
+
+    // A token for the admin principal (manage_access) to drive the Share endpoint.
+    adminToken = (await access.issueToken(db, admin, { principalId: admin.id, name: 'admin-t' }, NOW)).token;
   });
 
   it('rejects an invalid token with 401', async () => {
     const r = await req('/api/c/posts', { headers: auth('rmk_bogus') });
     expect(r.status).toBe(401);
+  });
+
+  it('Share (item grants): grant read on a draft, reader gains then loses access', async () => {
+    // Editor creates a draft (born draft on a draftPublish collection).
+    const created = await req('/api/c/posts', {
+      method: 'POST',
+      headers: { ...auth(editorToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Secret Draft', body: 'shh' }),
+    });
+    expect(created.status).toBe(201);
+    const id = created.json.data.id;
+
+    // The reader (published-only) cannot see the unpublished draft.
+    const before = await req(`/api/c/posts/${id}`, { headers: auth(readerToken) });
+    expect(before.status).not.toBe(200);
+
+    // Admin grants the 'reader' role read on just this document.
+    const granted = await req(`/api/c/posts/${id}/grants`, {
+      method: 'POST',
+      headers: { ...auth(adminToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subjectKind: 'role', subjectId: 'reader', actions: ['read'] }),
+    });
+    expect(granted.status).toBe(201);
+    const grantId = granted.json.data.id;
+
+    // Now the reader can read the otherwise-invisible draft.
+    const after = await req(`/api/c/posts/${id}`, { headers: auth(readerToken) });
+    expect(after.status).toBe(200);
+    expect(after.json.data.data.title).toBe('Secret Draft');
+
+    // The grant is listable, then revocable.
+    const list = await req(`/api/c/posts/${id}/grants`, { headers: auth(adminToken) });
+    expect(list.status).toBe(200);
+    expect(list.json.data).toHaveLength(1);
+
+    const revoked = await req(`/api/c/posts/${id}/grants`, {
+      method: 'DELETE',
+      headers: { ...auth(adminToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grantId }),
+    });
+    expect(revoked.status).toBe(200);
+
+    // Access is gone again.
+    const gone = await req(`/api/c/posts/${id}`, { headers: auth(readerToken) });
+    expect(gone.status).not.toBe(200);
   });
 
   it('editor token can create, read, update, publish, and delete a document', async () => {

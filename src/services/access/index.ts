@@ -179,6 +179,19 @@ export async function revokeItem(db: Database, principal: Principal, grantId: st
   await grantQ.revokeItemGrant(db, grantId);
 }
 
+/** List the item grants on a document (for the Share surface). Requires `manage_access`
+ *  on that document — the same gate that grants/revokes them. */
+export async function listItemGrants(
+  db: Database,
+  principal: Principal,
+  collection: string,
+  documentId: string,
+  now: string,
+): Promise<grantQ.ItemGrantRecord[]> {
+  await authorize(db, principal, 'manage_access', { collection, documentId }, now);
+  return grantQ.listGrantsForDocument(db, documentId);
+}
+
 export async function listAudit(db: Database, principal: Principal, now: string, limit = 100) {
   await authorize(db, principal, 'manage_access', ROOT, now);
   return recentAudit(db, limit);

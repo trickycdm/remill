@@ -14,7 +14,7 @@
 import type { Database } from '@/db/client';
 import { scopeMatches, type Principal, type Action } from '@/access';
 // COR-6: the MCP surface must go through SERVICES, never the queries layer directly.
-import { getPrincipalPermissions } from '@/services/access';
+import { getPrincipalPermissions, grantItem } from '@/services/access';
 import { listCollections, getCollection, listCollectionsForDiscovery } from '@/services/collections';
 import * as docs from '@/services/documents';
 import * as collectionsService from '@/services/collections';
@@ -157,6 +157,38 @@ export async function buildToolsForPrincipal(
         description: `Publish or unpublish a ${def.name} document.`,
         inputSchema: { type: 'object', properties: { id: { type: 'string' }, publish: { type: 'boolean' } }, required: ['id'] },
         handler: async (args) => docs.setPublished(db, principal, slug, String(args.id), args.publish !== false, now()),
+      });
+    }
+    if (couldDo(perms, principal, 'manage_access', slug, false)) {
+      tools.push({
+        name: `share_${slug}`,
+        description: `Grant a principal or role scoped actions on one ${def.name} document (item grant, optionally expiring).`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'the document id to share' },
+            subjectKind: { type: 'string', enum: ['principal', 'role'] },
+            subjectId: { type: 'string', description: 'principal id or role slug' },
+            actions: { type: 'array', items: { type: 'string' }, description: 'actions to grant, e.g. ["read"]' },
+            expiresAt: { type: 'string', description: 'optional ISO-8601 expiry' },
+          },
+          required: ['id', 'subjectKind', 'subjectId', 'actions'],
+        },
+        handler: async (args) => ({
+          id: await grantItem(
+            db,
+            principal,
+            {
+              subjectKind: args.subjectKind === 'role' ? 'role' : 'principal',
+              subjectId: String(args.subjectId ?? ''),
+              documentId: String(args.id ?? ''),
+              collection: slug,
+              actions: Array.isArray(args.actions) ? (args.actions.map(String) as Action[]) : [],
+              expiresAt: typeof args.expiresAt === 'string' ? args.expiresAt : undefined,
+            },
+            now(),
+          ),
+        }),
       });
     }
   }

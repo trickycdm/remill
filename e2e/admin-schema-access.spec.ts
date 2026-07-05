@@ -85,6 +85,28 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await expect(page.getByRole('button', { name: 'Delete' })).toBeVisible();
   });
 
+  test('share: grant item-level access on a document, then revoke', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    // Create a post to share.
+    await page.goto('/admin/c/posts/new');
+    await page.getByLabel('title').fill('Shared Doc');
+    await page.getByRole('button', { name: /Create Posts/i }).click();
+    await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
+
+    // The Share panel is visible for a manager.
+    await expect(page.getByRole('heading', { name: 'Share', exact: true })).toBeVisible();
+
+    // Grant read (checked by default) to the reader role.
+    await page.getByLabel('Grant to').selectOption('role:reader');
+    await page.getByRole('button', { name: 'Grant access' }).click();
+
+    // The grant now shows with a revoke control.
+    await expect(page.getByText('reader', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Revoke' }).click();
+    await expect(page.getByText('No one has been granted item-level access yet.')).toBeVisible();
+  });
+
   test('invite a person with a password, then sign in as them', async ({ page, context }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/access');
