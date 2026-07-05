@@ -12,8 +12,11 @@ import { authorize, ACTIONS, type Principal } from '@/access';
 import * as roleQ from '@/db/queries/roles';
 import * as grantQ from '@/db/queries/grants';
 import * as principalQ from '@/db/queries/principals';
+import * as inviteQ from '@/db/queries/invites';
+import { getUserByEmail } from '@/db/queries/users';
 import { recentAudit } from '@/db/queries/audit';
 import { generateToken, hashToken } from '@/lib/token';
+import { hashPassword } from '@/lib/password';
 import type { PermissionSpec, RoleSpec } from '@/access/policy';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
 import type { Action, Condition } from '@/access/types';
@@ -23,6 +26,11 @@ import type { ErrorDetails } from '@/lib/errors';
 
 const ROLE_SLUG_RE = /^[a-z][a-z0-9-]*$/;
 const CONDITIONS: readonly Condition[] = ['own', 'published'];
+
+// Human-credential policy (mirrors src/services/account/index.ts).
+const MIN_PASSWORD_LENGTH = 8;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // set-password links expire in 7 days
 
 // manage_access decisions concern the whole install, not one collection.
 const ROOT = { collection: '*' };
@@ -204,6 +212,54 @@ export async function createAgent(
     throw new InputValidationError([{ path: 'subtype', message: `Unknown machine type '${subtype}'.` }]);
   }
   return principalQ.createAgentPrincipal(db, name.trim(), now, subtype);
+}
+
+/**
+ * Create a human principal (a Person). Two paths, chosen by whether a password is
+ * supplied:
+ *  - direct: an initial password is set now — the person can sign in immediately.
+ *  - invite: no password — an unusable random hash is stored and a single-use,
+ *    expiring invite token is returned; the person sets their own password via the
+ *    set-password link. (Email delivery of that link is the route's concern and is
+ *    stubbed for now — the link is also surfaced once to the admin.)
+ *
+ * Gated by `manage_access` (human-held; agents refused). The initial role defaults
+ * to `reader` (least privilege); `assignRole` validates it exists.
+ */
+export async function createUser(
+  db: Database,
+  principal: Principal,
+  input: { name: string; email: string; password?: string; role?: string },
+  now: string,
+): Promise<{ principalId: string; inviteToken?: string }> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  const role = input.role?.trim() || 'reader';
+  const issues: ErrorDetails[] = [];
+  if (!name) issues.push({ path: 'name', message: 'Name is required.' });
+  if (!EMAIL_RE.test(email)) issues.push({ path: 'email', message: 'A valid email is required.' });
+  if (input.password !== undefined && input.password.length < MIN_PASSWORD_LENGTH) {
+    issues.push({ path: 'password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+  }
+  if (issues.length) throw new InputValidationError(issues, 'Invalid user');
+
+  if (await getUserByEmail(db, email)) throw new ConflictError(`A user with email '${email}' already exists.`);
+
+  // With no password, store an unguessable, unusable hash so login is impossible
+  // until the invitee sets one via the token (verifyPassword can never match it).
+  const passwordHash = hashPassword(input.password ?? generateToken());
+  const principalId = await principalQ.createUserPrincipal(db, { name, email, passwordHash }, now);
+  await assignRole(db, principal, principalId, role, '*', now);
+
+  if (input.password !== undefined) return { principalId };
+
+  const token = generateToken();
+  const expiresAt = new Date(new Date(now).getTime() + INVITE_TTL_MS).toISOString();
+  await inviteQ.createInviteToken(db, { principalId, tokenHash: await hashToken(token), expiresAt, now });
+  return { principalId, inviteToken: token };
 }
 
 export async function listTokens(db: Database, principal: Principal, now: string, targetPrincipalId?: string) {

@@ -66,6 +66,55 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await expect(page.getByText(/^rmk_/)).toBeVisible(); // the one-time plaintext
   });
 
+  test('invite a person with a password, then sign in as them', async ({ page, context }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/access');
+
+    await page.getByLabel('Add a person — name').fill('Casey Jones');
+    await page.getByLabel('Email', { exact: true }).fill('casey@remill.local');
+    await page.getByLabel('Password (optional)').fill('caseypass1');
+    await page.getByLabel('Initial role').selectOption('editor');
+    await page.getByRole('button', { name: 'Add person' }).click();
+
+    // Casey now appears under People.
+    await expect(page.getByText('casey@remill.local')).toBeVisible();
+
+    // Fresh session: Casey can sign in with the password the admin set.
+    await context.clearCookies();
+    await page.goto('/admin/login');
+    await page.getByLabel('Email').fill('casey@remill.local');
+    await page.getByLabel('Password').fill('caseypass1');
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.waitForURL('**/admin');
+  });
+
+  test('invite a person by link (no password): the set-password page activates login', async ({ page, context }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/access');
+
+    await page.getByLabel('Add a person — name').fill('Dana Link');
+    await page.getByLabel('Email', { exact: true }).fill('dana@remill.local');
+    // Leave the password blank → an invite link is issued and shown once.
+    await page.getByRole('button', { name: 'Add person' }).click();
+
+    const link = (await page.locator('code').first().innerText()).trim();
+    expect(link).toContain('/auth/set-password/');
+
+    // Visit the link in a fresh session and set a password.
+    await context.clearCookies();
+    await page.goto(link);
+    await page.getByLabel('New password').fill('danapass12');
+    await page.getByLabel('Confirm password').fill('danapass12');
+    await page.getByRole('button', { name: 'Set password' }).click();
+    await page.waitForURL('**/admin/login');
+
+    // Dana can now sign in.
+    await page.getByLabel('Email').fill('dana@remill.local');
+    await page.getByLabel('Password').fill('danapass12');
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.waitForURL('**/admin');
+  });
+
   test('author role: nav hides admin-only sections and the server denies schema management', async ({ page }) => {
     // Log in as the seeded author human.
     await page.goto('/admin/login');

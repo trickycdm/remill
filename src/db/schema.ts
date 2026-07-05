@@ -260,6 +260,31 @@ export const itemGrants = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// Invite tokens — single-use, expiring set-password links for invited humans.
+// Only the SHA-256 hash is stored (never the plaintext), mirroring api_tokens.
+// The token IS the credential: consuming one sets the invitee's password.
+// ---------------------------------------------------------------------------
+
+export const inviteTokens = sqliteTable(
+  'invite_tokens',
+  {
+    id: text('id').primaryKey(), // inv_…
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => principals.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(), // SHA-256 hex — never plaintext
+    purpose: text('purpose').notNull().default('set_password'), // extensible
+    expiresAt: text('expires_at').notNull(),
+    consumedAt: text('consumed_at'), // null until used (single-use)
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('invite_tokens_hash_unique').on(t.tokenHash),
+    index('invite_tokens_principal_idx').on(t.principalId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Media — R2 object metadata; rides the schema engine as a protected collection
 // ---------------------------------------------------------------------------
 

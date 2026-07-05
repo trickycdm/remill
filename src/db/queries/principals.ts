@@ -54,6 +54,26 @@ export async function createAgentPrincipal(
   return id;
 }
 
+/**
+ * Create a human principal + its credential row atomically (the invite/create-user
+ * path). `email` must already be normalized (trim + lowercase) and `passwordHash` a
+ * scrypt `saltHex:hashHex` — the service layer owns validation/uniqueness. Returns
+ * the new principal id. Mirrors the three-row bootstrap pattern, minus the role
+ * assignment (the service assigns the initial role).
+ */
+export async function createUserPrincipal(
+  db: Database,
+  input: { name: string; email: string; passwordHash: string },
+  now: string,
+): Promise<string> {
+  const id = newId('principal');
+  await db.batch([
+    db.insert(principals).values({ id, kind: 'user', subtype: 'person', name: input.name, disabled: 0, createdAt: now }),
+    db.insert(users).values({ principalId: id, email: input.email, passwordHash: input.passwordHash, createdAt: now }),
+  ]);
+  return id;
+}
+
 export async function setPrincipalDisabled(db: Database, id: string, disabled: boolean): Promise<void> {
   await db.update(principals).set({ disabled: disabled ? 1 : 0 }).where(eq(principals.id, id));
 }

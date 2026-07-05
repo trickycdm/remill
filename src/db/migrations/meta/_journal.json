@@ -36,6 +36,13 @@
       "when": 1783272652654,
       "tag": "0004_vengeful_wolf_cub",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1783273570900,
+      "tag": "0005_lame_mattie_franklin",
+      "breakpoints": true
     }
   ]
 }

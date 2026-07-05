@@ -20,6 +20,7 @@ export const ID_PREFIX = {
   principalRole: 'pnr', // principal_roles join rows (NOT a principal — avoid prn_ collision)
   grant: 'grn',
   audit: 'aud',
+  invite: 'inv', // invite_tokens rows (single-use set-password links)
 } as const;
 
 type Entity = keyof typeof ID_PREFIX;

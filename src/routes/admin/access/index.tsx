@@ -254,6 +254,35 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           </form>
         </div>
 
+        {/* Invite / add a Person */}
+        <form
+          method="post"
+          action="/admin/access/users"
+          class="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface p-4"
+        >
+          <FormField fieldId="invite-name" label="Add a person — name">
+            <Input id="invite-name" name="name" type="text" placeholder="Jane Doe" required />
+          </FormField>
+          <FormField fieldId="invite-email" label="Email">
+            <Input id="invite-email" name="email" type="email" placeholder="jane@example.com" required />
+          </FormField>
+          <FormField fieldId="invite-role" label="Initial role">
+            <Select id="invite-role" name="role">
+              {SYSTEM_ROLE_SLUGS.filter((s) => s !== 'anonymous').map((s) => (
+                <option value={s} selected={s === 'reader'}>
+                  {s}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField fieldId="invite-password" label="Password (optional)">
+            <Input id="invite-password" name="password" type="password" placeholder="blank → email an invite link" />
+          </FormField>
+          <Button type="submit" variant="secondary">
+            Add person
+          </Button>
+        </form>
+
         <PersonaGroup
           title="People"
           hint="Humans who sign in with a password."
