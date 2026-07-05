@@ -110,8 +110,18 @@ export interface FieldType<Config = unknown, Value = unknown> {
   readonly valueSchema: (cfg: Config, field: FieldDescriptor) => ZodType<unknown>;
 
   /** (1) value promoted into document_index for query/sort. Omit for
-   *  non-indexable types (e.g. json) — such fields may not set index:true. */
-  readonly toIndex?: (v: Value) => string | number | null;
+   *  non-indexable types (e.g. json) — such fields may not set index:true.
+   *  Returning an ARRAY emits one index row per element (multi-valued fields,
+   *  e.g. a multi-`relation` — each element independently filterable and
+   *  reverse-lookupable); scalar returns emit a single row as before. */
+  readonly toIndex?: (v: Value) => string | number | ReadonlyArray<string | number> | null;
+
+  /** Whether this field indexes as multi-valued under `cfg` (its `toIndex` may
+   *  return an array). Multi-valued fields cannot be `unique` (all rows would
+   *  share one unique_key → false collisions) and cannot be sorted on (the sort
+   *  subquery would pick an arbitrary row) — both enforced by the engine.
+   *  Omit for always-scalar types. */
+  readonly multiValued?: (cfg: Config) => boolean;
 
   /** transforms — Blogmill's fieldPreSave / preFieldRender, reborn. */
   readonly beforeSave?: (v: Value, ctx: SaveCtx) => Value | Promise<Value>;

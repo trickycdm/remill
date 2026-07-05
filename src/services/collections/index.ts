@@ -12,7 +12,7 @@
 import { z } from 'zod';
 import type { Database } from '@/db/client';
 import type { CollectionDefinition } from '@/fields/types';
-import { requireFieldType, isIndexable } from '@/fields/registry';
+import { requireFieldType, isIndexable, isMultiValued } from '@/fields/registry';
 import * as q from '@/db/queries/collections';
 import { authorize, type Principal } from '@/access';
 import { getPrincipalPermissions } from '@/db/queries/roles';
@@ -81,6 +81,11 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
       }
       if (f.unique && !f.index) {
         issues.push({ path: `${at}.unique`, message: `A unique field must also be indexed.` });
+      }
+      // A multi-valued field writes N index rows sharing one unique_key — two docs
+      // sharing ANY element would falsely collide. Reject at definition time.
+      if (f.unique && isMultiValued(f)) {
+        issues.push({ path: `${at}.unique`, message: `A multi-valued field cannot be unique.` });
       }
     } catch (e) {
       if (e instanceof z.ZodError) {

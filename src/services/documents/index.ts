@@ -13,7 +13,7 @@
 import { z } from 'zod';
 import type { Database } from '@/db/client';
 import type { CollectionDefinition, FieldDescriptor, SaveCtx } from '@/fields/types';
-import { resolveField } from '@/fields/registry';
+import { resolveField, isMultiValued } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
 import { getCollection } from '@/db/queries/collections';
 import { authorize, compileReadFilter, resolveAccess, type Principal } from '@/access';
@@ -108,7 +108,10 @@ function coerceNumericFilter(field: FieldDescriptor, raw: string): string {
   return raw;
 }
 
-/** Build document_index rows for every indexed field (SCHEMA_ENGINE.md surface 1). */
+/** Build document_index rows for every indexed field (SCHEMA_ENGINE.md surface 1).
+ *  A multi-valued `toIndex` returns an array — one row PER ELEMENT, so each edge of
+ *  a multi-relation is independently filterable and reverse-lookupable (B1). The
+ *  sync layer replaces a document's rows wholesale, so N rows need no query change. */
 function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): dq.IndexValue[] {
   const rows: dq.IndexValue[] = [];
   for (const field of def.fields) {
@@ -117,14 +120,17 @@ function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): d
     if (!ft.toIndex) continue;
     const idx = ft.toIndex(data[field.key] as never);
     if (idx === null || idx === undefined) continue;
-    rows.push({
-      fieldKey: field.key,
-      valueText: typeof idx === 'string' ? idx : null,
-      valueNum: typeof idx === 'number' ? idx : null,
-      // Populate the DB uniqueness backing only for unique fields (COR-8). A unique
-      // field is always indexed (collection validation enforces unique ⇒ index).
-      uniqueKey: field.unique ? `${def.slug}:${field.key}` : null,
-    });
+    for (const v of Array.isArray(idx) ? idx : [idx]) {
+      rows.push({
+        fieldKey: field.key,
+        valueText: typeof v === 'string' ? v : null,
+        valueNum: typeof v === 'number' ? v : null,
+        // Populate the DB uniqueness backing only for unique fields (COR-8). A unique
+        // field is always indexed, and never multi-valued (collection validation
+        // enforces unique ⇒ index and rejects unique on multi-valued fields).
+        uniqueKey: field.unique ? `${def.slug}:${field.key}` : null,
+      });
+    }
   }
   return rows;
 }
@@ -145,10 +151,14 @@ async function checkUnique(
     const { ft } = resolveField(field);
     const idx = ft.toIndex?.(data[field.key] as never);
     if (idx === null || idx === undefined) continue;
-    if (typeof idx === 'string' && idx === '') continue;
-    const kind: dq.IndexKind = typeof idx === 'number' ? 'num' : 'text';
-    if (await dq.isIndexValueTaken(db, def.slug, field.key, idx, kind, excludeId)) {
-      throw new ConflictError(`${field.label ?? field.key} '${idx}' is already taken.`);
+    // Unique + multi-valued is rejected at definition time; iterate defensively
+    // per element so the check stays correct even for a scalar-or-array toIndex.
+    for (const val of Array.isArray(idx) ? idx : [idx]) {
+      if (typeof val === 'string' && val === '') continue;
+      const kind: dq.IndexKind = typeof val === 'number' ? 'num' : 'text';
+      if (await dq.isIndexValueTaken(db, def.slug, field.key, val, kind, excludeId)) {
+        throw new ConflictError(`${field.label ?? field.key} '${val}' is already taken.`);
+      }
     }
   }
 }
@@ -252,6 +262,12 @@ export async function listDocuments(
     });
     if (params.sort) {
       const field = assertIndexed(def, params.sort.field, 'sort');
+      // A multi-valued field has N index rows per document; the sort correlated
+      // subquery would pick an arbitrary one — reject rather than sort randomly.
+      // (Filtering stays allowed: matching ANY element is the wanted semantics.)
+      if (isMultiValued(field)) {
+        throw new BadRequestError(`Field '${params.sort.field}' is multi-valued; cannot sort by it.`);
+      }
       sort = { fieldKey: params.sort.field, dir: params.sort.dir, kind: indexKind(field) };
     }
   }

@@ -51,6 +51,54 @@ describe('collections service — definition validation', () => {
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 
+  it('accepts a relation field with zero allowlist edits (registry IS the gate)', async () => {
+    const def = await svc.createCollection(
+      db,
+      admin,
+      bad({
+        slug: 'graph',
+        fields: [
+          { key: 'title', type: 'text', required: true, index: true },
+          { key: 'author', type: 'relation', config: { collection: 'people' }, index: true },
+          { key: 'refs', type: 'relation', config: { collection: 'graph', multiple: true }, index: true },
+        ],
+      }),
+      NOW,
+    );
+    expect(def.slug).toBe('graph');
+  });
+
+  it('rejects unique on a multi-valued relation (shared unique_key → false collisions)', async () => {
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({
+          slug: 'rel-u',
+          fields: [
+            { key: 'title', type: 'text', required: true, index: true },
+            { key: 'refs', type: 'relation', config: { collection: 'people', multiple: true }, index: true, unique: true },
+          ],
+        }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
+  it('rejects a relation without a target collection (config gate)', async () => {
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({
+          slug: 'rel-bad',
+          fields: [{ key: 'ref', type: 'relation', index: true }],
+        }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
   it('rejects a bad slug', async () => {
     await expect(svc.createCollection(db, admin, bad({ slug: 'Bad Slug' }), NOW)).rejects.toBeInstanceOf(
       InputValidationError,

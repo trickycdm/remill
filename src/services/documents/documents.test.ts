@@ -8,7 +8,7 @@ import * as docs from '@/services/documents';
 import type { Principal } from '@/access';
 import { seedRoles, makePrincipal } from '@/test/access';
 import type { CollectionDefinition } from '@/fields/types';
-import { InputValidationError, ConflictError, ForbiddenError, NotFoundError } from '@/lib/errors';
+import { InputValidationError, ConflictError, ForbiddenError, NotFoundError, BadRequestError } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
 
@@ -71,6 +71,63 @@ describe('documents service — the save pipeline', () => {
     expect(byField.slug?.valueText).toBe('indexed-post');
     expect(byField.views?.valueNum).toBe(42);
     expect(byField.body).toBeUndefined(); // body is not indexed
+  });
+
+  it('multi-valued relation: one document_index row per referenced id; re-synced on update (B1)', async () => {
+    const PEOPLE: CollectionDefinition = {
+      slug: 'people',
+      name: 'People',
+      shape: 'collection',
+      fields: [
+        { key: 'name', type: 'text', required: true, index: true },
+        { key: 'posts', type: 'relation', config: { collection: 'posts', multiple: true }, index: true },
+      ],
+    };
+    await collectionsService.createCollection(db, admin, PEOPLE, NOW);
+
+    const person = await docs.createDocument(
+      db,
+      admin,
+      'people',
+      { name: 'Ada', posts: ['doc_a1', 'doc_b2', 'doc_c3'] },
+      NOW,
+    );
+    const edges = (await indexRows(db, person.id)).filter((r) => r.fieldKey === 'posts');
+    expect(edges.map((r) => r.valueText).sort()).toEqual(['doc_a1', 'doc_b2', 'doc_c3']);
+    expect(edges.every((r) => r.uniqueKey === null)).toBe(true);
+
+    // The comma-string widget shape normalizes + dedupes; scalars elsewhere unaffected.
+    const bob = await docs.createDocument(db, admin, 'people', { name: 'Bob', posts: 'doc_b2, doc_b2, doc_z9' }, NOW);
+    expect(bob.data.posts).toEqual(['doc_b2', 'doc_z9']);
+
+    // Filtering matches ANY element (contains semantics) — both reference doc_b2.
+    const hits = await docs.listDocuments(db, admin, 'people', { filters: { posts: 'doc_b2' } }, NOW);
+    expect(hits.rows.map((r) => r.data.name).sort()).toEqual(['Ada', 'Bob']);
+
+    // Update replaces the whole edge set (delete-then-insert sync).
+    await docs.updateDocument(db, admin, 'people', person.id, { posts: ['doc_z9'] }, NOW);
+    const after = (await indexRows(db, person.id)).filter((r) => r.fieldKey === 'posts');
+    expect(after.map((r) => r.valueText)).toEqual(['doc_z9']);
+  });
+
+  it('multi-valued relation: sort is rejected (non-deterministic across N rows)', async () => {
+    const TEAMS: CollectionDefinition = {
+      slug: 'teams',
+      name: 'Teams',
+      shape: 'collection',
+      fields: [
+        { key: 'name', type: 'text', required: true, index: true },
+        { key: 'members', type: 'relation', config: { collection: 'people', multiple: true }, index: true },
+      ],
+    };
+    await collectionsService.createCollection(db, admin, TEAMS, NOW);
+    await expect(
+      docs.listDocuments(db, admin, 'teams', { sort: { field: 'members', dir: 'asc' } }, NOW),
+    ).rejects.toBeInstanceOf(BadRequestError);
+    // …while filtering by the same field stays allowed.
+    await expect(
+      docs.listDocuments(db, admin, 'teams', { filters: { members: 'doc_x' } }, NOW),
+    ).resolves.toBeTruthy();
   });
 
   it('WHITELIST: rejects any undeclared field (anti-mass-assignment)', async () => {

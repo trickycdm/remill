@@ -34,6 +34,7 @@ const FIELD_BY_TYPE: Record<string, FieldDescriptor> = {
   tags: { key: 'tags', type: 'tags' },
   json: { key: 'json', type: 'json' },
   media: { key: 'media', type: 'media' },
+  relation: { key: 'relation', type: 'relation', config: { collection: 'people' } },
 };
 
 describe('FieldShell refactor — every EditComponent keeps its contract wiring', () => {
