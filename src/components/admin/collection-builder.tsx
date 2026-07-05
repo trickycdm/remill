@@ -18,13 +18,27 @@
  * (checkboxes only post when checked). Unique per-row names sidestep alignment
  * entirely — Hono `parseBody()` returns one clean string per key, and
  * "checkbox key present ⇒ true" reads correctly per row.
+ *
+ * ── Select options editor (TD-10) ───────────────────────────────────────────────
+ * A `select` field needs its own option list. The same fixed-pool idiom nests one
+ * level deeper: each field row carries a per-row pool of `MAX_OPTIONS` option slots
+ * (`field_i_opt_j_value` / `_label`), revealed by a per-row `optc_i` count signal
+ * and shown only while that row's type is `select` (`ftype_i` signal, bound to the
+ * type dropdown). Option inputs disable themselves when hidden, off-select, or in a
+ * removed row, so only live options post. `parseCollectionForm` reads them back.
  */
 
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import { listFieldTypeKeys, isIndexable } from '@/fields/registry';
+import { jsonForScript } from '@/lib/json-for-script';
 import { Button, Input, Select, FormField, Plus, Trash } from '@/components/ui';
 
 type RawBody = Record<string, string | File | (string | File)[]>;
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
 
 function firstString(v: string | File | (string | File)[] | undefined): string {
   if (v === undefined) return '';
@@ -32,14 +46,35 @@ function firstString(v: string | File | (string | File)[] | undefined): string {
   return typeof v === 'string' ? v : '';
 }
 
+/** The configured option list of a `select` field descriptor (empty otherwise). */
+function selectOptionsOf(field: FieldDescriptor | undefined): SelectOption[] {
+  if (!field || field.type !== 'select') return [];
+  const cfg = field.config as { options?: SelectOption[] } | undefined;
+  return Array.isArray(cfg?.options) ? cfg.options : [];
+}
+
+/** Read one field row's posted option rows into a value+label list, dropping
+ *  blank slots and defaulting a missing label to the value. */
+function parseOptions(body: RawBody, i: number): SelectOption[] {
+  const options: SelectOption[] = [];
+  for (let j = 0; `field_${i}_opt_${j}_value` in body; j++) {
+    const value = firstString(body[`field_${i}_opt_${j}_value`]).trim();
+    if (!value) continue;
+    const label = firstString(body[`field_${i}_opt_${j}_label`]).trim() || value;
+    options.push({ value, label });
+  }
+  return options;
+}
+
 /**
  * Parse a builder POST body into a CollectionDefinition. Shared by the new + edit
  * routes so the wire format lives in one place. Rows with a blank `key` are
  * dropped (empty pool slots); `required`/`index`/`unique` are true when present.
  *
- * `select` has no options editor in the builder, so a sensible default option is
- * seeded to satisfy the field type's config validation — richer config (options,
- * slug `from`, etc.) is authored via the REST/MCP API.
+ * A `select` field's `config.options` is read from its per-row option editor
+ * (TD-10). If the admin adds no options the list is empty and the collection
+ * service rejects it (the select config requires ≥1 option) — honest feedback,
+ * not the old dummy `{ value: 'option' }` seed that produced an unusable field.
  */
 export function parseCollectionForm(body: RawBody): CollectionDefinition {
   const fields: FieldDescriptor[] = [];
@@ -55,8 +90,7 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
       required: `field_${i}_required` in body || undefined,
       index: `field_${i}_index` in body || undefined,
       unique: `field_${i}_unique` in body || undefined,
-      config:
-        type === 'select' ? { options: [{ value: 'option', label: 'Option' }] } : undefined,
+      config: type === 'select' ? { options: parseOptions(body, i) } : undefined,
     });
   }
 
@@ -70,6 +104,87 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
   };
 }
 
+/** The per-row `select` options editor. A fixed pool of `maxOptions` value+label
+ *  slots, revealed by `$optc_i` and shown only while the row is a live select. */
+function FieldOptionsEditor({
+  i,
+  n,
+  options,
+  maxOptions,
+  initialShown,
+  initialOptCount,
+}: {
+  i: number;
+  n: number;
+  options: SelectOption[];
+  maxOptions: number;
+  initialShown: boolean;
+  initialOptCount: number;
+}) {
+  // Disabled unless this slot is revealed, the row is a select, and the row is shown.
+  const slotDisabled = (j: number) =>
+    `${j} >= $optc_${i} || $ftype_${i} !== 'select' || ${i} >= $count`;
+  return (
+    <div
+      data-show={`$ftype_${i} === 'select' && ${i} < $count`}
+      style={initialShown ? undefined : 'display:none'}
+      role="group"
+      aria-label={`Options for field ${n}`}
+      class="flex flex-col gap-2 rounded-md border border-border/60 bg-canvas/40 p-3"
+    >
+      <span class="font-mono text-eyebrow font-medium tracking-[0.1em] text-ink-subtle uppercase">
+        Options
+      </span>
+      <div class="flex flex-col gap-2">
+        {Array.from({ length: maxOptions }, (_, j) => (
+          <div
+            data-show={`${j} < $optc_${i}`}
+            style={j < initialOptCount ? undefined : 'display:none'}
+            class="grid grid-cols-1 gap-2 sm:grid-cols-2"
+          >
+            <Input
+              name={`field_${i}_opt_${j}_value`}
+              value={options[j]?.value}
+              placeholder="value"
+              aria-label={`Option ${j + 1} value for field ${n}`}
+              data-attr:disabled={slotDisabled(j)}
+            />
+            <Input
+              name={`field_${i}_opt_${j}_label`}
+              value={options[j]?.label}
+              placeholder="Label"
+              aria-label={`Option ${j + 1} label for field ${n}`}
+              data-attr:disabled={slotDisabled(j)}
+            />
+          </div>
+        ))}
+      </div>
+      <div class="flex items-center gap-3">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          data-on:click={`$optc_${i} = Math.min($optc_${i} + 1, ${maxOptions})`}
+          data-attr:disabled={`$optc_${i} >= ${maxOptions}`}
+        >
+          <Plus class="size-4" />
+          Add option
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          data-on:click={`$optc_${i} = Math.max($optc_${i} - 1, 1)`}
+          data-attr:disabled={`$optc_${i} <= 1`}
+        >
+          <Trash class="size-4" />
+          Remove option
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** One field-row slot in the pool. Hidden slots disable their inputs so they
  *  never post; every control carries an aria-label for the row it belongs to. */
 function FieldRow({
@@ -77,16 +192,19 @@ function FieldRow({
   field,
   typeKeys,
   initialCount,
+  maxOptions,
 }: {
   i: number;
   field: FieldDescriptor | undefined;
   typeKeys: string[];
   initialCount: number;
+  maxOptions: number;
 }) {
   const shown = i < initialCount;
   const n = i + 1;
   const selectedType = field?.type ?? 'text';
   const hiddenDisabled = `${i} >= $count`; // Datastar: disabled while this row is hidden
+  const options = selectOptionsOf(field);
   const checkboxes: { key: 'required' | 'index' | 'unique'; label: string; on?: boolean }[] = [
     { key: 'required', label: 'Required', on: field?.required },
     { key: 'index', label: 'Indexed', on: field?.index },
@@ -96,48 +214,59 @@ function FieldRow({
     <div
       data-show={`${i} < $count`}
       style={shown ? undefined : 'display:none'}
-      class="grid grid-cols-1 gap-3 rounded-lg border border-border bg-surface/40 p-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,9rem)_minmax(0,1.2fr)_auto] sm:items-center"
+      class="flex flex-col gap-3 rounded-lg border border-border bg-surface/40 p-3"
     >
-      <Input
-        name={`field_${i}_key`}
-        value={field?.key}
-        placeholder="field_key"
-        aria-label={`Key for field ${n}`}
-        data-attr:disabled={hiddenDisabled}
-      />
-      <Select
-        name={`field_${i}_type`}
-        aria-label={`Type for field ${n}`}
-        data-attr:disabled={hiddenDisabled}
-      >
-        {typeKeys.map((k) => (
-          <option value={k} selected={k === selectedType}>
-            {isIndexable(k) ? k : `${k} (no index)`}
-          </option>
-        ))}
-      </Select>
-      <Input
-        name={`field_${i}_label`}
-        value={field?.label}
-        placeholder="Label (optional)"
-        aria-label={`Label for field ${n}`}
-        data-attr:disabled={hiddenDisabled}
-      />
-      <div class="flex items-center gap-3">
-        {checkboxes.map((cb) => (
-          <label class="flex items-center gap-1.5 text-xs text-ink-muted">
-            <input
-              type="checkbox"
-              name={`field_${i}_${cb.key}`}
-              checked={cb.on}
-              aria-label={`${cb.label} for field ${n}`}
-              data-attr:disabled={hiddenDisabled}
-              class="size-4 rounded border-border-strong text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            />
-            <span aria-hidden="true">{cb.label.slice(0, 3)}</span>
-          </label>
-        ))}
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,9rem)_minmax(0,1.2fr)_auto] sm:items-center">
+        <Input
+          name={`field_${i}_key`}
+          value={field?.key}
+          placeholder="field_key"
+          aria-label={`Key for field ${n}`}
+          data-attr:disabled={hiddenDisabled}
+        />
+        <Select
+          name={`field_${i}_type`}
+          aria-label={`Type for field ${n}`}
+          data-bind={`ftype_${i}`}
+          data-attr:disabled={hiddenDisabled}
+        >
+          {typeKeys.map((k) => (
+            <option value={k} selected={k === selectedType}>
+              {isIndexable(k) ? k : `${k} (no index)`}
+            </option>
+          ))}
+        </Select>
+        <Input
+          name={`field_${i}_label`}
+          value={field?.label}
+          placeholder="Label (optional)"
+          aria-label={`Label for field ${n}`}
+          data-attr:disabled={hiddenDisabled}
+        />
+        <div class="flex items-center gap-3">
+          {checkboxes.map((cb) => (
+            <label class="flex items-center gap-1.5 text-xs text-ink-muted">
+              <input
+                type="checkbox"
+                name={`field_${i}_${cb.key}`}
+                checked={cb.on}
+                aria-label={`${cb.label} for field ${n}`}
+                data-attr:disabled={hiddenDisabled}
+                class="size-4 rounded border-border-strong text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              />
+              <span aria-hidden="true">{cb.label.slice(0, 3)}</span>
+            </label>
+          ))}
+        </div>
       </div>
+      <FieldOptionsEditor
+        i={i}
+        n={n}
+        options={options}
+        maxOptions={maxOptions}
+        initialShown={shown && selectedType === 'select'}
+        initialOptCount={Math.max(options.length, 1)}
+      />
     </div>
   );
 }
@@ -163,11 +292,24 @@ export function CollectionBuilder({
   const existing = def?.fields ?? [];
   const MAX_ROWS = Math.max(12, existing.length + 4);
   const initialCount = Math.max(existing.length, 1);
+  const maxExistingOptions = existing.reduce((m, f) => Math.max(m, selectOptionsOf(f).length), 0);
+  const MAX_OPTIONS = Math.max(8, maxExistingOptions + 2);
+
+  // Seed signals: field-row count + per-row type (`ftype_i`, toggles the options
+  // editor) and per-row option count (`optc_i`). jsonForScript is the sanctioned
+  // way to embed a signals object (DATASTAR_PATTERNS.md) — it also handles the
+  // string `ftype` values the old hand-concatenated seed couldn't.
+  const signals: Record<string, unknown> = { count: initialCount, busy: false };
+  for (let i = 0; i < MAX_ROWS; i++) {
+    const f = existing[i];
+    signals[`ftype_${i}`] = f?.type ?? 'text';
+    signals[`optc_${i}`] = Math.max(selectOptionsOf(f).length, 1);
+  }
 
   return (
     <form
       class="flex flex-col gap-8"
-      data-signals={`{count: ${initialCount}, busy: false}`}
+      data-signals={jsonForScript(signals)}
       data-on:submit={`@post('${action}', {contentType: 'form'})`}
     >
       {/* ── Identity ──────────────────────────────────────────────────────────── */}
@@ -240,6 +382,7 @@ export function CollectionBuilder({
         <p class="text-sm text-ink-muted">
           Each field defines one column of the document. A field must have a key and a type.
           Indexed fields are queryable and sortable; a unique field must also be indexed.
+          A <code class="font-mono">select</code> field lists its choices in the options editor.
         </p>
 
         {/* Column headings (sighted, wide screens); each control keeps its own aria-label. */}
@@ -252,7 +395,7 @@ export function CollectionBuilder({
 
         <div class="flex flex-col gap-3">
           {Array.from({ length: MAX_ROWS }, (_, i) => (
-            <FieldRow i={i} field={existing[i]} typeKeys={typeKeys} initialCount={initialCount} />
+            <FieldRow i={i} field={existing[i]} typeKeys={typeKeys} initialCount={initialCount} maxOptions={MAX_OPTIONS} />
           ))}
         </div>
 
