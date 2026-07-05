@@ -5,6 +5,8 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { nowIso } from '@/lib/now';
 import * as access from '@/services/access';
+import { listCollections } from '@/services/collections';
+import { ACTIONS } from '@/access';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
 import { personaOf, PERSONA_LABEL, PERSONA_TONE, type Persona } from '@/lib/persona';
 import type { PrincipalRecord, TokenRecord } from '@/db/queries/principals';
@@ -30,7 +32,15 @@ import {
 } from '@/components/ui';
 
 /** One principal card — role badges, inline assign, and (machine principals) tokens. */
-function PrincipalCard({ p, tokens }: { p: PrincipalRecord; tokens: TokenRecord[] }) {
+function PrincipalCard({
+  p,
+  tokens,
+  collectionSlugs,
+}: {
+  p: PrincipalRecord;
+  tokens: TokenRecord[];
+  collectionSlugs: string[];
+}) {
   const persona = personaOf(p.kind, p.subtype);
   return (
     <Card>
@@ -111,13 +121,24 @@ function PrincipalCard({ p, tokens }: { p: PrincipalRecord; tokens: TokenRecord[
               <FormField fieldId={`tok-${p.id}`} label="New token">
                 <Input id={`tok-${p.id}`} name="name" type="text" placeholder="prod read-only" required />
               </FormField>
-              <FormField fieldId={`toks-${p.id}`} label="Scope (narrowing)">
-                <Select id={`toks-${p.id}`} name="scope">
-                  <option value="">full (no narrowing)</option>
-                  <option value="read">read only</option>
-                  <option value="read,create,update">write (no publish/delete)</option>
+              <FormField fieldId={`tokc-${p.id}`} label="Scope: collection">
+                <Select id={`tokc-${p.id}`} name="scopeCollection">
+                  <option value="*">All collections</option>
+                  {collectionSlugs.map((s) => (
+                    <option value={s}>{s}</option>
+                  ))}
                 </Select>
               </FormField>
+              <fieldset class="flex flex-col gap-1">
+                <legend class="mb-1 text-xs font-medium text-ink-muted">Scope: actions (none = full)</legend>
+                <div class="flex flex-wrap gap-x-3 gap-y-1">
+                  {ACTIONS.map((a) => (
+                    <label class="inline-flex items-center gap-1 text-sm text-ink-muted">
+                      <input type="checkbox" name="scopeAction" value={a} class="accent-accent" /> {a}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               <Button type="submit" variant="secondary">
                 Issue token
               </Button>
@@ -135,11 +156,13 @@ function PersonaGroup({
   hint,
   principals,
   tokensByPrincipal,
+  collectionSlugs,
 }: {
   title: string;
   hint: string;
   principals: PrincipalRecord[];
   tokensByPrincipal: Map<string, TokenRecord[]>;
+  collectionSlugs: string[];
 }) {
   return (
     <div class="mb-6">
@@ -151,7 +174,7 @@ function PersonaGroup({
       ) : (
         <div class="flex flex-col gap-4">
           {principals.map((p) => (
-            <PrincipalCard p={p} tokens={tokensByPrincipal.get(p.id) ?? []} />
+            <PrincipalCard p={p} tokens={tokensByPrincipal.get(p.id) ?? []} collectionSlugs={collectionSlugs} />
           ))}
         </div>
       )}
@@ -168,12 +191,14 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const principal = requirePrincipal(c);
   const now = nowIso();
 
-  const [roles, principals, tokens, audit] = await Promise.all([
+  const [roles, principals, tokens, audit, collections] = await Promise.all([
     access.listRoles(db),
     access.listPrincipals(db, principal, now),
     access.listTokens(db, principal, now),
     access.listAudit(db, principal, now, 30),
+    listCollections(db),
   ]);
+  const collectionSlugs = collections.map((c) => c.slug);
   const tokensByPrincipal = new Map<string, typeof tokens>();
   for (const t of tokens) {
     const list = tokensByPrincipal.get(t.principalId) ?? [];
@@ -195,7 +220,12 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
       {/* Roles */}
       <section class="mb-10">
-        <h2 class="mb-3 font-serif text-display-sm">Roles</h2>
+        <div class="mb-3 flex items-baseline justify-between gap-4">
+          <h2 class="font-serif text-display-sm">Roles</h2>
+          <a href="/admin/access/roles" class="text-sm font-medium text-accent-text hover:underline">
+            Manage roles →
+          </a>
+        </div>
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {roles.map((r) => (
             <Card>
@@ -288,18 +318,21 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           hint="Humans who sign in with a password."
           principals={people}
           tokensByPrincipal={tokensByPrincipal}
+          collectionSlugs={collectionSlugs}
         />
         <PersonaGroup
           title="Services"
           hint="No services yet — create one above for a system that pulls data via the API."
           principals={services}
           tokensByPrincipal={tokensByPrincipal}
+          collectionSlugs={collectionSlugs}
         />
         <PersonaGroup
           title="Agents"
           hint="No agents yet — create one above for an autonomous AI client (MCP or API)."
           principals={agents}
           tokensByPrincipal={tokensByPrincipal}
+          collectionSlugs={collectionSlugs}
         />
       </section>
 

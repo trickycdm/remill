@@ -14,6 +14,7 @@ import * as admin_media_id_delete from './routes/admin/media/[id]/delete';
 import * as api_c_collection_id_index from './routes/api/c/[collection]/[id]';
 import * as admin_access_agents from './routes/admin/access/agents';
 import * as admin_access_assign from './routes/admin/access/assign';
+import * as admin_access_roles_index from './routes/admin/access/roles';
 import * as admin_access_tokens from './routes/admin/access/tokens';
 import * as admin_access_users from './routes/admin/access/users';
 import * as admin_account_password from './routes/admin/account/password';
@@ -59,6 +60,8 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.patch('/api/c/:collection/:id', ...api_c_collection_id_index.onRequestPatch);
 	app.post('/admin/access/agents', ...admin_access_agents.onRequestPost);
 	app.post('/admin/access/assign', ...admin_access_assign.onRequestPost);
+	app.get('/admin/access/roles', ...admin_access_roles_index.onRequestGet);
+	app.post('/admin/access/roles', ...admin_access_roles_index.onRequestPost);
 	app.post('/admin/access/tokens', ...admin_access_tokens.onRequestPost);
 	app.post('/admin/access/users', ...admin_access_users.onRequestPost);
 	app.post('/admin/account/password', ...admin_account_password.onRequestPost);

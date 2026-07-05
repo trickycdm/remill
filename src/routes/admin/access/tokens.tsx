@@ -12,14 +12,24 @@ import { PageHeader, Card, CardContent, Button } from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
 
-function parseScope(raw: string): { collection: string; action: Action }[] | undefined {
-  if (!raw) return undefined;
-  return raw.split(',').map((a) => ({ collection: '*', action: a.trim() as Action }));
+/** Build a narrowing scope mask from the issue form: the chosen collection (or '*')
+ *  crossed with the checked actions. No actions checked → undefined (full, no
+ *  narrowing). The service validates the actions against the closed vocabulary. */
+function parseScope(collection: string, actions: string[]): { collection: string; action: Action }[] | undefined {
+  if (actions.length === 0) return undefined;
+  const col = collection || '*';
+  return actions.map((a) => ({ collection: col, action: a as Action }));
+}
+
+/** Coerce a possibly-repeated form field (Hono `{ all: true }`) into a string[]. */
+function asArray(v: string | string[] | undefined): string[] {
+  if (v == null) return [];
+  return Array.isArray(v) ? v.map(String) : [String(v)];
 }
 
 /** POST /admin/access/tokens — issue (renders the plaintext once) or revoke. */
 export const onRequestPost = factory.createHandlers(rateLimit('token', TOKEN_RATE_LIMIT), requireAuth(), async (c) => {
-  const body = await c.req.parseBody();
+  const body = await c.req.parseBody({ all: true });
   const db = getDb(c.env.DB);
   const principal = requirePrincipal(c);
   const now = nowIso();
@@ -35,7 +45,7 @@ export const onRequestPost = factory.createHandlers(rateLimit('token', TOKEN_RAT
     {
       principalId: String(body.principalId ?? ''),
       name: String(body.name ?? ''),
-      scope: parseScope(String(body.scope ?? '')),
+      scope: parseScope(String(body.scopeCollection ?? '*'), asArray(body.scopeAction as string | string[] | undefined)),
     },
     now,
   );

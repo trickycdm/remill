@@ -56,14 +56,33 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await expect(page.getByText('Service', { exact: true }).and(page.locator('span')).first()).toBeVisible();
     await expect(page.getByText('Agent', { exact: true }).and(page.locator('span')).first()).toBeVisible();
 
-    // Issue a read-only token for it → the plaintext is shown once.
+    // Issue a token scoped to all collections, read-only → plaintext shown once.
     const card = page.locator('div', { hasText: 'e2e-bot' });
     await card.getByLabel('New token').first().fill('ci-read');
-    await card.getByLabel('Scope (narrowing)').first().selectOption('read');
+    await card.getByLabel('Scope: collection').first().selectOption('*');
+    await card.getByRole('checkbox', { name: 'read', exact: true }).first().check();
     await card.getByRole('button', { name: 'Issue token' }).first().click();
 
     await expect(page.getByText('Token issued')).toBeVisible();
     await expect(page.getByText(/^rmk_/)).toBeVisible(); // the one-time plaintext
+  });
+
+  test('roles: create a custom role from the closed action vocabulary', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/access');
+    await page.getByRole('link', { name: 'Manage roles →' }).click();
+    await expect(page).toHaveURL(/\/admin\/access\/roles$/);
+
+    await page.getByLabel('Slug').fill('moderator');
+    await page.getByLabel('Name', { exact: true }).fill('Moderator');
+    await page.getByLabel('Description').fill('Publish only');
+    await page.getByRole('checkbox', { name: 'publish', exact: true }).check();
+    await page.getByRole('button', { name: 'Create role' }).click();
+
+    // The new custom role appears with its permission and is editable/deletable.
+    await expect(page.getByText('moderator', { exact: true })).toBeVisible(); // the slug span
+    await expect(page.getByText('Publish only')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Delete' })).toBeVisible();
   });
 
   test('invite a person with a password, then sign in as them', async ({ page, context }) => {
@@ -152,7 +171,7 @@ test.describe('Phase 4 — schema builder + access UI', () => {
 
   test('axe: collections index, builder, and access pages pass WCAG 2.1 AA', async ({ page }) => {
     await loginAsAdmin(page);
-    for (const path of ['/admin/collections', '/admin/collections/new', '/admin/access', '/admin/settings']) {
+    for (const path of ['/admin/collections', '/admin/collections/new', '/admin/access', '/admin/access/roles', '/admin/settings']) {
       await page.goto(path);
       await page.waitForLoadState('networkidle');
       const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
