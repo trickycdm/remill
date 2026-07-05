@@ -5,6 +5,7 @@ import * as admin_c_collection_id_delete from './routes/admin/c/[collection]/[id
 import * as admin_c_collection_id_publish from './routes/admin/c/[collection]/[id]/publish';
 import * as admin_c_collection_id_restore from './routes/admin/c/[collection]/[id]/restore';
 import * as admin_c_collection_id_share from './routes/admin/c/[collection]/[id]/share';
+import * as api_c_collection_id_backlinks from './routes/api/c/[collection]/[id]/backlinks';
 import * as api_c_collection_id_grants from './routes/api/c/[collection]/[id]/grants';
 import * as api_c_collection_id_publish from './routes/api/c/[collection]/[id]/publish';
 import * as api_c_collection_id_revisions from './routes/api/c/[collection]/[id]/revisions';
@@ -50,6 +51,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/c/:collection/:id/publish', ...admin_c_collection_id_publish.onRequestPost);
 	app.post('/admin/c/:collection/:id/restore', ...admin_c_collection_id_restore.onRequestPost);
 	app.post('/admin/c/:collection/:id/share', ...admin_c_collection_id_share.onRequestPost);
+	app.get('/api/c/:collection/:id/backlinks', ...api_c_collection_id_backlinks.onRequestGet);
 	app.get('/api/c/:collection/:id/grants', ...api_c_collection_id_grants.onRequestGet);
 	app.post('/api/c/:collection/:id/grants', ...api_c_collection_id_grants.onRequestPost);
 	app.delete('/api/c/:collection/:id/grants', ...api_c_collection_id_grants.onRequestDelete);

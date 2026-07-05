@@ -154,6 +154,53 @@ describe('documents service — the save pipeline', () => {
     expect(row?.relations?.author).toEqual({ id: ada.id, title: 'Ada Lovelace', collection: 'authors' });
   });
 
+  it('B3: backlinks — A referencing B appears under B, access-scoped, indexed-only', async () => {
+    const AUTHORS: CollectionDefinition = {
+      slug: 'authors',
+      name: 'Authors',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+      access: { publicRead: true }, // anyone can read a published author…
+    };
+    const BOOKS: CollectionDefinition = {
+      slug: 'books',
+      name: 'Books',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        // Indexed relation — produces backlinks (edges live in document_index).
+        { key: 'author', type: 'relation', config: { collection: 'authors' }, index: true },
+        // NOT indexed — must never produce a backlink.
+        { key: 'mention', type: 'relation', config: { collection: 'authors' } },
+      ],
+      // …but books are NOT publicRead: their edges are invisible to outsiders.
+    };
+    await collectionsService.createCollection(db, admin, AUTHORS, NOW);
+    await collectionsService.createCollection(db, admin, BOOKS, NOW);
+    const ada = await docs.createDocument(db, admin, 'authors', { name: 'Ada' }, NOW);
+    const book = await docs.createDocument(
+      db,
+      admin,
+      'books',
+      { title: 'Notes', author: ada.id, mention: ada.id },
+      NOW,
+    );
+
+    // Admin traverses the reverse edge (once — the unindexed field adds nothing).
+    const links = await docs.getBacklinks(db, admin, 'authors', ada.id, NOW);
+    expect(links).toEqual([
+      { id: book.id, collection: 'books', title: 'Notes', status: 'published', updatedAt: NOW },
+    ]);
+
+    // The roleless reader may read the author but not books — edges invisible.
+    const asNobody = await docs.getBacklinks(db, nobody, 'authors', ada.id, NOW);
+    expect(asNobody).toEqual([]);
+
+    // Removing the reference removes the backlink (index re-sync).
+    await docs.updateDocument(db, admin, 'books', book.id, { author: undefined }, NOW);
+    expect(await docs.getBacklinks(db, admin, 'authors', ada.id, NOW)).toEqual([]);
+  });
+
   it('B2: a configured titleField overrides the first-text-field default', async () => {
     const TARGETS: CollectionDefinition = {
       slug: 'targets',

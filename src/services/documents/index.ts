@@ -15,7 +15,7 @@ import type { Database } from '@/db/client';
 import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference } from '@/fields/types';
 import { resolveField, isMultiValued, referencesOf } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
-import { getCollection } from '@/db/queries/collections';
+import { getCollection, listCollections as listCollectionDefs } from '@/db/queries/collections';
 import { authorize, compileReadFilter, resolveAccess, type Principal } from '@/access';
 import { newId } from '@/lib/id';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
@@ -263,6 +263,73 @@ async function expandRelations(
     }
     return Object.keys(relations).length ? { ...row, relations } : row;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Backlinks — the reverse edges of the graph (B3)
+// ---------------------------------------------------------------------------
+
+/** One reverse edge: a document that references the asked-about document. */
+export interface Backlink {
+  readonly id: string;
+  /** The SOURCE collection the referrer lives in. */
+  readonly collection: string;
+  readonly title: string | null;
+  readonly status: 'draft' | 'published';
+  readonly updatedAt: string;
+}
+
+/** Referrers returned per source collection — a display cap, not pagination. */
+const BACKLINKS_LIMIT = 50;
+
+/**
+ * Documents that REFERENCE the given document through indexed relation fields.
+ * Access-gated twice: asking requires `read` on the target document, and each
+ * SOURCE collection is read under the caller's own compiled filter — a referrer
+ * the reader cannot see is simply absent, never a leak. Only INDEXED relation
+ * fields produce backlinks (the edges live in `document_index`).
+ */
+export async function getBacklinks(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  now: string,
+): Promise<Backlink[]> {
+  const grant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const target = await dq.getDocument(db, collectionSlug, id, grant);
+  if (!target) throw new NotFoundError('Document');
+
+  const out: Backlink[] = [];
+  for (const def of await listCollectionDefs(db)) {
+    const fieldKeys = def.fields
+      .filter((f) => f.index && referencesOf(f)?.collection === collectionSlug)
+      .map((f) => f.key);
+    if (!fieldKeys.length) continue;
+    let rows: DocumentRecord[];
+    try {
+      const resolved = await resolveAccess(db, principal.id, def.slug);
+      const srcGrant = await authorize(db, principal, 'read', { collection: def.slug }, now, resolved);
+      const filter = await compileReadFilter(db, principal, def.slug, now, resolved);
+      rows = await dq.listBacklinks(db, def.slug, fieldKeys, id, filter, BACKLINKS_LIMIT, srcGrant);
+    } catch (e) {
+      // The reader can't read this source collection — its edges are invisible.
+      if (!(e instanceof ForbiddenError)) throw e;
+      continue;
+    }
+    const titleKey = pickTitleField(def);
+    for (const row of rows) {
+      const raw = titleKey ? row.data[titleKey] : undefined;
+      out.push({
+        id: row.id,
+        collection: def.slug,
+        title: typeof raw === 'string' && raw.length ? raw : null,
+        status: row.status,
+        updatedAt: row.updatedAt,
+      });
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

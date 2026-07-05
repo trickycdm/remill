@@ -131,6 +131,12 @@ export async function buildToolsForPrincipal(
         inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
         handler: async (args) => docs.getDocument(db, principal, slug, String(args.id), now()),
       });
+      tools.push({
+        name: `backlinks_${slug}`,
+        description: `List documents that reference a ${def.name} document via relation fields (reverse links — the graph).`,
+        inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        handler: async (args) => docs.getBacklinks(db, principal, slug, String(args.id), now()),
+      });
     }
     if (couldDo(perms, principal, 'create', slug, false)) {
       tools.push({

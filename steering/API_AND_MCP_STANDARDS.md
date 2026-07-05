@@ -65,6 +65,12 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   Titles are permission-gated: a dangling id or a target the reader cannot see expands with
   `title: null` — never an error, and never a leak (the batch load applies the reader's compiled
   filter in-query).
+- **Backlinks (B3)**: `GET /api/c/:collection/:id/backlinks` (and the MCP `backlinks_<slug>` tool)
+  lists documents that reference the given one through **indexed** relation fields —
+  `[{ id, collection, title, status, updatedAt }]`. Read-gated twice: asking requires `read` on the
+  target, and each SOURCE collection is queried under the caller's own compiled filter, so a
+  referrer the reader cannot see is simply absent. Capped per source collection (display, not
+  pagination).
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
 - **Rate-limit headers** are stubbed in v1 (`X-RateLimit-*` present, not enforced). Wire real limits
@@ -77,7 +83,8 @@ A direct streamable-HTTP JSON-RPC endpoint at `/mcp` (`src/mcp/handler.ts` + `to
 tokens** as REST.
 
 - **Tools are generated per collection** from field descriptors (surface 6), not hand-listed:
-  - Per collection: `list_<slug>`, `get_<slug>`, `create_<slug>`, `update_<slug>`, `publish_<slug>`,
+  - Per collection: `list_<slug>`, `get_<slug>`, `backlinks_<slug>` (reverse links, read-gated),
+    `create_<slug>`, `update_<slug>`, `publish_<slug>`,
     `share_<slug>` (item grant; visible only with `manage_access`)
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
   - Schema management: `list_collections`, `create_collection`, `update_collection`

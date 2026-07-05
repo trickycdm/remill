@@ -232,6 +232,36 @@ export async function getDocumentsByIds(
   return out;
 }
 
+/** Documents in ONE source collection whose indexed relation field(s) reference
+ *  `targetDocId` — the reverse edge lookup (backlinks, B3). This is a CONTENT
+ *  read, so the caller's compiled access predicate applies in-query (unlike
+ *  `isIndexValueTaken` below, which is an access-blind uniqueness pre-check and
+ *  must never serve user-facing reads). Witness required. */
+export async function listBacklinks(
+  db: Database,
+  sourceCollection: string,
+  fieldKeys: readonly string[],
+  targetDocId: string,
+  accessFilter: SQL | undefined,
+  limit: number,
+  _grant: Grant,
+): Promise<DocumentRecord[]> {
+  if (!fieldKeys.length) return [];
+  const rows = await db
+    .select()
+    .from(documents)
+    .where(
+      and(
+        eq(documents.collection, sourceCollection),
+        sql`${documents.id} IN (SELECT ${documentIndex.documentId} FROM ${documentIndex} WHERE ${documentIndex.collection} = ${sourceCollection} AND ${inArray(documentIndex.fieldKey, [...fieldKeys])} AND ${documentIndex.valueText} = ${targetDocId})`,
+        accessFilter,
+      ),
+    )
+    .orderBy(sql`${documents.createdAt} DESC, ${documents.id} DESC`)
+    .limit(limit);
+  return rows.map(toDomain);
+}
+
 /** The next 1-based revision number for a document. */
 export async function nextRevisionNumber(db: Database, documentId: string): Promise<number> {
   const rows = await db

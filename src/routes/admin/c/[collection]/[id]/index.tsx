@@ -5,7 +5,7 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
-import { getDocument, updateDocument, listRevisions } from '@/services/documents';
+import { getDocument, updateDocument, listRevisions, getBacklinks } from '@/services/documents';
 import { getSettings } from '@/services/settings';
 import { getPrincipalPermissions, listItemGrants, listPrincipals, listRoles } from '@/services/access';
 import { coerceAdminForm } from '@/lib/admin-form';
@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/ui';
 import { GeneratedForm } from '@/components/admin/generated';
 import { EditorSidebar } from '@/components/admin/editor-sidebar';
 import { SharePanel } from '@/components/admin/share-panel';
+import { BacklinksPanel } from '@/components/admin/backlinks-panel';
 import { renderSaveError } from '@/lib/save-error';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -32,6 +33,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const now = nowIso();
   const doc = await getDocument(db, principal, slug, id, now);
   const revisions = await listRevisions(db, principal, slug, id, now);
+  const backlinks = await getBacklinks(db, principal, slug, id, now);
   const settings = await getSettings(db);
 
   // Share panel: only for principals with install-wide manage_access (matches what
@@ -88,6 +90,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           settings={settings}
         />
       </div>
+
+      <BacklinksPanel backlinks={backlinks} />
 
       {share && (
         <SharePanel slug={slug} id={id} grants={share.grants} principals={share.principals} roles={share.roles} />
