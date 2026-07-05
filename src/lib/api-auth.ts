@@ -8,7 +8,7 @@
 
 import type { Context } from 'hono';
 import type { Database } from '@/db/client';
-import { findTokenByHash, isPrincipalActive } from '@/db/queries/principals';
+import { findTokenByHash, isPrincipalActive, stampTokenUsed } from '@/db/queries/principals';
 import { hashToken } from '@/lib/token';
 import { UnauthorizedError } from '@/lib/errors';
 import type { Action, Principal, Surface } from '@/access';
@@ -36,10 +36,14 @@ export async function resolvePrincipal(
   const token = bearer(c);
   if (!token) return { ...ANONYMOUS_PRINCIPAL, surface };
 
-  const rec = await findTokenByHash(db, await hashToken(token), now);
+  const rec = await findTokenByHash(db, await hashToken(token));
   if (!rec) throw new UnauthorizedError('Invalid token.');
   if (rec.expiresAt && rec.expiresAt <= now) throw new UnauthorizedError('Token expired.');
   if (!(await isPrincipalActive(db, rec.principalId))) throw new UnauthorizedError('Principal disabled.');
+
+  // Only now that the token is valid AND its principal active do we record use
+  // (SEC-7 — never stamp last_used on a matched-but-rejected token).
+  await stampTokenUsed(db, rec.id, now);
 
   return {
     id: rec.principalId,

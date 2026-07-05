@@ -16,6 +16,8 @@ export const ID_PREFIX = {
   index: 'idx',
   media: 'med',
   role: 'rol',
+  rolePermission: 'rlp', // role_permissions rows (distinct from the role itself)
+  principalRole: 'pnr', // principal_roles join rows (NOT a principal — avoid prn_ collision)
   grant: 'grn',
   audit: 'aud',
 } as const;

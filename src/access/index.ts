@@ -7,6 +7,7 @@
  * (src/test/, tests only). See steering/ACCESS_CONTROL.md.
  */
 
-export { authorize, principalFromSession, compileReadFilter, Grant, resourceKey, ACTIONS } from '@/access/authorize';
+export { authorize, principalFromSession, compileReadFilter, resolveAccess, Grant, resourceKey, ACTIONS } from '@/access/authorize';
+export type { ResolvedAccess } from '@/access/authorize';
 export type { Action, Principal, Resource, Condition, Surface } from '@/access/types';
 export type { TokenScopeEntry } from '@/access/permissions';

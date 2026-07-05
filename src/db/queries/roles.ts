@@ -8,7 +8,7 @@ import type { Database } from '@/db/client';
 import { roles, rolePermissions, principalRoles } from '@/db/schema';
 import { newId } from '@/lib/id';
 import type { Action, Condition } from '@/access/types';
-import type { PermissionSpec, RoleSpec } from '@/access/policy';
+import { SYSTEM_ROLE_SLUGS, type PermissionSpec, type RoleSpec } from '@/access/policy';
 
 export interface RoleRecord {
   readonly slug: string;
@@ -56,7 +56,7 @@ export async function insertRole(db: Database, spec: RoleSpec, system: boolean, 
   await db.batch([
     db.insert(roles).values({ slug: spec.slug, name: spec.name, description: spec.description, system: system ? 1 : 0, createdAt: now }),
     ...spec.permissions.map((p) =>
-      db.insert(rolePermissions).values({ id: newId('role'), role: spec.slug, collection: p.collection, action: p.action, condition: p.condition ?? null }),
+      db.insert(rolePermissions).values({ id: newId('rolePermission'), role: spec.slug, collection: p.collection, action: p.action, condition: p.condition ?? null }),
     ),
   ] as [import('drizzle-orm/batch').BatchItem<'sqlite'>, ...import('drizzle-orm/batch').BatchItem<'sqlite'>[]]);
 }
@@ -64,7 +64,7 @@ export async function insertRole(db: Database, spec: RoleSpec, system: boolean, 
 /** Replace a role's permission set (used by the roles service on update). */
 export async function setRolePermissions(db: Database, slug: string, name: string, description: string | undefined, perms: PermissionSpec[]): Promise<void> {
   const inserts = perms.map((p) =>
-    db.insert(rolePermissions).values({ id: newId('role'), role: slug, collection: p.collection, action: p.action, condition: p.condition ?? null }),
+    db.insert(rolePermissions).values({ id: newId('rolePermission'), role: slug, collection: p.collection, action: p.action, condition: p.condition ?? null }),
   );
   await db.batch([
     db.update(roles).set({ name, description: description ?? null }).where(eq(roles.slug, slug)),
@@ -84,7 +84,7 @@ export async function deleteRole(db: Database, slug: string): Promise<void> {
 export async function assignRole(db: Database, principalId: string, role: string, collection = '*'): Promise<void> {
   await db
     .insert(principalRoles)
-    .values({ id: newId('principal'), principalId, role, collection })
+    .values({ id: newId('principalRole'), principalId, role, collection })
     .onConflictDoNothing();
 }
 
@@ -134,8 +134,10 @@ function effectiveCollection(scope: string, permCollection: string): string | nu
 }
 
 // Strength order for picking a principal's coarse "primary" role (display/nav only;
-// real decisions use the full permission set). Higher index = stronger.
-const ROLE_STRENGTH = ['anonymous', 'reader', 'author', 'editor', 'admin'];
+// real decisions use the full permission set). Higher index = stronger. Derived
+// from the policy (which declares roles strongest-first) rather than re-listed, so
+// the two never drift; reversing yields weakest→strongest.
+const ROLE_STRENGTH: readonly string[] = [...SYSTEM_ROLE_SLUGS].reverse();
 
 /** The principal's strongest assigned system role, for the session's coarse role.
  *  Defaults to 'reader' when the principal holds only custom or no roles. */

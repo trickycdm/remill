@@ -172,11 +172,22 @@ export const documentIndex = sqliteTable(
     fieldKey: text('field_key').notNull(),
     valueText: text('value_text'),
     valueNum: real('value_num'),
+    // DB-level backing for `unique` fields (COR-8). Set to `${collection}:${fieldKey}`
+    // ONLY for fields declared unique; NULL otherwise. Because SQLite treats NULLs
+    // as distinct in a UNIQUE index, the two unique indexes below constrain unique
+    // fields alone — non-unique indexed rows (unique_key NULL) never collide. This
+    // makes uniqueness race-proof (the app-level check is a friendly pre-check only).
+    uniqueKey: text('unique_key'),
   },
   (t) => [
     index('document_index_doc_idx').on(t.documentId),
     index('document_index_text_idx').on(t.collection, t.fieldKey, t.valueText),
     index('document_index_num_idx').on(t.collection, t.fieldKey, t.valueNum),
+    // A unique field is either text- or number-indexed (one value column is NULL);
+    // pairing unique_key with each column covers both without a cross-field clash
+    // (unique_key embeds the field, so two unique fields never share a namespace).
+    uniqueIndex('document_index_unique_text').on(t.uniqueKey, t.valueText),
+    uniqueIndex('document_index_unique_num').on(t.uniqueKey, t.valueNum),
   ],
 );
 
