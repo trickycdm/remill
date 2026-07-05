@@ -2,6 +2,10 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
 
+// Distinct client IP per spec file so the login rate-limiter (SEC-2: 10/min per
+// CF-Connecting-IP) buckets each file separately. See admin-content.spec.ts.
+test.use({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.14' } });
+
 // A real 1×1 red PNG (renders in the grid, sniffs as image/png).
 const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';

@@ -2,6 +2,11 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
 
+// Distinct client IP per spec file so the login rate-limiter (SEC-2: 10/min per
+// CF-Connecting-IP) buckets each file separately — the suite's many logins would
+// otherwise share the fallback bucket and trip the limit. See scripts/seed-e2e.ts.
+test.use({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.11' } });
+
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 test.describe('Phase 4 — generated document admin', () => {

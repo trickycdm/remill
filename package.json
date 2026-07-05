@@ -17,7 +17,7 @@
     "test:coverage": "vitest run --coverage",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "e2e": "PLAYWRIGHT_HTML_OPEN=never playwright test",
+    "e2e": "bun run db:migrate && bun run db:seed && bun run db:seed:e2e && PLAYWRIGHT_HTML_OPEN=never playwright test",
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",
     "e2e:report": "playwright show-report",
@@ -27,7 +27,8 @@
     "db:seed": "wrangler d1 execute remill --local --file src/db/seed.sql && bun run db:bootstrap:local",
     "db:seed:remote": "wrangler d1 execute remill --remote --file src/db/seed.sql",
     "db:bootstrap:local": "bun run scripts/bootstrap-admin.ts --local",
-    "db:bootstrap:remote": "bun run scripts/bootstrap-admin.ts --remote"
+    "db:bootstrap:remote": "bun run scripts/bootstrap-admin.ts --remote",
+    "db:seed:e2e": "bun run scripts/seed-e2e.ts"
   },
   "dependencies": {
     "@noble/hashes": "^1.7.2",

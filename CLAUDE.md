@@ -35,7 +35,8 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **R2** — media originals, streamed with range support.
 - **hono-sessions** (encrypted cookie) + **scrypt** (`@noble/hashes`) for human auth; **bearer tokens**
   (hashed at rest, scope-masked) for machine auth (REST + MCP).
-- **Cloudflare `agents` SDK** — `McpAgent` on a Durable Object at `/mcp`.
+- **MCP** — a direct streamable-HTTP JSON-RPC endpoint at `/mcp` (decision **D18**; not the
+  `agents`-SDK `McpAgent`-on-a-Durable-Object once planned — that dep was removed).
 - **Zod 4** validation (generated from field descriptors); **Vitest 3** + **Playwright** (+ axe);
   **nanoid** IDs; **Tailwind v4** CSS-first `@theme` tokens. _Deferred / not yet wired:_ the
   **CodeMirror 6** markdown island and **Uppy** uploads — `src/client/init.ts` is an empty stub and
@@ -46,7 +47,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 ```
   Browser (admin) ─▶ /admin/**   Datastar SSR management UI
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
-  AI agents ───────▶ /mcp        MCP server (McpAgent on a DO)
+  AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
 
   Routes / DOs → Services (src/services/) → Queries (src/db/queries/) → D1
@@ -66,7 +67,8 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   in the codebase (SCHEMA_ENGINE.md).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
   (ACCESS_CONTROL.md).
-- **MCP** `src/mcp/` — the one module touching the `agents` SDK (containment of a moving dependency).
+- **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
+  module owning the MCP protocol surface (decision D18).
 - **`src/lib/`** errors/validation/auth/logging/datastar-response; **`src/components/`** Hono JSX;
   **`src/client/`** browser islands (CodeMirror, Uppy).
 
