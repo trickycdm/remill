@@ -16,6 +16,10 @@
  * `data-show`, so the control disables optimistically and announces itself.
  */
 
+import type { JSX } from 'hono/jsx/jsx-runtime';
+import { Spinner } from '@/components/ui/icon';
+import { cx } from '@/components/ui/cx';
+
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'link';
 type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 
@@ -73,11 +77,11 @@ export type ButtonProps = ButtonAsButton | ButtonAsAnchor;
 const BASE =
   'inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md font-medium transition-all duration-150 outline-none focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50';
 
-export function Button(props: ButtonProps) {
+export function Button(props: ButtonProps): JSX.Element {
   const { children, variant = 'primary', size = 'md', class: cls, busy, ...rest } = props;
   // Link variant is inline text — it opts out of the fixed control height/padding.
   const sizeClass = variant === 'link' ? '' : SIZE[size];
-  const classes = `${BASE} ${VARIANT[variant]} ${sizeClass}${cls ? ` ${cls}` : ''}`;
+  const classes = cx(BASE, VARIANT[variant], sizeClass, cls);
 
   // Datastar busy affordance: string → reactive attrs; boolean → static.
   const busyAttrs =
@@ -93,20 +97,7 @@ export function Button(props: ButtonProps) {
         class="contents"
         {...(typeof busy === 'string' ? { 'data-show': busy, style: 'display:none' } : {})}
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.25"
-          stroke-linecap="round"
-          class="rm-anim-spin -ml-0.5 size-4"
-          aria-hidden="true"
-        >
-          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-        </svg>
+        <Spinner class="rm-anim-spin -ml-0.5 size-4" />
       </span>
     ) : null;
 

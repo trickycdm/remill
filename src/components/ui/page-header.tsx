@@ -7,6 +7,9 @@
  * the h1. The eyebrow is decorative-adjacent context, not a heading level.
  */
 
+import type { JSX } from 'hono/jsx/jsx-runtime';
+import { cx } from '@/components/ui/cx';
+
 export function PageHeader({
   title,
   eyebrow,
@@ -21,9 +24,9 @@ export function PageHeader({
   actions?: unknown;
   as?: 'h1' | 'h2';
   class?: string;
-}) {
+}): JSX.Element {
   return (
-    <header class={`flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between${cls ? ` ${cls}` : ''}`}>
+    <header class={cx('flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between', cls)}>
       <div class="flex flex-col gap-2">
         {eyebrow ? (
           <span class="font-mono text-eyebrow font-medium tracking-[0.14em] text-ink-subtle uppercase">

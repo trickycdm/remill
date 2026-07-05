@@ -19,6 +19,9 @@
  * staying keyboard-scrollable.
  */
 
+import type { JSX } from 'hono/jsx/jsx-runtime';
+import { cx } from '@/components/ui/cx';
+
 export function Table({
   children,
   caption,
@@ -30,10 +33,10 @@ export function Table({
   caption?: string;
   class?: string;
   'aria-label'?: string;
-}) {
+}): JSX.Element {
   return (
     <div class="w-full overflow-x-auto rounded-lg border border-border">
-      <table class={`w-full border-collapse text-left text-sm text-ink${cls ? ` ${cls}` : ''}`} aria-label={ariaLabel}>
+      <table class={cx('w-full border-collapse text-left text-sm text-ink', cls)} aria-label={ariaLabel}>
         {caption ? <caption class="sr-only">{caption}</caption> : null}
         {children}
       </table>
@@ -41,11 +44,11 @@ export function Table({
   );
 }
 
-export function TableHead({ children, class: cls }: { children: unknown; class?: string }) {
-  return <thead class={`bg-surface${cls ? ` ${cls}` : ''}`}>{children}</thead>;
+export function TableHead({ children, class: cls }: { children: unknown; class?: string }): JSX.Element {
+  return <thead class={cx('bg-surface', cls)}>{children}</thead>;
 }
 
-export function TableBody({ children, class: cls }: { children: unknown; class?: string }) {
+export function TableBody({ children, class: cls }: { children: unknown; class?: string }): JSX.Element {
   return <tbody class={cls}>{children}</tbody>;
 }
 
@@ -57,10 +60,10 @@ export function TableRow({
   children: unknown;
   class?: string;
   readonly [attr: `data-${string}`]: unknown;
-}) {
+}): JSX.Element {
   return (
     <tr
-      class={`border-b border-border last:border-0 transition-colors hover:bg-hover/60${cls ? ` ${cls}` : ''}`}
+      class={cx('border-b border-border last:border-0 transition-colors hover:bg-hover/60', cls)}
       {...(rest as Record<string, unknown>)}
     >
       {children}
@@ -76,13 +79,13 @@ export function TableHeaderCell({
   children: unknown;
   scope?: 'col' | 'row';
   class?: string;
-}) {
+}): JSX.Element {
   const base =
     scope === 'col'
       ? 'px-4 py-3 font-mono text-eyebrow font-medium tracking-[0.1em] text-ink-subtle uppercase'
       : 'px-4 py-3 text-sm font-medium text-ink';
   return (
-    <th scope={scope} class={`${base}${cls ? ` ${cls}` : ''}`}>
+    <th scope={scope} class={cx(base, cls)}>
       {children}
     </th>
   );
@@ -96,9 +99,9 @@ export function TableCell({
   children: unknown;
   class?: string;
   colspan?: number;
-}) {
+}): JSX.Element {
   return (
-    <td colspan={colspan} class={`px-4 py-3 align-middle text-ink${cls ? ` ${cls}` : ''}`}>
+    <td colspan={colspan} class={cx('px-4 py-3 align-middle text-ink', cls)}>
       {children}
     </td>
   );

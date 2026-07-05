@@ -16,6 +16,9 @@
  * live regions must exist in the first render (A11Y_STANDARDS.md §Live regions).
  */
 
+import type { JSX } from 'hono/jsx/jsx-runtime';
+import { cx } from '@/components/ui/cx';
+
 /** Build the aria-describedby value for a control inside a FormField. */
 export function describedBy(
   fieldId: string,
@@ -37,9 +40,9 @@ export function Label({
   for: string;
   required?: boolean;
   class?: string;
-}) {
+}): JSX.Element {
   return (
-    <label for={htmlFor} class={`flex items-center gap-1.5 text-sm font-medium text-ink${cls ? ` ${cls}` : ''}`}>
+    <label for={htmlFor} class={cx('flex items-center gap-1.5 text-sm font-medium text-ink', cls)}>
       {children}
       {required ? (
         <span class="text-danger" title="Required">
@@ -67,9 +70,9 @@ export function FormField({
   error?: unknown;
   required?: boolean;
   class?: string;
-}) {
+}): JSX.Element {
   return (
-    <div class={`flex flex-col gap-1.5${cls ? ` ${cls}` : ''}`}>
+    <div class={cx('flex flex-col gap-1.5', cls)}>
       <Label for={fieldId} required={required}>
         {label}
       </Label>
@@ -84,7 +87,7 @@ export function FormField({
         id={`${fieldId}-error`}
         role="alert"
         aria-live="assertive"
-        class={`text-[13px] font-medium text-danger${error ? '' : ' hidden'}`}
+        class={cx('text-[13px] font-medium text-danger', !error && 'hidden')}
       >
         {error}
       </p>

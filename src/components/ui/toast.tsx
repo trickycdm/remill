@@ -20,6 +20,8 @@ import {
   X,
   type IconComponent,
 } from '@/components/ui/icon';
+import type { JSX } from 'hono/jsx/jsx-runtime';
+import { cx } from '@/components/ui/cx';
 
 type ToastTone = 'success' | 'danger' | 'warning' | 'info';
 
@@ -49,15 +51,18 @@ export function Toast({
   tone?: ToastTone;
   id?: string;
   class?: string;
-}) {
+}): JSX.Element {
   const ToneIcon = TONE_ICON[tone];
   return (
     <div
       id={id}
       role={tone === 'danger' ? 'alert' : 'status'}
-      class={`rm-anim-toast pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border border-border bg-surface-raised px-4 py-3 shadow-md${cls ? ` ${cls}` : ''}`}
+      class={cx(
+        'rm-anim-toast pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border border-border bg-surface-raised px-4 py-3 shadow-md',
+        cls,
+      )}
     >
-      <span class={`mt-0.5 shrink-0 ${TONE_ACCENT[tone]}`}>
+      <span class={cx('mt-0.5 shrink-0', TONE_ACCENT[tone])}>
         <ToneIcon class="size-5" />
       </span>
       <div class="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -73,7 +78,7 @@ export function Toast({
  * `app-error` on window, and renders a dismissible danger toast bound to those
  * signals. Auto-dismisses after 6s; the ✕ dismisses immediately.
  */
-export function ToastHost() {
+export function ToastHost(): JSX.Element {
   return (
     <div
       class="pointer-events-none fixed inset-0 z-[100] flex flex-col items-end justify-end gap-2 p-4 sm:p-6"
