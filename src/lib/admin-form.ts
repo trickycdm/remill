@@ -3,9 +3,16 @@
  * documents service validates. This is admin-surface glue only — REST and MCP send
  * already-typed JSON, so they skip it. Keyed by field type; unknown types pass the
  * raw string through and let the field's valueSchema/beforeSave handle it.
+ *
+ * Blank-optional rule (COR-2): a present-but-empty string is a *present* value, so
+ * `.optional()` would NOT skip it — an optional `select`/`media` would reject `''`
+ * and `json.beforeSave` would `JSON.parse('')` → throw, failing the whole save.
+ * So a blank value on a non-required field is OMITTED (mirroring the `number`
+ * omit). Required fields still flow their `''` through, so they error as required.
  */
 
 import type { CollectionDefinition } from '@/fields/types';
+import { datetimeLocalToIso } from '@/fields/datetime';
 
 type Raw = string | File | (string | File)[];
 
@@ -32,14 +39,41 @@ export function coerceAdminForm(
         out[field.key] = Number(asString(raw));
         break;
       }
-      case 'select':
+      case 'datetime': {
         if (!present) break;
-        // A multi-select posts repeated keys → array; otherwise a single string.
-        out[field.key] = Array.isArray(raw) ? raw.map(String) : asString(raw);
+        const s = asString(raw);
+        if (s === '' && !field.required) break; // blank optional → omit
+        // The datetime-local widget emits a bare local value; the validator needs
+        // full ISO-8601 UTC (COR-1).
+        out[field.key] = datetimeLocalToIso(s);
         break;
-      default:
-        // text, slug, markdown, datetime, tags (CSV string), json (JSON string).
-        if (present) out[field.key] = asString(raw);
+      }
+      case 'select': {
+        if (!present) break;
+        const multiple = (field.config as { multiple?: boolean } | undefined)?.multiple;
+        if (multiple) {
+          // A <select multiple> posts one key per choice → an array (requires
+          // parseBody({ all: true }) in the route). A SINGLE choice posts just one
+          // key, which parseBody returns as a string — normalize it to an array so
+          // the z.array() schema accepts it (COR-4, one-selection edge).
+          const arr = (Array.isArray(raw) ? raw : [raw]).map(asString).filter((s) => s !== '');
+          if (arr.length === 0 && !field.required) break; // blank optional → omit
+          out[field.key] = arr;
+        } else {
+          // A single select posts one string ('' from the optional '—' option).
+          const s = asString(raw);
+          if (s === '' && !field.required) break; // blank optional → omit
+          out[field.key] = s;
+        }
+        break;
+      }
+      default: {
+        // text, slug, markdown, media, tags (CSV string), json (JSON string).
+        if (!present) break;
+        const s = asString(raw);
+        if (s === '' && !field.required) break; // blank optional → omit
+        out[field.key] = s;
+      }
     }
   }
   return out;

@@ -86,8 +86,11 @@ export interface FieldEditProps<Config = unknown, Value = unknown> {
   readonly signal: string;
 }
 
-export interface FieldCellProps<Value = unknown> {
+export interface FieldCellProps<Config = unknown, Value = unknown> {
   readonly value: Value | undefined;
+  /** The field's validated config — lets a cell render human labels (e.g. a
+   *  `select`'s option label) rather than the raw stored value. */
+  readonly config: Config;
 }
 
 /**
@@ -118,12 +121,15 @@ export interface FieldType<Config = unknown, Value = unknown> {
   /** (4) edit widget (Datastar-wired) and (3) list cell (optional; falls back
    *  to a text render). Composed by the generated admin (Phase 4). */
   readonly EditComponent: FC<FieldEditProps<Config, Value>>;
-  readonly CellComponent?: FC<FieldCellProps<Value>>;
+  readonly CellComponent?: FC<FieldCellProps<Config, Value>>;
 
   /** (5) OpenAPI + (6) MCP input schema. Defaults to deriving from valueSchema
    *  via Zod's toJSONSchema when omitted (see registry.deriveJsonSchema). */
   readonly jsonSchema?: (cfg: Config, field: FieldDescriptor) => JSONSchema;
 }
 
-/** Existential field type for storing heterogeneous types in the registry. */
+/** Existential field type for storing heterogeneous types in the registry.
+ *  `<never, never>` is an intentional type-erasure seam (TD-13): the registry
+ *  holds many concrete `FieldType<C, V>` under one key-map type, so callers erase
+ *  Config/Value here and re-narrow at each resolved use site (see registry.ts). */
 export type AnyFieldType = FieldType<never, never>;

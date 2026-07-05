@@ -5,7 +5,8 @@
  */
 
 import { z } from 'zod';
-import { Badge, FormField } from '@/components/ui';
+import { Badge } from '@/components/ui';
+import { FieldShell, controlProps } from '@/fields/field-shell';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
 
 const configSchema = z.object({}).strict();
@@ -23,21 +24,14 @@ export const booleanField: FieldType<BooleanConfig, boolean> = {
   valueSchema,
   toIndex: (v) => (v === undefined ? null : v ? 1 : 0),
   EditComponent: ({ field, value, signal }) => (
-    <FormField
-      fieldId={signal}
-      label={field.label ?? field.key}
-      required={field.required}
-      description={field.admin?.help}
-    >
+    <FieldShell field={field} signal={signal}>
       <input
-        id={signal}
-        name={field.key}
+        {...controlProps({ field, signal })}
         type="checkbox"
         checked={value ?? false}
         class="size-4 rounded border border-border-strong bg-surface text-accent accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        data-bind={signal}
       />
-    </FormField>
+    </FieldShell>
   ),
   CellComponent: ({ value }) => (
     <Badge tone={value ? 'success' : 'neutral'} dot>

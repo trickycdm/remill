@@ -41,7 +41,8 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   const def = await getCollection(db, slug);
   if (!def) throw new NotFoundError('Collection');
 
-  const body = await c.req.parseBody();
+  // all: true so a <select multiple> posts repeated keys as an array (COR-4).
+  const body = await c.req.parseBody({ all: true });
   const input = coerceAdminForm(def, body);
   try {
     const doc = await createDocument(db, requirePrincipal(c), slug, input, nowIso());
