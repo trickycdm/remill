@@ -1,0 +1,142 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import app from '@/main';
+import { createTestD1 } from '@/test/d1';
+import { getDb, type Database } from '@/db/client';
+import { seedRoles, makePrincipal } from '@/test/access';
+import * as collectionsService from '@/services/collections';
+import * as access from '@/services/access';
+import { recentAudit } from '@/db/queries/audit';
+import type { Principal } from '@/access';
+import type { CollectionDefinition } from '@/fields/types';
+
+const NOW = '2026-07-04T12:00:00Z';
+
+const POSTS: CollectionDefinition = {
+  slug: 'posts',
+  name: 'Posts',
+  shape: 'collection',
+  fields: [{ key: 'title', type: 'text', required: true, index: true }],
+  workflow: { draftPublish: true },
+  access: { publicRead: true },
+};
+
+describe('MCP server — generated, permission-filtered tools (Phase 7)', () => {
+  let db: Database;
+  let env: { DB: D1Database; MEDIA: R2Bucket; SESSION_SECRET: string; BASE_URL: string };
+  let admin: Principal;
+  let editorToken: string;
+  let authorToken: string;
+  let readerToken: string;
+
+  async function mcp(token: string | null, method: string, params?: object, id: number | null = 1) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await app.request('/mcp', { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '2.0', id, method, params }) }, env);
+    const text = await res.text();
+    return { status: res.status, body: text ? JSON.parse(text) : null };
+  }
+  const toolNames = (listResult: { body: { result: { tools: { name: string }[] } } }) =>
+    listResult.body.result.tools.map((t) => t.name);
+
+  async function tokenFor(name: string, role: string) {
+    const pid = await access.createAgent(db, admin, name, NOW);
+    await access.assignRole(db, admin, pid, role, '*', NOW);
+    return (await access.issueToken(db, admin, { principalId: pid, name: 't' }, NOW)).token;
+  }
+
+  beforeEach(async () => {
+    const d1 = createTestD1();
+    db = getDb(d1);
+    env = { DB: d1, MEDIA: {} as R2Bucket, SESSION_SECRET: 'x'.repeat(32), BASE_URL: 'http://test' };
+    await seedRoles(db, NOW);
+    admin = await makePrincipal(db, NOW, { id: 'prn_admin', role: 'admin' });
+    await collectionsService.createCollection(db, admin, POSTS, NOW);
+    editorToken = await tokenFor('editor-bot', 'editor');
+    authorToken = await tokenFor('author-bot', 'author');
+    readerToken = await tokenFor('reader-bot', 'reader');
+  });
+
+  it('initialize returns the protocol handshake', async () => {
+    const r = await mcp(editorToken, 'initialize', { protocolVersion: '2024-11-05', capabilities: {} });
+    expect(r.body.result.serverInfo.name).toBe('remill');
+    expect(r.body.result.capabilities.tools).toBeTruthy();
+  });
+
+  it('tools are generated per collection and intersected with permissions', async () => {
+    const editor = toolNames(await mcp(editorToken, 'tools/list'));
+    expect(editor).toEqual(expect.arrayContaining(['list_posts', 'get_posts', 'create_posts', 'update_posts', 'publish_posts']));
+
+    // An author sees create/update but NOT publish, and NOT schema management.
+    const author = toolNames(await mcp(authorToken, 'tools/list'));
+    expect(author).toContain('create_posts');
+    expect(author).not.toContain('publish_posts');
+    expect(author).not.toContain('create_collection');
+
+    // A reader sees only read tools.
+    const reader = toolNames(await mcp(readerToken, 'tools/list'));
+    expect(reader).toEqual(expect.arrayContaining(['list_posts', 'get_posts']));
+    expect(reader).not.toContain('create_posts');
+
+    // An admin (schema rights) sees create_collection.
+    // (admin has no token here; verify via editor lacking it and the tool existing for manage_schema)
+    expect(editor).not.toContain('create_collection'); // editor lacks manage_schema
+  });
+
+  it('an agent can create a collection and documents through generated tools', async () => {
+    const adminToken = await tokenFor('admin-bot', 'admin');
+    const created = await mcp(adminToken, 'tools/call', {
+      name: 'create_collection',
+      arguments: { definition: { slug: 'notes', name: 'Notes', shape: 'collection', fields: [{ key: 'body', type: 'text', required: true }] } },
+    });
+    expect(created.body.result.isError).toBeFalsy();
+
+    // The new collection's tools now exist for this principal.
+    const names = toolNames(await mcp(adminToken, 'tools/list'));
+    expect(names).toContain('create_notes');
+
+    const doc = await mcp(adminToken, 'tools/call', { name: 'create_notes', arguments: { body: 'first note' } });
+    const payload = JSON.parse(doc.body.result.content[0].text);
+    expect(payload.data.body).toBe('first note');
+  });
+
+  it('AGENTIC GOVERNANCE: an author drafts but cannot publish — denial is structured and audited', async () => {
+    // Author creates a draft via the generated tool (allowed).
+    const create = await mcp(authorToken, 'tools/call', { name: 'create_posts', arguments: { title: 'Draft by agent' } });
+    const doc = JSON.parse(create.body.result.content[0].text);
+    expect(doc.status).toBe('draft');
+
+    // The author has no publish tool over MCP — calling it is refused at discovery
+    // with a structured FORBIDDEN payload (no service call, so nothing to audit).
+    const viaMcp = await mcp(authorToken, 'tools/call', { name: 'publish_posts', arguments: { id: doc.id, publish: true } });
+    expect(viaMcp.body.result.isError).toBe(true);
+
+    // Going around MCP to the RAW REST API, the server still denies publish — and
+    // THAT reaches authorize(), so the denial is audited (surface 'rest').
+    const rawPublish = await app.request(
+      `/api/c/posts/${doc.id}/publish`,
+      { method: 'POST', headers: { Authorization: `Bearer ${authorToken}`, 'Content-Type': 'application/json' }, body: '{"publish":true}' },
+      env,
+    );
+    expect(rawPublish.status).toBe(403);
+
+    // A human (admin) publishes it — "agent drafts, human publishes" falls out of
+    // the permission model, no workflow engine required.
+    const { setPublished } = await import('@/services/documents');
+    const published = await setPublished(db, admin, 'posts', doc.id, true, NOW);
+    expect(published.status).toBe('published');
+
+    // The whole story is in the audit log: the agent's MCP create (allow), the
+    // agent's raw-API publish (deny), and the human's publish (allow).
+    const audit = await recentAudit(db, 1000);
+    const mcpCreate = audit.find((a) => a.surface === 'mcp' && a.action === 'create' && a.allowed === 1);
+    const restDeny = audit.find((a) => a.surface === 'rest' && a.action === 'publish' && a.allowed === 0);
+    expect(mcpCreate).toBeTruthy();
+    expect(restDeny).toBeTruthy();
+    expect(restDeny?.principalId).toMatch(/^prn_/);
+  });
+
+  it('an unknown/unavailable tool is refused without leaking its existence', async () => {
+    const r = await mcp(readerToken, 'tools/call', { name: 'publish_posts', arguments: { id: 'x' } });
+    expect(r.body.result.isError).toBe(true);
+  });
+});

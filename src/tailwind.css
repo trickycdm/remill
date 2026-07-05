@@ -1,0 +1,218 @@
+@import 'tailwindcss';
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   remill design tokens — "Ink & Paper"
+
+   The single source of truth for the admin's visual language. DESIGN_SYSTEM.md
+   explains intent and usage; it never restates these values. Components consume
+   these tokens through Tailwind utilities (bg-surface, text-ink, border-border,
+   text-danger, …) — never raw hex.
+
+   ── Theming mechanism ───────────────────────────────────────────────────────
+   Every colour token declares BOTH its light and dark value in one line via the
+   CSS `light-dark()` function. Which value resolves is decided by the element's
+   `color-scheme`, controlled below:
+
+     • no `data-theme`      → color-scheme: light dark → follows prefers-color-scheme
+     • data-theme="dark"    → color-scheme: dark        → forced dark
+     • data-theme="light"   → color-scheme: light       → forced light
+
+   The admin-shell theme toggle sets `data-theme` on <html> and persists it to
+   localStorage; THEME_INIT_SNIPPET (exported from admin-shell) applies it in
+   <head> before first paint so a chosen theme never flashes. When no theme is
+   chosen, the OS preference applies with zero JS. `color-scheme` also themes
+   native scrollbars and form controls for free.
+
+   ── Contrast ────────────────────────────────────────────────────────────────
+   Every text/background pairing meets WCAG 2.1 AA (body 4.5:1, large/UI 3:1) in
+   BOTH themes. Non-obvious ratios are noted inline. Text-safe colour tokens are
+   tuned so `text-{token}` is AA on canvas/surface AND on the matching `-soft`
+   wash; solid fills (accent, danger-solid) are tuned for AA white text.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Typography ────────────────────────────────────────────────────────────
+     Three roles, all from high-quality system stacks (no external fonts —
+     Workers/CSP + offline dev). Serif = editorial display + wordmark; sans =
+     UI/body; mono = eyebrows, metadata, IDs, timestamps, code. */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
+  --font-serif:
+    'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', ui-serif,
+    Georgia, Cambria, 'Times New Roman', serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+
+  /* Editorial additions to Tailwind's default type scale. */
+  --text-eyebrow: 0.6875rem; /* 11px mono-caps label */
+  --text-eyebrow--line-height: 1;
+  --text-eyebrow--letter-spacing: 0.14em;
+  --text-display: 2.25rem; /* serif page title */
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.02em;
+  --text-display-sm: 1.5rem;
+  --text-display-sm--line-height: 1.15;
+  --text-display-sm--letter-spacing: -0.015em;
+
+  /* ── Neutrals — warm paper & ink ───────────────────────────────────────────
+     The editorial signature: warm (not cold-grey) paper in light, a warm
+     "reading-lamp" espresso in dark. */
+  --color-canvas: light-dark(#f2efe7, #16130f); /* app background */
+  --color-surface: light-dark(#fbf9f4, #1e1a15); /* cards, panels, bars */
+  --color-surface-raised: light-dark(#fffdf8, #26201a); /* dialogs, popovers, menus */
+  --color-hover: light-dark(#ece7dc, #2b241c); /* subtle hover / pressed fill */
+
+  --color-ink: light-dark(#1c1a16, #ece6db); /* primary text — 7.8:1+ on surface */
+  --color-ink-muted: light-dark(#56514a, #b4aa9a); /* secondary text — 7.8:1 / 7.5:1 */
+  --color-ink-subtle: light-dark(#6c665a, #948a79); /* meta/placeholder — AA on the darkest paper: 5.0:1 on canvas, 5.4:1 on surface / 5.3:1 dark */
+
+  --color-border: light-dark(#e7e1d4, #322b22); /* hairline rules (non-text) */
+  --color-border-strong: light-dark(#d4ccbb, #453c30); /* input / divider edges */
+
+  /* ── Accent — iris ink (muted blue-violet) ─────────────────────────────────
+     One memorable, calm accent: fountain-pen ink on paper. Deliberately
+     distinct in hue from all four semantics so status never reads as "brand". */
+  --color-accent: light-dark(#4b44a3, #6058c9); /* solid fill — white fg AA (7.9:1 / 5.7:1) */
+  --color-accent-hover: light-dark(#3b3488, #746cdb);
+  --color-accent-fg: #ffffff; /* text/icon on an accent fill */
+  --color-accent-text: light-dark(#4b44a3, #b3a9f5); /* accent as link/label text — 7.4:1 / 8.3:1 */
+  --color-accent-soft: light-dark(#e9e7f7, #2a2452); /* tinted wash: active nav, selection */
+
+  --color-ring: light-dark(#4b44a3, #8f86ea); /* focus ring — visible on paper & ink */
+  --color-overlay: light-dark(rgba(38, 32, 25, 0.42), rgba(8, 6, 4, 0.62)); /* modal backdrop */
+
+  /* ── Semantic — success / warning / danger / info ──────────────────────────
+     Base token = text-safe tone (AA on surface AND on its own -soft wash, both
+     themes). `-soft` = tinted background for badges/toasts/inline notices.
+     Never rely on colour alone — components always pair colour with a label. */
+  --color-success: light-dark(#276b41, #5fca8a); /* text 6.2:1 / 8.5:1 on surface */
+  --color-success-soft: light-dark(#e6f2ea, #16341f);
+  --color-warning: light-dark(#8a5a10, #e0a94e); /* text 5.7:1 / 6.6:1 */
+  --color-warning-soft: light-dark(#f6ead2, #3a2a10);
+  --color-danger: light-dark(#b23124, #ef8377); /* text 5.8:1 / 6.1:1 */
+  --color-danger-soft: light-dark(#f8e2de, #3d1a15);
+  --color-danger-solid: light-dark(#b23124, #c03a2b); /* destructive fill — white fg AA (6.3:1 / 5.0:1) */
+  --color-info: light-dark(#0f6f86, #59b6d0); /* text 5.4:1 / 5.8:1 */
+  --color-info-soft: light-dark(#dcecf1, #10333d);
+
+  /* ── Radii — restrained (editorial, not bubbly) ────────────────────────────*/
+  --radius-sm: 0.25rem; /* 4px  — chips, small controls */
+  --radius-md: 0.4375rem; /* 7px  — buttons, inputs */
+  --radius-lg: 0.625rem; /* 10px — cards */
+  --radius-xl: 0.875rem; /* 14px — large panels */
+  --radius-2xl: 1.25rem; /* 20px — feature surfaces */
+
+  /* ── Shadows — warm-tinted, soft (depth without drama) ─────────────────────*/
+  --shadow-xs: 0 1px 2px rgba(40, 33, 24, 0.06);
+  --shadow-sm: 0 1px 3px rgba(40, 33, 24, 0.08), 0 1px 2px -1px rgba(40, 33, 24, 0.06);
+  --shadow-md: 0 6px 16px -4px rgba(40, 33, 24, 0.12), 0 2px 6px -2px rgba(40, 33, 24, 0.08);
+  --shadow-lg: 0 20px 40px -12px rgba(40, 33, 24, 0.22);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Theme control — color-scheme drives every light-dark() token.
+   ───────────────────────────────────────────────────────────────────────────*/
+:root {
+  color-scheme: light dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'kern', 'liga', 'calt';
+  }
+
+  /* Editorial ink selection. */
+  ::selection {
+    background-color: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
+
+  /* One visible focus ring for every keyboard-focused control. Components may
+     override the offset; they must never remove it without a replacement. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+  /* Pointer clicks shouldn't paint the ring (only keyboard focus). */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Native <dialog> backdrop for Dialog + Drawer (focus-trap & Esc for free). */
+  dialog::backdrop {
+    background-color: var(--color-overlay);
+    backdrop-filter: blur(2px);
+  }
+  dialog {
+    color: var(--color-ink);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Motion — tasteful entrances for overlays/toasts. All disabled under
+   prefers-reduced-motion (A11Y_STANDARDS.md §Motion).
+   ───────────────────────────────────────────────────────────────────────────*/
+@keyframes rm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rm-rise-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes rm-slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes rm-slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes rm-toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rm-anim-fade { animation: rm-fade-in 0.18s ease-out; }
+.rm-anim-rise { animation: rm-rise-in 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+.rm-anim-slide-right { animation: rm-slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+.rm-anim-slide-left { animation: rm-slide-in-left 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+.rm-anim-toast { animation: rm-toast-in 0.24s cubic-bezier(0.22, 1, 0.36, 1); }
+.rm-anim-spin { animation: rm-spin 0.7s linear infinite; }
+
+@keyframes rm-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-anim-fade,
+  .rm-anim-rise,
+  .rm-anim-slide-right,
+  .rm-anim-slide-left,
+  .rm-anim-toast,
+  .rm-anim-spin {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

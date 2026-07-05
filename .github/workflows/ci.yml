@@ -1,0 +1,213 @@
+name: CI
+
+# STATUS: the `ci` job runs the standard gate (type-check → lint → test → build). It goes green once
+# Phase 1 lands package.json + the build config. The `preview` and `deploy-production` jobs are wired
+# but require repository secrets (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, SESSION_SECRET) — they
+# no-op safely until those exist.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  ci:
+    name: Build, Lint, Type-check, Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Guard — skip before Phase 1 scaffolds package.json
+        id: guard
+        run: |
+          if [ -f package.json ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json yet (pre-Phase 1) — steering-only repo, nothing to build."
+          fi
+
+      - name: Install dependencies
+        if: steps.guard.outputs.ready == 'true'
+        run: bun install
+
+      - name: Type-check
+        if: steps.guard.outputs.ready == 'true'
+        run: bun run type-check
+
+      - name: Lint
+        if: steps.guard.outputs.ready == 'true'
+        run: bun run lint
+
+      - name: Test
+        if: steps.guard.outputs.ready == 'true'
+        run: bun run test:run
+
+      - name: Build
+        if: steps.guard.outputs.ready == 'true'
+        run: bun run build
+
+  # ---------------------------------------------------------------------------
+  # PR preview: deploy a unique Worker per PR (remill-pr-<N>) against an isolated
+  # preview D1. Requires CLOUDFLARE_* + SESSION_SECRET repo secrets; the guard step
+  # skips the whole job cleanly when they're absent (pre-Phase 1 or unconfigured).
+  # ---------------------------------------------------------------------------
+  preview:
+    name: Deploy PR preview
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'pull_request'
+    concurrency:
+      group: remill-preview-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — need deploy secrets + a build
+        id: guard
+        run: |
+          if [ -f package.json ] && [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Preview deploy skipped: missing package.json or CLOUDFLARE_API_TOKEN."
+          fi
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.guard.outputs.ready == 'true'
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        if: steps.guard.outputs.ready == 'true'
+        run: bun install
+
+      - name: Provision per-PR D1 + inject config
+        if: steps.guard.outputs.ready == 'true'
+        id: d1
+        run: |
+          NAME="remill-pr-${{ github.event.pull_request.number }}"
+          DB_ID="$(bunx wrangler d1 info "$NAME" --json 2>/dev/null | jq -r '.uuid // empty')"
+          if [ -z "$DB_ID" ]; then
+            bunx wrangler d1 create "$NAME" || true
+            DB_ID="$(bunx wrangler d1 info "$NAME" --json 2>/dev/null | jq -r '.uuid // empty')"
+          fi
+          if [ -z "$DB_ID" ]; then echo "Failed to resolve D1 id for $NAME" >&2; exit 1; fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          # Inject the per-PR Worker name + D1 (name and id) into env.preview of wrangler.jsonc.
+          sed -i \
+            -e "s/\"name\": \"remill-preview\"/\"name\": \"$NAME\"/" \
+            -e "s/\"database_name\": \"remill-preview\"/\"database_name\": \"$NAME\"/" \
+            -e "s/00000000-0000-0000-0000-000000000000/$DB_ID/" \
+            wrangler.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Apply preview D1 migrations
+        if: steps.guard.outputs.ready == 'true'
+        run: bunx wrangler d1 migrations apply ${{ steps.d1.outputs.name }} --remote --env preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Seed per-PR D1 (idempotent)
+        if: steps.guard.outputs.ready == 'true'
+        run: bunx wrangler d1 execute ${{ steps.d1.outputs.name }} --remote --file src/db/seed.sql --env preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Build & deploy PR preview
+        if: steps.guard.outputs.ready == 'true'
+        id: deploy
+        run: |
+          bun run build
+          bunx wrangler deploy --env preview > /tmp/deploy.log 2>&1
+          url="$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' /tmp/deploy.log | head -1)"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ENV: preview
+
+      - name: Push preview secrets to the per-PR Worker
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          printf 'SESSION_SECRET=%s\n' "${{ secrets.SESSION_SECRET }}" > /tmp/preview-secrets.env
+          bunx wrangler secret bulk /tmp/preview-secrets.env --env preview
+          rm -f /tmp/preview-secrets.env
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Comment preview URL on PR
+        if: steps.guard.outputs.ready == 'true' && steps.deploy.outputs.url != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.url }}';
+            const marker = '<!-- remill-preview-url -->';
+            const sha = context.payload.pull_request.head.sha.slice(0, 7);
+            const body = `${marker}\n🔎 **remill preview deployed** (${sha})\n\n${url}\n\n_Isolated preview D1 — not production data._`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  # ---------------------------------------------------------------------------
+  # Production deploy: on a `v*` tag.
+  # ---------------------------------------------------------------------------
+  deploy-production:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — need deploy secrets + a build
+        id: guard
+        run: |
+          if [ -f package.json ] && [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Production deploy skipped: missing package.json or CLOUDFLARE_API_TOKEN."
+          fi
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.guard.outputs.ready == 'true'
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        if: steps.guard.outputs.ready == 'true'
+        run: bun install
+
+      - name: Apply production D1 migrations
+        if: steps.guard.outputs.ready == 'true'
+        run: bunx wrangler d1 migrations apply remill --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy
+        if: steps.guard.outputs.ready == 'true'
+        run: bun run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

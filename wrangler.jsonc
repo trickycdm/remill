@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "remill",
+  "main": "src/main.tsx",
+  "compatibility_date": "2025-10-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "logpush": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
+  "vars": {
+    "BASE_URL": "http://localhost:3000"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "remill",
+      // Replace with your D1 id after `wrangler d1 create remill`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "src/db/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "remill-media"
+    }
+  ],
+  // MCP server (Phase 7) binds an McpAgent Durable Object here.
+  // "durable_objects": { "bindings": [{ "name": "MCP", "class_name": "RemillMcp" }] },
+  "env": {
+    "preview": {
+      "name": "remill-preview",
+      "vars": {
+        "BASE_URL": "https://remill-preview.workers.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "remill-preview",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "src/db/migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "MEDIA",
+          "bucket_name": "remill-media-preview"
+        }
+      ]
+    }
+  }
+}

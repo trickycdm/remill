@@ -1,0 +1,63 @@
+import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { loginAsAdmin, ADMIN_EMAIL } from './helpers/auth';
+
+test.describe('Phase 1 — admin shell smoke + a11y', () => {
+  test('unauthenticated admin routes bounce to login', async ({ page }) => {
+    await page.goto('/admin');
+    await expect(page).toHaveURL(/\/admin\/login/);
+  });
+
+  test('rejects bad credentials with an inline error', async ({ page }) => {
+    await page.goto('/admin/login');
+    await page.getByLabel('Email').fill(ADMIN_EMAIL);
+    await page.getByLabel('Password').fill('wrong-password');
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await expect(page.getByRole('alert')).toContainText(/incorrect/i);
+    await expect(page).toHaveURL(/\/admin\/login/);
+  });
+
+  test('signs in and lands on a styled dashboard', async ({ page }) => {
+    await loginAsAdmin(page);
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+    await expect(page.getByRole('navigation')).toBeVisible();
+  });
+
+  test('dark/light theme toggle flips and persists', async ({ page }) => {
+    await loginAsAdmin(page);
+    const html = page.locator('html');
+    const before = await html.getAttribute('data-theme');
+    await page.getByRole('button', { name: /theme|dark|light/i }).first().click();
+    await expect(html).not.toHaveAttribute('data-theme', before ?? '');
+    const after = await html.getAttribute('data-theme');
+    // Persisted choice survives a reload (no-flash init reads localStorage).
+    await page.reload();
+    await expect(html).toHaveAttribute('data-theme', after ?? '');
+  });
+
+  const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
+
+  test('login page passes axe (WCAG 2.1 AA)', async ({ page }) => {
+    await page.goto('/admin/login');
+    await page.waitForLoadState('networkidle'); // let CSS/paint settle before contrast checks
+    const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
+    expect(r.violations).toEqual([]);
+  });
+
+  test('every admin page passes axe (WCAG 2.1 AA)', async ({ page }) => {
+    await loginAsAdmin(page);
+    for (const path of [
+      '/admin',
+      '/admin/c',
+      '/admin/media',
+      '/admin/collections',
+      '/admin/access',
+      '/admin/settings',
+    ]) {
+      await page.goto(path);
+      await page.waitForLoadState('networkidle');
+      const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
+      expect(r.violations, `axe violations on ${path}`).toEqual([]);
+    }
+  });
+});
