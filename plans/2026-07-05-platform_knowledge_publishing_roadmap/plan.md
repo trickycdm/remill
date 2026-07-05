@@ -80,9 +80,12 @@ untouched.
 
 Start with **Track A (Access)** per the user's steer — lowest risk, highest "I can
 finally see it," and it unblocks sharing. Then **Track B (relational data + graph)** —
-the keystone. Then **Track C (render + publish + share links)**. Phases are sequenced
-by dependency; each ships green (0 type / 0 lint / unit + e2e / build) with its own
-commit, worklog rows, and steering-doc updates.
+the keystone. Then **Track C (render + publish + share links)**. **B5 is deferred until
+after Track C** (2026-07-05 re-plan). Phases are sequenced by dependency; each ships
+green (0 type / 0 lint / unit) with its own commit, worklog rows, and steering-doc
+updates. **E2e is consolidated:** per-phase e2e items are written and run in one final
+verification pass after C3 (user decision, 2026-07-05) — unit tests still travel with
+each phase.
 
 ---
 
@@ -162,8 +165,21 @@ commit, worklog rows, and steering-doc updates.
 
 ### Phase B1 — Engine: multi-value index + relation field (the keystone)
 - **Engine change:** allow `toIndex` to return `Array<string|number>`
-  (`src/fields/types.ts:115`); `buildIndex` (`src/services/documents/index.ts:112-130`)
+  (`src/fields/types.ts:114`); `buildIndex` (`src/services/documents/index.ts:112-130`)
   emits one `document_index` row per element. Scalar returns unchanged (non-breaking).
+  Verified 2026-07-05: the sync layer already delete-then-inserts an arbitrary
+  `IndexValue[]` (`src/db/queries/documents.ts:317-344`) and there is no unique
+  constraint on `(documentId, fieldKey)` — multi-row emission needs no query/schema change.
+- **Guards (required):** the list **sort** path uses a scalar correlated subquery with
+  no LIMIT/aggregate (`src/db/queries/documents.ts:195`) — sorting a multi-valued field
+  is non-deterministic. Reject `sort` on multi-valued relation fields (or aggregate
+  later). Also reject `unique: true` on a `multiple` relation — all its index rows share
+  one `unique_key`, so two docs sharing any element would falsely collide.
+- **Builder config gap:** `parseCollectionForm` hardcodes per-field config to `select`
+  only (`src/components/admin/collection-builder.tsx:93`) — add a relation config branch
+  (target-collection picker + `multiple` + `titleField`) or relations are REST/MCP-
+  authorable only. Give relation an explicit `jsonSchema` (clean id-string schema)
+  rather than relying on `z.toJSONSchema` derivation.
 - **New field `src/fields/relation.tsx`** (register in `src/fields/registry.ts:20-33`):
   - `configSchema`: `{ collection: string (target slug), multiple?: boolean,
     titleField?: string }` (`.strict()`).
@@ -178,6 +194,11 @@ commit, worklog rows, and steering-doc updates.
   it with zero allowlist edits.
 
 ### Phase B2 — Relation read-expansion across all surfaces
+- **Query (new, was missing from this plan):** `getDocumentsByIds` — a Grant-scoped
+  batch loader (`inArray`, precedent `src/access/authorize.ts:175` and
+  `src/db/queries/grants.ts:46`). No batch-by-ids document query exists today
+  (`src/db/queries/documents.ts` doesn't even import `inArray`); without it expansion
+  is an N+1 or an access leak.
 - **Service:** `expandRelations` step in the documents-read path
   (`getDocument`/`listDocuments`, `src/services/documents/index.ts:164-282`) — collect
   relation fields, batch-load targets' display titles (first text/`slug` field or
@@ -190,9 +211,13 @@ commit, worklog rows, and steering-doc updates.
   create A referencing B, read A, assert B's title present; delete B, assert graceful null.
 
 ### Phase B3 — Backlinks / the graph
-- **Query (new):** `listBacklinks(db, grant, targetDocId)` beside `isIndexValueTaken`
-  (`src/db/queries/documents.ts:219`) — reverse WHERE on `document_index`
-  (`value_text = targetDocId` across relation fields) → source doc ids → hydrate.
+- **Query (new):** `listBacklinks(db, grant, targetDocId)` — reverse WHERE on
+  `document_index` (`value_text = targetDocId` across relation fields) → source docs.
+  **Correction (2026-07-05):** `isIndexValueTaken` (`src/db/queries/documents.ts:219`)
+  is a *template only* — it is access-blind by design (an internal uniqueness pre-check)
+  and filters by collection+fieldKey. Backlinks are a **content read**: the new query
+  must join `documents` and apply the same access/status narrowing as the list path
+  (`documents.ts:175-204`), so a reader who can't read the referrer never sees the edge.
 - **Service:** `getBacklinks(db, principal, collection, id, now)` — `authorize('read')`,
   returns witnessed source docs (respects the reader's permissions).
 - **Surfaces:** admin "Referenced by" panel on the edit/detail view; REST
@@ -202,25 +227,40 @@ commit, worklog rows, and steering-doc updates.
   (A→B link produces B's backlink to A).
 
 ### Phase B4 — Per-collection lifecycle opt-out + strip cosmetic post-isms
+- **Framing (corrected 2026-07-05): this is a *visibility* opt-out, not status removal.**
+  The `'draft' | 'published'` axis is load-bearing in the access layer (`Condition =
+  'own' | 'published'`, the publicRead sugar, the seeded reader/anonymous policies) —
+  `lifecycle:'none'` gates the publish *affordances* and the initial status; the
+  `documents.status` column stays and such docs are simply born `published`.
 - **Lifecycle opt-out:** extend `workflow` to `{ draftPublish?: boolean; lifecycle?:
-  'publish' | 'none' }`. When `lifecycle:'none'`: `initialStatus`
-  (`src/services/documents/index.ts:156`) → always available; generated list hides the
-  **Status** column (`src/components/admin/generated.tsx:120-142`); no publish
-  button/`publish_<slug>` tool; REST omits the `status` filter
-  (`src/lib/openapi.ts:37`). Keep the `documents.status` column (defaults published) —
-  suppress UI/tooling only. A "Company"/"Person" record stops looking like a draft blog post.
+  'publish' | 'none' }`. **Prereq:** `WORKFLOW_SCHEMA` is a `strictObject`
+  (`src/services/collections/index.ts:33`) — any new key is rejected on write until the
+  schema (and the `CollectionDefinition` type) is extended. When `lifecycle:'none'`:
+  `initialStatus` (`src/services/documents/index.ts:156`) → always `published`;
+  generated list hides the **Status** column (`src/components/admin/generated.tsx:120-142`);
+  no publish button/`publish_<slug>` tool (`src/mcp/tools.ts:154-161` — currently
+  generated for every publish-permitted collection regardless of workflow); REST omits
+  the `status` filter — in **both** hardcoded enum spots: `src/lib/openapi.ts:37` *and*
+  the MCP `list_` tool (`src/mcp/tools.ts:110`). A "Company"/"Person" record stops
+  looking like a draft blog post.
 - **Strip dressing:** `collection-builder.tsx:317,329` ("Blog posts"/"posts"),
   `slug.tsx:73` ("my-post-slug"), reframe `defaultAuthorName` (`seed.sql:55`) as an
   optional convention. Cosmetic, ~30 min.
 - **Docs/tests:** SCHEMA_ENGINE.md (lifecycle modes); unit + e2e: a lifecycle-`none`
   collection renders no Status column and exposes no publish tool.
 
-### Phase B5 — `repeater` + `object` composite field types
-- **`src/fields/object.tsx`** (nested group of sub-fields) and **`src/fields/repeater.tsx`**
-  (array of a sub-field set), composing existing field types recursively. Config carries
-  the sub-`FieldDescriptor[]`; `valueSchema` builds a nested/`array` Zod object; nested
-  edit UI. Non-indexable at the composite level (like `json`) but far more structured —
-  closes the "nested structured records" gap without the untyped `json` escape hatch.
+### Phase B5 — `repeater` + `object` composite field types (DEFERRED until after Track C)
+- **Deferred 2026-07-05:** not needed by any end-to-end acceptance flow; Track C
+  (publish/share) delivers more of the goal. Reassess scope after C3 ships.
+- **Real scope (validated):** composites work as **self-contained** field types — the
+  engine supports nested *values* (Zod nests fine; MCP/OpenAPI schemas come free via
+  `jsonSchemaFor`) but NOT nested *indexing/filter/sort* (`document_index` +
+  `assertIndexed` are flat), nested *PATCH merge* (top-level replace only,
+  `src/services/documents/index.ts:411-436`), form *recursion*
+  (`generated.tsx` renders one `EditComponent` per flat key/signal), or builder
+  authoring. The composite type must validate its sub-`FieldDescriptor[]` inside its own
+  `valueSchema` and own all nested rendering/signal management; the flat-engine gaps are
+  explicitly out-of-scope or separately budgeted.
 - **Docs/tests:** SCHEMA_ENGINE.md; unit (nested validation, whitelist still rejects
   undeclared sub-keys); e2e authoring a repeater.
 
@@ -244,8 +284,22 @@ commit, worklog rows, and steering-doc updates.
   query (uses the indexed `slug` filter path, published-only). Fall back to `/{collection}/{id}`
   when a collection has no slug field.
 - **Public route:** `src/routes/[collection]/[slug]/index.tsx` `onRequestGet`, **no
-  auth**, `anonymousPrincipal('rest')`; `authorize('read')` + `compileReadFilter` already
-  enforce publicRead + published-only (drafts structurally invisible). 404 otherwise.
+  auth**, anonymous principal (`resolvePrincipal` already falls back to one — the same
+  path REST uses); `authorize('read')` + `compileReadFilter` already enforce publicRead +
+  published-only (drafts structurally invisible). 404 otherwise. Verified: no route
+  conflict (static segments win in Hono's router).
+- **Public error handling (added 2026-07-05):** the global `onError`
+  (`src/main.tsx:64-99`) redirects browser 403s to `/admin` and renders 404s as JSON —
+  an anonymous visitor hitting a draft/missing URL would be bounced into the admin.
+  Public routes render their own public 404/403 page (route-level catch or an `onError`
+  branch keyed on the public route group).
+- **Reserved slugs (added):** `RESERVED_COLLECTION_SLUGS` = `admin, api, auth, media,
+  mcp, s, vendor` rejected in collection validation (precedent: `RESERVED_FIELD_KEYS`
+  in `src/config/constants.ts`) — a collection literally named `media` would be shadowed
+  by static routes.
+- **CSP note:** the global CSP (`src/main.tsx:28-52`) is admin-tuned — `img-src 'self'
+  data:` blocks remote images on public pages and `frame-ancestors 'none'` blocks
+  embedding. Acceptable for v1 public pages; document as a future knob, don't relax now.
 - **Public layout (new):** `PublicLayout` reusing `RootLayout` (`src/layouts.tsx:18`) +
   `getSettings` masthead (siteName/description — the sanctioned un-gated read,
   `src/services/settings/index.ts:43`). Render fields via `ViewComponent`; relations
@@ -259,9 +313,18 @@ commit, worklog rows, and steering-doc updates.
 
 ### Phase C3 — Share links (token) + email-share (stubbed)
 - **Model:** extend `item_grants.subjectKind` to allow `'link'`; `subjectId` = hashed
-  link token. New service `createShareLink(db, principal, {collection, documentId|null,
-  actions, expiresAt}, now)` → `authorize('manage_access', {collection, documentId})`,
-  returns the plaintext token once (like API tokens). Reuse `grantItem` plumbing.
+  link token. **No migration (corrected 2026-07-05):** `subject_kind` has no CHECK
+  constraint — the widening is code-only. Widen the TS unions
+  (`src/db/queries/grants.ts:15,26`; `src/services/access/index.ts:151`) and add an
+  explicit `'link'` branch to the subject-match in **both** `getApplicableGrants` and
+  `getGrantedDocumentIds` (`src/db/queries/grants.ts:43-48, 64-81`) — do NOT disguise
+  links as `subjectKind='principal'`; the access matrix must stay honest. Token
+  generation/hashing reuses `generateToken`/`hashToken` (`src/lib/token.ts`, SHA-256 at
+  rest, plaintext-once) and the invite-token validity pattern
+  (`src/db/queries/invites.ts` — uniform null for unknown/expired/consumed). New service
+  `createShareLink(db, principal, {collection, documentId|null, actions, expiresAt},
+  now)` → `authorize('manage_access', {collection, documentId})`. Reuse `grantItem`
+  plumbing.
 - **Consumption:** public route `src/routes/s/[token]/index.tsx` (+ an API/JSON variant
   and MCP resource): resolve + verify the token → construct an anonymous principal
   carrying the link identity so `getApplicableGrants`/`compileReadFilter`
@@ -277,10 +340,10 @@ commit, worklog rows, and steering-doc updates.
 ---
 
 ## Cross-cutting notes
-- **Migrations:** A1 (`principals.subtype`), A2 (`invite_tokens`), C3 (`item_grants`
-  subjectKind widening) each need a reviewed migration (`bun run db:generate` +
-  hand-add CHECK/indexes per DATABASE_STANDARDS.md). Never edit an applied migration.
-  Re-seed note per `docs/DEPLOY_CHECKLIST.md`.
+- **Migrations:** A1 (`principals.subtype`, shipped as `0004`) and A2 (`invite_tokens`,
+  shipped as `0005`) needed reviewed migrations. C3 needs **none** — `subject_kind` has
+  no CHECK constraint; the `'link'` widening is code-only (corrected 2026-07-05). Never
+  edit an applied migration. Re-seed note per `docs/DEPLOY_CHECKLIST.md`.
 - **Steering updates travel with each phase** (SCHEMA_ENGINE, ACCESS_CONTROL,
   SECURITY_STANDARDS, API_AND_MCP_STANDARDS, DESIGN_SYSTEM, A11Y). Run `/learn` +
   `/wrap-up` at the end.
@@ -292,8 +355,12 @@ commit, worklog rows, and steering-doc updates.
 
 ## Verification (per phase + end-to-end)
 For **every** phase: `bun run type-check` (0), `bun run lint` (0), `bun run test:run`
-(green), `bun run e2e` (green, incl. axe), `bun run build` (clean). Reset local D1 if
-e2e collides: `rm -rf .wrangler/state/v3/d1`.
+(green). `bun run e2e` (green, incl. axe) and `bun run build` run in the **final
+consolidated pass** after C3 (2026-07-05 re-plan) — which also decides the e2e harness
+once (recommended: point Playwright's `webServer` at a built preview/`wrangler dev`
+instead of `vite dev`; the axe-sweep flake is diagnosed vite-dev degradation under
+sustained load, not a violation). Reset local D1 before e2e:
+`rm -rf .wrangler/state/v3/d1` then `db:migrate && db:seed && db:seed:e2e`.
 
 **End-to-end acceptance (the whole roadmap), driven on `bun run dev` @ 127.0.0.1:3100
 plus REST/MCP:**
@@ -313,3 +380,18 @@ plus REST/MCP:**
    the stubbed transport logged the link.
 6. **All three surfaces** exercised end-to-end (admin SSR, REST JSON, MCP tools) on the
    same content, each permission-gated and audited.
+
+---
+
+## Revision Log
+- 2026-07-05: Track A complete (A1–A5, commits 8fa715b…4f7c115). Re-planned Tracks B/C
+  after a three-agent code validation + docs audit: added B1 sort/unique guards and the
+  builder-config work item; added the B2 `getDocumentsByIds` batch loader; corrected B3
+  (backlinks need a new access-gated query — `isIndexValueTaken` is an access-blind
+  template); reframed B4 as a visibility opt-out with the `WORKFLOW_SCHEMA` prereq and
+  the MCP status-enum location; **deferred B5 until after Track C** with its real scope
+  annotated; added C2 public error handling, `RESERVED_COLLECTION_SLUGS`, and the CSP
+  note; corrected C3 (no migration needed — code-only `'link'` branch in both grant
+  queries). Per-phase e2e consolidated into one final pass (user decision); unit tests
+  still travel per phase. Docs grounded as the single source of truth (commit 2dd5c54:
+  PROJECT_BRIEF rewrite, CLAUDE.md refresh, D19–D23, steering STATUS sweep).
