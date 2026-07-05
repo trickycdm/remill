@@ -4,13 +4,14 @@ import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { uploadMedia } from '@/services/media';
+import { rateLimit, UPLOAD_RATE_LIMIT } from '@/middleware/rate-limit';
 import { nowIso } from '@/lib/now';
 import { BadRequestError } from '@/lib/errors';
 
 const factory = createFactory<{ Bindings: Env }>();
 
 /** POST /admin/media/upload — multipart upload → sniff → R2 → metadata row. */
-export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
+export const onRequestPost = factory.createHandlers(rateLimit('upload', UPLOAD_RATE_LIMIT), requireAuth(), async (c) => {
   const body = await c.req.parseBody();
   const file = body.file;
   if (!(file instanceof File)) throw new BadRequestError('No file provided.');

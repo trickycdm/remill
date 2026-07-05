@@ -2,15 +2,18 @@ import { createFactory } from 'hono/factory';
 import type { Env } from '@/types';
 import { apiPrincipal, jsonBody, apiJson } from '@/lib/api';
 import { getDb } from '@/db/client';
-import { listCollections, createCollection } from '@/services/collections';
+import { listCollectionsForDiscovery, createCollection } from '@/services/collections';
 import type { CollectionDefinition } from '@/fields/types';
 import { nowIso } from '@/lib/now';
 
 const factory = createFactory<{ Bindings: Env }>();
 
-/** GET /api/collections — list collection definitions (metadata). */
+/** GET /api/collections — list collection definitions. Discovery is public, but
+ *  unauthenticated/unprivileged callers get the public-safe projection (SEC-5). */
 export const onRequestGet = factory.createHandlers(async (c) => {
-  return apiJson(c, { data: await listCollections(getDb(c.env.DB)) });
+  const now = nowIso();
+  const principal = await apiPrincipal(c, now);
+  return apiJson(c, { data: await listCollectionsForDiscovery(getDb(c.env.DB), principal) });
 });
 
 /** POST /api/collections — create a collection (requires manage_schema). */

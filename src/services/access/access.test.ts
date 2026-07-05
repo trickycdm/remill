@@ -36,6 +36,19 @@ describe('access service — principals, roles, tokens', () => {
     await expect(access.listAudit(db, editor, NOW)).rejects.toBeInstanceOf(ForbiddenError);
   });
 
+  it('SEC-8: an AGENT principal cannot assign roles or mint tokens — even with manage_access', async () => {
+    // An agent granted the admin role (which includes manage_access) must STILL be
+    // structurally refused access-management mutations: no self-escalation, no
+    // minting tokens for others.
+    const agentAdmin = await makePrincipal(db, NOW, { id: 'prn_agent_admin', kind: 'agent', role: 'admin' });
+    const target = await access.createAgent(db, admin, 'victim-bot', NOW);
+
+    await expect(access.assignRole(db, agentAdmin, target, 'admin', '*', NOW)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(
+      access.issueToken(db, agentAdmin, { principalId: target, name: 'stolen' }, NOW),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
   it('issues a token: returns plaintext once, stores only the hash, resolves back', async () => {
     const agentId = await access.createAgent(db, admin, 'bot', NOW);
     const { token } = await access.issueToken(

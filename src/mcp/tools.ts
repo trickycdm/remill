@@ -12,12 +12,13 @@
 
 import type { Database } from '@/db/client';
 import type { Principal, Action } from '@/access';
-import { getPrincipalPermissions } from '@/db/queries/roles';
-import { listCollections, getCollection } from '@/services/collections';
+// COR-6: the MCP surface must go through SERVICES, never the queries layer directly.
+import { getPrincipalPermissions } from '@/services/access';
+import { listCollections, getCollection, listCollectionsForDiscovery } from '@/services/collections';
 import * as docs from '@/services/documents';
 import * as collectionsService from '@/services/collections';
-import { listMedia } from '@/services/media';
-import { getMedia } from '@/db/queries/media';
+import { listMedia, getMediaById } from '@/services/media';
+import { parseSort, clampPage, clampPageSize } from '@/lib/list-query';
 import { jsonSchemaFor } from '@/fields/registry';
 import type { CollectionDefinition, JSONSchema } from '@/fields/types';
 
@@ -71,7 +72,9 @@ export async function buildToolsForPrincipal(
     name: 'list_collections',
     description: 'List all content-type definitions.',
     inputSchema: { type: 'object', properties: {} },
-    handler: async () => listCollections(db),
+    // SEC-5: discovery is public but projected — unauthenticated/unprivileged
+    // callers never see the internal access/workflow config.
+    handler: async () => listCollectionsForDiscovery(db, principal),
   });
   if (couldDo(perms, principal, 'manage_schema', '*', false)) {
     tools.push({
@@ -109,21 +112,19 @@ export async function buildToolsForPrincipal(
             sort: { type: 'string', description: 'indexed field name, prefix "-" for descending' },
           },
         },
-        handler: async (args) => {
-          const sortRaw = typeof args.sort === 'string' ? args.sort : undefined;
-          return docs.listDocuments(
+        handler: async (args) =>
+          docs.listDocuments(
             db,
             principal,
             slug,
             {
-              page: Number(args.page ?? 1),
-              pageSize: Number(args.pageSize ?? 25),
+              page: clampPage(args.page),
+              pageSize: clampPageSize(args.pageSize),
               status: args.status as 'draft' | 'published' | undefined,
-              sort: sortRaw ? (sortRaw.startsWith('-') ? { field: sortRaw.slice(1), dir: 'desc' } : { field: sortRaw, dir: 'asc' }) : undefined,
+              sort: parseSort(typeof args.sort === 'string' ? args.sort : undefined),
             },
             now(),
-          );
-        },
+          ),
       });
       tools.push({
         name: `get_${slug}`,
@@ -165,17 +166,31 @@ export async function buildToolsForPrincipal(
   if (couldDo(perms, principal, 'read', 'media', (await getCollection(db, 'media'))?.access?.publicRead === true)) {
     tools.push({
       name: 'list_media',
-      description: 'List uploaded media assets.',
-      inputSchema: { type: 'object', properties: { page: { type: 'integer' } } },
-      handler: async (args) => listMedia(db, principal, { page: Number(args.page ?? 1) }, now()),
+      description: 'List uploaded media assets (newest first; pass the returned cursor for the next page).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          cursor: { type: 'string', description: 'opaque cursor from a previous page' },
+          pageSize: { type: 'integer' },
+        },
+      },
+      handler: async (args) =>
+        listMedia(
+          db,
+          principal,
+          { cursor: typeof args.cursor === 'string' ? args.cursor : null, limit: args.pageSize as number | undefined },
+          now(),
+        ),
     });
     tools.push({
       name: 'get_media_url',
       description: 'Get the serving URL for a media asset by id.',
       inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      // COR-6: resolve through the Grant-gated media service — never a raw query.
+      // Unauthorized/unknown ids surface as a structured tool error (authorize()).
       handler: async (args) => {
-        const m = await getMedia(db, String(args.id));
-        return m ? { id: m.id, url: `/media/${m.id}`, mime: m.mime, alt: m.alt } : null;
+        const m = await getMediaById(db, principal, String(args.id), now());
+        return { id: m.id, url: `/media/${m.id}`, mime: m.mime, alt: m.alt };
       },
     });
   }

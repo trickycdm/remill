@@ -139,4 +139,13 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     const r = await mcp(readerToken, 'tools/call', { name: 'publish_posts', arguments: { id: 'x' } });
     expect(r.body.result.isError).toBe(true);
   });
+
+  it('SEC-5: anonymous list_collections returns a public-safe projection (no access/workflow)', async () => {
+    const r = await mcp(null, 'tools/call', { name: 'list_collections' });
+    const payload = JSON.parse(r.body.result.content[0].text) as { slug: string; access?: unknown; workflow?: unknown }[];
+    const posts = payload.find((c) => c.slug === 'posts');
+    expect(posts).toBeTruthy();
+    expect(posts?.access).toBeUndefined();
+    expect(posts?.workflow).toBeUndefined();
+  });
 });

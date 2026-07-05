@@ -50,6 +50,12 @@ export async function serveMedia(c: Context<{ Bindings: Env }>, id: string): Pro
     'Cache-Control': 'public, max-age=31536000, immutable',
     ETag: `"${rec.id}"`,
     'Accept-Ranges': 'bytes',
+    // Serve the STORED sniffed type verbatim and forbid the browser from
+    // re-sniffing it into something executable (SEC-3, SECURITY_STANDARDS §8).
+    'X-Content-Type-Options': 'nosniff',
+    // Render inline (never force a drive-by download context); the filename is the
+    // untrusted original, so it is deliberately not echoed here.
+    'Content-Disposition': 'inline',
   };
 
   // Conditional GET.

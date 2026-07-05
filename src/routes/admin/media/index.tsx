@@ -20,8 +20,8 @@ function humanSize(n: number): string {
 export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
   const db = getDb(c.env.DB);
-  const page = Number(c.req.query('page') ?? '1') || 1;
-  const { rows, total } = await listMedia(db, requirePrincipal(c), { page }, nowIso());
+  const cursor = c.req.query('cursor') || null;
+  const { rows, total, nextCursor } = await listMedia(db, requirePrincipal(c), { cursor }, nowIso());
 
   return c.render(
     <AdminShell user={user} current="media">
@@ -93,6 +93,17 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {nextCursor && (
+        <div class="mt-8 flex justify-center">
+          <a
+            href={`/admin/media?cursor=${encodeURIComponent(nextCursor)}`}
+            class="text-sm text-accent-text hover:underline"
+          >
+            Show more
+          </a>
         </div>
       )}
     </AdminShell>,

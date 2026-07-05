@@ -102,3 +102,72 @@ describe('collections service — definition validation', () => {
     await expect(svc.deleteCollection(db, admin, 'articles', NOW)).rejects.toBeInstanceOf(ForbiddenError);
   });
 });
+
+describe('collections service — discovery projection (SEC-5) + access/workflow validation (SEC-6)', () => {
+  let db: Database;
+  let admin: Principal;
+  const anon: Principal = { id: 'anonymous', kind: 'user', surface: 'rest' };
+
+  const posts: CollectionDefinition = {
+    slug: 'posts',
+    name: 'Posts',
+    shape: 'collection',
+    fields: [
+      { key: 'title', type: 'text', label: 'Title', required: true, index: true },
+      { key: 'body', type: 'markdown' },
+    ],
+    workflow: { draftPublish: true },
+    access: { publicRead: true },
+  };
+
+  beforeEach(async () => {
+    db = getDb(createTestD1());
+    await seedRoles(db, NOW);
+    admin = await makePrincipal(db, NOW, { id: 'prn_admin', role: 'admin' });
+    await svc.createCollection(db, admin, posts, NOW);
+  });
+
+  it('SEC-5: anonymous discovery omits internal access/workflow but keeps field shape', async () => {
+    const list = await svc.listCollectionsForDiscovery(db, anon);
+    const p = list.find((c) => c.slug === 'posts')!;
+    expect(p.name).toBe('Posts');
+    expect((p as unknown as Record<string, unknown>).access).toBeUndefined();
+    expect((p as unknown as Record<string, unknown>).workflow).toBeUndefined();
+    expect(p.fields.map((f) => f.key)).toEqual(['title', 'body']);
+    expect(p.fields[0]).toMatchObject({ key: 'title', type: 'text', label: 'Title', required: true });
+    // Field internals (index/config/admin) are not exposed to anonymous callers.
+    expect((p.fields[0] as unknown as Record<string, unknown>).index).toBeUndefined();
+  });
+
+  it('SEC-5: a schema manager sees the FULL definition, internals included', async () => {
+    const list = await svc.listCollectionsForDiscovery(db, admin);
+    const p = list.find((c) => c.slug === 'posts')!;
+    expect((p as unknown as Record<string, unknown>).access).toEqual({ publicRead: true });
+    expect((p as unknown as Record<string, unknown>).workflow).toEqual({ draftPublish: true });
+  });
+
+  it('SEC-5: getCollectionForDiscovery projects the single-collection read too', async () => {
+    const asAnon = await svc.getCollectionForDiscovery(db, anon, 'posts');
+    expect((asAnon as unknown as Record<string, unknown>).access).toBeUndefined();
+    const asAdmin = await svc.getCollectionForDiscovery(db, admin, 'posts');
+    expect((asAdmin as unknown as Record<string, unknown>).access).toEqual({ publicRead: true });
+  });
+
+  it('SEC-6: rejects a malformed workflow config', async () => {
+    await expect(
+      svc.createCollection(db, admin, { ...posts, slug: 'bad-wf', workflow: { draftPublish: 'yes' as unknown as boolean } }, NOW),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
+  it('SEC-6: rejects a malformed access config', async () => {
+    await expect(
+      svc.createCollection(db, admin, { ...posts, slug: 'bad-acc', access: { publicRead: 'nope' as unknown as boolean } }, NOW),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
+  it('SEC-6: accepts publicRead plus a valid role→actions map', async () => {
+    await expect(
+      svc.createCollection(db, admin, { ...posts, slug: 'ok-acc', access: { publicRead: true, editor: ['read', 'create'] } }, NOW),
+    ).resolves.toBeTruthy();
+  });
+});

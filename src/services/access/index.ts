@@ -28,6 +28,29 @@ const ROOT = { collection: '*' };
 
 export const listRoles = roleQ.listRoles;
 
+/**
+ * Resolve a principal's effective role permissions. Exposed for capability
+ * discovery (e.g. MCP tool visibility) so the MCP surface routes through a SERVICE
+ * rather than importing the queries layer directly (COR-6 layering fix). Read-only,
+ * un-gated: a principal may always learn its OWN capabilities.
+ */
+export const getPrincipalPermissions = roleQ.getPrincipalPermissions;
+
+/**
+ * Structurally refuse access-management mutations by agent principals (SEC-8).
+ * `manage_access` is a human-held capability: an agent must never grant roles or
+ * mint tokens (for itself or others), even if it were somehow assigned the
+ * permission. Defense in depth on top of authorize() — fail fast, before any audit
+ * or mutation. Throws a clean structured 403.
+ */
+function refuseAgentEscalation(principal: Principal): void {
+  if (principal.kind === 'agent') {
+    throw new ForbiddenError('Agents cannot perform access-management operations.', {
+      action: 'manage_access',
+    });
+  }
+}
+
 /** Validate a custom role's permission specs against the closed vocabularies. */
 function validatePermissions(perms: readonly PermissionSpec[]): PermissionSpec[] {
   const issues: ErrorDetails[] = [];
@@ -94,6 +117,7 @@ export async function assignRole(
   collection: string,
   now: string,
 ): Promise<void> {
+  refuseAgentEscalation(principal);
   await authorize(db, principal, 'manage_access', ROOT, now);
   if (!(await roleQ.getRole(db, role))) throw new NotFoundError('Role');
   await roleQ.assignRole(db, targetPrincipalId, role, collection);
@@ -182,6 +206,7 @@ export async function issueToken(
   input: { principalId: string; name: string; scope?: { collection: string; action: Action }[]; expiresAt?: string },
   now: string,
 ): Promise<{ id: string; token: string }> {
+  refuseAgentEscalation(principal);
   await authorize(db, principal, 'manage_access', ROOT, now);
   if (!input.name.trim()) throw new InputValidationError([{ path: 'name', message: 'Token name is required.' }]);
   const bad = (input.scope ?? []).filter((s) => !ACTIONS.includes(s.action));

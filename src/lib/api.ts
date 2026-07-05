@@ -9,15 +9,42 @@ import type { Context } from 'hono';
 import type { Env } from '@/types';
 import { getDb } from '@/db/client';
 import { resolvePrincipal } from '@/lib/api-auth';
-import { BadRequestError } from '@/lib/errors';
+import { AppError, BadRequestError } from '@/lib/errors';
 import type { Principal } from '@/access';
+import { parseSort, clampPage, clampPageSize, type SortSpec } from '@/lib/list-query';
+import {
+  GLOBAL_RATE_LIMIT,
+  RATE_LIMIT_INFO_KEY,
+  type RateLimitInfo,
+} from '@/middleware/rate-limit';
+
+/** Max accepted JSON request-body size (SEC-4). Content beyond this is a DoS vector;
+ *  reject before parsing. 1 MiB is generous for document/collection payloads. */
+export const MAX_JSON_BODY_BYTES = 1024 * 1024;
 
 export async function apiPrincipal(c: Context<{ Bindings: Env }>, now: string): Promise<Principal> {
   return resolvePrincipal(getDb(c.env.DB), c, 'rest', now);
 }
 
-/** Parse a JSON request body into a plain object, or throw 400. */
+/**
+ * Guard a request body against oversized payloads (SEC-4). Rejects with 413 when the
+ * declared `Content-Length` exceeds `max`. Shared by the REST and MCP entrypoints.
+ */
+export function assertBodyWithinLimit(c: Context, max = MAX_JSON_BODY_BYTES): void {
+  const declared = Number(c.req.header('content-length') ?? '0');
+  if (Number.isFinite(declared) && declared > max) {
+    throw new AppError(
+      `Request body ${declared} bytes exceeds the ${max}-byte limit`,
+      413,
+      'PAYLOAD_TOO_LARGE',
+      'Request body is too large.',
+    );
+  }
+}
+
+/** Parse a JSON request body into a plain object, or throw. Enforces the size cap. */
 export async function jsonBody(c: Context): Promise<Record<string, unknown>> {
+  assertBodyWithinLimit(c);
   let parsed: unknown;
   try {
     parsed = await c.req.json();
@@ -35,7 +62,7 @@ export function listQuery(c: Context): {
   page: number;
   pageSize: number;
   status?: 'draft' | 'published';
-  sort?: { field: string; dir: 'asc' | 'desc' };
+  sort?: SortSpec;
   filters: Record<string, string>;
 } {
   const q = c.req.query();
@@ -44,26 +71,28 @@ export function listQuery(c: Context): {
     const m = /^filter\[(.+)\]$/.exec(k);
     if (m) filters[m[1]] = v;
   }
-  const sortRaw = q.sort;
-  const sort = sortRaw
-    ? sortRaw.startsWith('-')
-      ? { field: sortRaw.slice(1), dir: 'desc' as const }
-      : { field: sortRaw, dir: 'asc' as const }
-    : undefined;
   const status = q.status === 'draft' || q.status === 'published' ? q.status : undefined;
   return {
-    page: Number(q.page ?? '1') || 1,
-    pageSize: Number(q.pageSize ?? '25') || 25,
+    page: clampPage(q.page),
+    pageSize: clampPageSize(q.pageSize),
     status,
-    sort,
+    sort: parseSort(q.sort),
     filters,
   };
 }
 
-/** A JSON response with the stubbed rate-limit headers (not enforced in v1). */
+/**
+ * A JSON response stamped with the REAL rate-limit headers (SEC-2). The limiter
+ * middleware records its decision on the context; if it did not run (e.g. the KV
+ * binding is absent in tests), fall back to the global tier so REST clients always
+ * see a coherent quota.
+ */
 export function apiJson(c: Context, body: unknown, status = 200): Response {
+  const info = c.get(RATE_LIMIT_INFO_KEY) as RateLimitInfo | undefined;
+  const limit = info?.limit ?? GLOBAL_RATE_LIMIT.limit;
+  const remaining = info?.remaining ?? GLOBAL_RATE_LIMIT.limit;
   return c.json(body as object, status as 200, {
-    'X-RateLimit-Limit': '1000',
-    'X-RateLimit-Remaining': '1000',
+    'X-RateLimit-Limit': String(limit),
+    'X-RateLimit-Remaining': String(remaining),
   });
 }

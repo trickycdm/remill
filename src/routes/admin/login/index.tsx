@@ -4,6 +4,7 @@ import { getDb } from '@/db/client';
 import { authenticateUser } from '@/services/auth';
 import { setSessionUser, getSessionUser } from '@/lib/auth';
 import { dsRedirect } from '@/lib/datastar-response';
+import { rateLimit, LOGIN_RATE_LIMIT } from '@/middleware/rate-limit';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, FormField, Input } from '@/components/ui';
 
@@ -63,7 +64,7 @@ export const onRequestGet = factory.createHandlers((c) => {
 // ---------------------------------------------------------------------------
 // POST /admin/login — verify credentials, start the session
 // ---------------------------------------------------------------------------
-export const onRequestPost = factory.createHandlers(async (c) => {
+export const onRequestPost = factory.createHandlers(rateLimit('login', LOGIN_RATE_LIMIT), async (c) => {
   const form = await c.req.parseBody();
   const email = String(form.email ?? '');
   const password = String(form.password ?? '');

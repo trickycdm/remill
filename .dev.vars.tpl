@@ -5,3 +5,21 @@
 # SESSION_SECRET: encryption key for the hono-sessions cookie. MUST be >= 32 chars.
 # Generate one with:  openssl rand -hex 32
 SESSION_SECRET="change-me-to-a-random-string-at-least-32-characters-long"
+
+# ---------------------------------------------------------------------------
+# First-admin bootstrap (C1). The admin login is NOT seeded — no credentials live
+# in the repo. Provision it explicitly with scripts/bootstrap-admin.ts:
+#
+#   Local dev (dev password 'remilladmin'):   bun run db:seed   (seeds + bootstraps)
+#                                       or:    bun run db:bootstrap:local
+#
+#   Production (choose a strong password, >= 16 chars):
+#     ADMIN_BOOTSTRAP_EMAIL=you@site.com \
+#     ADMIN_BOOTSTRAP_PASSWORD='…strong…' \
+#     bun run db:bootstrap:remote
+#   (omit ADMIN_BOOTSTRAP_PASSWORD to have a strong one generated + printed once.)
+#
+# These are consumed by the bootstrap SCRIPT (process env), not the running Worker —
+# export them in your shell / CI secret store rather than committing them here.
+# ADMIN_BOOTSTRAP_EMAIL="admin@remill.local"
+# ADMIN_BOOTSTRAP_PASSWORD=""

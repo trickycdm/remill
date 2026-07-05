@@ -12,6 +12,7 @@ import type {
 } from 'better-sqlite3';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { hashPassword } from '@/lib/password';
 
 interface D1Meta {
   duration: number;
@@ -157,10 +158,27 @@ function applyMigrations(bsdb: BetterSqliteDatabase): void {
 
 const SEED_FILE = join(import.meta.dirname, '../db/seed.sql');
 
+// Dev-admin fixture. seed.sql no longer ships credentials (C1); production creates
+// the admin via scripts/bootstrap-admin.ts. Tests still need a known admin login, so
+// we compute its hash HERE at run time from a dev password — no hash is committed.
+const DEV_ADMIN_PRINCIPAL_ID = 'prn_admin0000000000000';
+const DEV_ADMIN_EMAIL = 'admin@remill.local';
+const DEV_ADMIN_PASSWORD = 'remilladmin';
+
+function seedDevAdmin(bsdb: BetterSqliteDatabase): void {
+  const hash = hashPassword(DEV_ADMIN_PASSWORD); // saltHex:hashHex — safe to inline.
+  const now = '2026-07-04T00:00:00Z';
+  bsdb.exec(
+    `INSERT OR IGNORE INTO principals (id, kind, name, disabled, created_at) VALUES ('${DEV_ADMIN_PRINCIPAL_ID}', 'user', 'Administrator', 0, '${now}');
+     INSERT OR IGNORE INTO users (principal_id, email, password_hash, created_at) VALUES ('${DEV_ADMIN_PRINCIPAL_ID}', '${DEV_ADMIN_EMAIL}', '${hash}', '${now}');
+     INSERT OR IGNORE INTO principal_roles (id, principal_id, role, collection) VALUES ('pnr_admin0000000000000', '${DEV_ADMIN_PRINCIPAL_ID}', 'admin', '*');`,
+  );
+}
+
 /**
  * Create a fresh in-memory D1Database with the app schema applied. Isolated per
- * call. Pass `{ seed: true }` to also apply src/db/seed.sql (admin + protected
- * collections).
+ * call. Pass `{ seed: true }` to also apply src/db/seed.sql (system roles + the two
+ * protected collections) plus the dev-admin fixture (see above).
  */
 export function createTestD1(opts: { seed?: boolean } = {}): D1Database {
   const bsdb = new Database(':memory:');
@@ -169,6 +187,7 @@ export function createTestD1(opts: { seed?: boolean } = {}): D1Database {
   applyMigrations(bsdb);
   if (opts.seed) {
     bsdb.exec(readFileSync(SEED_FILE, 'utf-8'));
+    seedDevAdmin(bsdb);
   }
   return new D1DatabaseAdapter(bsdb) as unknown as D1Database;
 }

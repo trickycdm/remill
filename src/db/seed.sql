@@ -1,27 +1,18 @@
--- remill seed — idempotent (fixed IDs + INSERT OR IGNORE). Safe to re-run.
+-- remill seed — SYSTEM DATA ONLY. Idempotent (fixed IDs + INSERT OR IGNORE).
 -- Applied locally by `bun run db:seed`, remotely by `bun run db:seed:remote`,
 -- and by CI after migrations. See steering/DATABASE_STANDARDS.md.
 --
--- Seeds: the first admin (principal + user), and the two protected dogfooding
--- collections `settings` (singleton) and `media`. The field `type`s referenced
--- in fields_json are implemented by the schema engine in Phase 2 — seeding the
--- definitions now is intentional (the engine reads them).
-
--- ---------------------------------------------------------------------------
--- First admin principal + credentials
--- Default dev login: admin@remill.local / remilladmin  — CHANGE IN PRODUCTION.
--- (Rotate with: bun run scripts/hash-password.ts '<new>' then update this row.)
--- ---------------------------------------------------------------------------
-INSERT OR IGNORE INTO principals (id, kind, name, disabled, created_at)
-VALUES ('prn_admin0000000000000', 'user', 'Administrator', 0, '2026-07-04T00:00:00Z');
-
-INSERT OR IGNORE INTO users (principal_id, email, password_hash, created_at)
-VALUES (
-  'prn_admin0000000000000',
-  'admin@remill.local',
-  'cc81123b2cb4b87287c00c60e550a5ff:7e267b470e881c47d10871b587cb208899275378b065d00729241c440c585f9b',
-  '2026-07-04T00:00:00Z'
-);
+-- Seeds the system roles/permissions and the two protected dogfooding collections
+-- `settings` (singleton) and `media`. The field `type`s referenced in fields_json
+-- are implemented by the schema engine (the engine reads these definitions).
+--
+-- SECURITY (C1): this file NO LONGER provisions an admin login. Shipping a known
+-- password hash in the repo — and pushing it to production via `db:seed:remote` —
+-- was a critical hole (any freshly-seeded prod instance had publicly-known admin
+-- credentials). The first admin is now created out of band, with an explicit
+-- generated/operator-chosen password, by `scripts/bootstrap-admin.ts`
+-- (`bun run db:bootstrap:local` / `db:bootstrap:remote`). This seed is therefore
+-- safe to run against production: it contains no credentials.
 
 -- ---------------------------------------------------------------------------
 -- System roles + permissions (mirrors src/access/policy.ts — keep in sync).
@@ -52,10 +43,6 @@ INSERT OR IGNORE INTO role_permissions (id, role, collection, action, condition)
   ('rlp_author_readown','author', '*', 'read',   'own'),
   ('rlp_author_updown', 'author', '*', 'update', 'own'),
   ('rlp_reader_readpub','reader', '*', 'read',   'published');
-
--- Grant the first admin the admin role, install-wide.
-INSERT OR IGNORE INTO principal_roles (id, principal_id, role, collection)
-VALUES ('pnr_admin0000000000000', 'prn_admin0000000000000', 'admin', '*');
 
 -- ---------------------------------------------------------------------------
 -- `settings` — singleton, protected. Site-wide configuration.

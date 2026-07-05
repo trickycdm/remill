@@ -5,6 +5,7 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { issueToken, revokeToken } from '@/services/access';
 import type { Action } from '@/access';
+import { rateLimit, TOKEN_RATE_LIMIT } from '@/middleware/rate-limit';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Card, CardContent, Button } from '@/components/ui';
@@ -17,7 +18,7 @@ function parseScope(raw: string): { collection: string; action: Action }[] | und
 }
 
 /** POST /admin/access/tokens — issue (renders the plaintext once) or revoke. */
-export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
+export const onRequestPost = factory.createHandlers(rateLimit('token', TOKEN_RATE_LIMIT), requireAuth(), async (c) => {
   const body = await c.req.parseBody();
   const db = getDb(c.env.DB);
   const principal = requirePrincipal(c);
