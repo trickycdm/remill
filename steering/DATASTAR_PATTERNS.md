@@ -58,6 +58,16 @@ server-rendered HTML) catch a broken one. **Playwright is the only safety net** 
 you add non-trivial reactivity, drive it in a real browser, change inputs, assert the rendered output.
 That is how the computed-from-computed freeze above was caught.
 
+**Gotcha — `data-attr:X` DROPS the attribute when the expression is boolean `false`.** That's right for
+boolean attributes (`disabled`, `hidden`). But an ARIA attribute that must **always be present** — e.g.
+`aria-expanded` on a disclosure trigger — then has *no* value in its collapsed state. Bind a **string
+ternary** and render a static initial value:
+`aria-expanded="false" data-attr:aria-expanded="$open ? 'true' : 'false'"`. A **disclosure menu** is the
+non-modal counterpart to Dialog: an `$open` signal + a transparent full-screen click-outside catcher
+(`data-show="$open" data-on:click="$open=false"`) + the shell's `keydown__window` Escape handler —
+`role="menu"` with real focusable `<a>`/`<button>` items in DOM order (see `admin-shell.tsx`). Do **not**
+reuse the native-`<dialog>` Dialog/Drawer (modal) for a menu.
+
 ---
 
 ## (b) Form posts with `data-on:submit` + `@post`

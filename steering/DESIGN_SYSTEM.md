@@ -107,6 +107,21 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   `<th scope>`, native `<dialog>` for Dialog/Drawer (focus trap + Esc free), visible
   focus rings, icon-only buttons carry `aria-label`, `aria-current` on the active
   nav item, status pairs colour with a text label (never colour alone).
+- **Control heights come from `CONTROL_H`** (`ui/control.ts`: `sm h-8 / md h-10 /
+  lg h-11`) — the single source Button, Input, and Select all draw from. Canonical
+  height is `md` (40px). **Adjacent controls MUST share a `size`**: a `size="sm"`
+  button next to a default `h-10` input is the classic mismatch.
+- **Toggle vs Checkbox.** `Toggle` (a native `<input type="checkbox" role="switch">`
+  styled as a track+thumb) for a single on/off *state* — boolean fields,
+  workflow/access flags, boolean settings. `Checkbox` for an independent multi-option
+  group. Both stay **native** (free keyboard/SR semantics; they POST their value).
+- **A native checkbox/toggle paints its check from `accent-color`, not `color`.**
+  Style the tick with `accent-accent` (the iris token) — `text-accent` sets `color`,
+  which a native checkbox ignores, so it silently rendered browser-default blue.
+- **No raw field keys in the UI.** Resolve a field's visible label with
+  `fieldLabel(field)` (`src/lib/humanize.ts`) = `field.label ?? humanizeKey(field.key)`
+  — used by the edit form *and* the list header, so an unlabeled `siteName` reads
+  "Site name", never `siteName`.
 
 ## Layout primitives
 
@@ -116,8 +131,18 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   backdrop + Escape). Content column is centered `max-w-6xl` with generous padding.
 - **AuthShell** (`components/auth-shell.tsx`) — centered editorial "title page" for
   `/admin/login`: wordmark over a hairline, mono colophon, single card.
-- **PageHeader** — the masthead of a content region (eyebrow + serif `<h1>` +
-  lede + actions slot). **Nav**, **Card**, **Table** as above.
+- **PageHeader** — the masthead of a content region (optional breadcrumb + eyebrow
+  + serif `<h1>` + lede + actions slot). It **owns the space below its hairline**
+  (`mb-8`) — pages never add an ad-hoc top margin to compensate. **Nav**, **Card**,
+  **Table** as above.
+- **Breadcrumbs** (`ui/breadcrumb.tsx`) go in the PageHeader on depth-2+ pages
+  (built from data already in scope); omit them at depth 1 — a one-item trail is noise.
+- **Action hierarchy on editor/detail pages.** Actions + metadata belong in one
+  sticky sidebar, not scattered top/bottom: exactly one primary (Save), a secondary
+  (Publish), and an isolated destructive (Delete → `Dialog`, never native
+  `confirm()`). The sidebar Save can drive the content form in the other column via
+  `<button type="submit" form="editor-form">` association (no nested forms). Two
+  competing iris-accent primaries on one page is the smell to avoid.
 - **Spacing rhythm:** 4px base (Tailwind default scale); cards `gap`/padding in
   multiples of 4/5; page sections separated by `gap-6`+ and hairline rules.
 

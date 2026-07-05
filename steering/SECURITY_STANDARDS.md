@@ -66,6 +66,11 @@ onto the record — any field an attacker named got written. remill's fix, from 
   presented token by hashing it and matching. A leaked database must never yield usable tokens.
 - Tokens belong to a **principal** and carry an optional narrowing scope mask (∩ only, never widens) —
   ACCESS_CONTROL.md.
+- **Changing a password verifies the CURRENT password first** (`verifyPassword`, constant-time), and
+  rejects a mismatch with a **generic** message — never reveal whether the account or the password was
+  wrong. Enforce a minimum length, then re-hash. A change email/password path is scoped to the session
+  principal only. Note the stateless-cookie limitation: a password change cannot revoke sessions already
+  minted on other devices (documented in `services/account`; server-side revocation is post-v1).
 
 ## 5. Secrets
 
