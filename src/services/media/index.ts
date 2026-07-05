@@ -13,6 +13,7 @@ import * as mq from '@/db/queries/media';
 import { sniffMime, SNIFF_BYTES } from '@/lib/mime';
 import { imageSize } from '@/lib/image-size';
 import { newId } from '@/lib/id';
+import { clampPageSize } from '@/lib/list-query';
 import { BadRequestError, InputValidationError, NotFoundError, ConflictError } from '@/lib/errors';
 
 export type { MediaRecord } from '@/db/queries/media';
@@ -57,7 +58,9 @@ export async function uploadMedia(
 
   await bucket.put(r2Key, input.bytes, { httpMetadata: { contentType: sniff.mime } });
 
-  await mq.insertMedia(db, {
+  // Build the record once and insert it — no re-fetch round-trip (TD-9). The row we
+  // write is exactly the row we return.
+  const record: mq.MediaRecord = {
     id,
     r2Key,
     filename,
@@ -68,15 +71,19 @@ export async function uploadMedia(
     duration: null,
     alt: input.alt?.trim() ?? null,
     createdBy: principal.id,
-    now,
-  });
-
-  return (await mq.getMedia(db, id))!;
+    createdAt: now,
+  };
+  await mq.insertMedia(db, { ...record, now });
+  return record;
 }
 
-/** Resolve a media row for serving. Read authorized as published media of the
- *  `media` collection (so publicRead lets anonymous fetch assets). */
-export async function getMediaForServe(
+/**
+ * Read one media record by id, authorized as `read` of PUBLISHED media on the
+ * `media` collection (so publicRead lets anonymous fetch assets, and drafts stay
+ * hidden). The single Grant-gated read path shared by media serving and the MCP
+ * `get_media_url` tool (COR-6 — that tool previously read media with no authz).
+ */
+export async function getMediaById(
   db: Database,
   principal: Principal,
   id: string,
@@ -88,12 +95,26 @@ export async function getMediaForServe(
   return rec;
 }
 
-export async function listMedia(db: Database, principal: Principal, opts: { page?: number; pageSize?: number }, now: string) {
+/** Resolve a media row for serving (alias of the Grant-gated read). */
+export async function getMediaForServe(
+  db: Database,
+  principal: Principal,
+  id: string,
+  now: string,
+): Promise<mq.MediaRecord> {
+  return getMediaById(db, principal, id, now);
+}
+
+export async function listMedia(
+  db: Database,
+  principal: Principal,
+  opts: { limit?: number; cursor?: string | null },
+  now: string,
+) {
   await authorize(db, principal, 'read', { collection: MEDIA_COLLECTION }, now);
-  const page = Math.max(1, opts.page ?? 1);
-  const pageSize = Math.min(60, Math.max(1, opts.pageSize ?? 24));
-  const { rows, total } = await mq.listMedia(db, { limit: pageSize, offset: (page - 1) * pageSize });
-  return { rows, total, page, pageSize };
+  const limit = clampPageSize(opts.limit);
+  const { rows, total, nextCursor } = await mq.listMedia(db, { limit, cursor: opts.cursor ?? null });
+  return { rows, total, nextCursor };
 }
 
 export async function updateAlt(db: Database, principal: Principal, id: string, alt: string, now: string): Promise<void> {

@@ -14,13 +14,23 @@ import type { Database } from '@/db/client';
 import type { CollectionDefinition } from '@/fields/types';
 import { requireFieldType, isIndexable } from '@/fields/registry';
 import * as q from '@/db/queries/collections';
-import { authorize, type Principal } from '@/access';
+import { authorize, ACTIONS, type Principal } from '@/access';
+import { getPrincipalPermissions } from '@/db/queries/roles';
 import { InputValidationError, NotFoundError, ConflictError, ForbiddenError } from '@/lib/errors';
 import { RESERVED_FIELD_KEYS } from '@/config/constants';
 import type { ErrorDetails } from '@/lib/errors';
 
 const SLUG_RE = /^[a-z][a-z0-9-]*$/;
 const KEY_RE = /^[a-z][a-z0-9_]*$/;
+
+// SEC-6: `access` and `workflow` are persisted verbatim, so they MUST be validated
+// before they reach the database. `workflow` is a closed shape; `access` allows the
+// `publicRead` sugar plus an optional role→actions map (each value a list of the
+// closed action vocabulary).
+const WORKFLOW_SCHEMA = z.strictObject({ draftPublish: z.boolean().optional() });
+const ACCESS_SCHEMA = z
+  .object({ publicRead: z.boolean().optional() })
+  .catchall(z.array(z.enum(ACTIONS)));
 
 export const listCollections = q.listCollections;
 export const getCollection = q.getCollection;
@@ -71,6 +81,23 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
       }
     }
   });
+
+  if (input.workflow !== undefined) {
+    const r = WORKFLOW_SCHEMA.safeParse(input.workflow);
+    if (!r.success) {
+      for (const iss of r.error.issues) {
+        issues.push({ path: `workflow${iss.path.length ? `.${iss.path.join('.')}` : ''}`, message: iss.message });
+      }
+    }
+  }
+  if (input.access !== undefined) {
+    const r = ACCESS_SCHEMA.safeParse(input.access);
+    if (!r.success) {
+      for (const iss of r.error.issues) {
+        issues.push({ path: `access${iss.path.length ? `.${iss.path.join('.')}` : ''}`, message: iss.message });
+      }
+    }
+  }
 
   if (issues.length) throw new InputValidationError(issues, 'Invalid collection definition');
 
@@ -130,4 +157,79 @@ export async function deleteCollection(
   if (!existing) throw new NotFoundError('Collection');
   if (existing.protected) throw new ForbiddenError(`Collection '${slug}' is protected and cannot be deleted.`);
   await q.deleteCollectionRow(db, slug, grant);
+}
+
+// ---------------------------------------------------------------------------
+// Public-safe discovery projection (SEC-5)
+//
+// Collection discovery stays public (remill is agent-native), but an
+// UNAUTHENTICATED (or unprivileged) caller must not be able to enumerate the
+// internal `access`/`workflow` config. These functions return the FULL definition
+// to schema managers and a reduced, public-safe view to everyone else. All three
+// discovery surfaces (REST `/api/collections`, MCP `list_collections`, and the
+// admin) share this one projection.
+// ---------------------------------------------------------------------------
+
+/** A single field as exposed to unauthenticated discovery — no `index`, `unique`,
+ *  `config`, `admin`, or `access` internals. */
+export interface PublicFieldView {
+  readonly key: string;
+  readonly type: string;
+  readonly label?: string;
+  readonly required?: boolean;
+}
+
+/** A collection as exposed to unauthenticated discovery — internal `access` and
+ *  `workflow` are omitted entirely. */
+export interface PublicCollectionView {
+  readonly slug: string;
+  readonly name: string;
+  readonly shape: CollectionDefinition['shape'];
+  readonly fields: PublicFieldView[];
+}
+
+function toPublicView(def: CollectionDefinition): PublicCollectionView {
+  return {
+    slug: def.slug,
+    name: def.name,
+    shape: def.shape,
+    fields: def.fields.map((f) => ({
+      key: f.key,
+      type: f.type,
+      ...(f.label ? { label: f.label } : {}),
+      ...(f.required ? { required: true } : {}),
+    })),
+  };
+}
+
+/** Whether the principal may see full collection internals. `manage_schema` is the
+ *  gate: schema managers author these definitions, so they see them whole. This is
+ *  a read-only capability check for projection selection — NOT an authorize()
+ *  decision (discovery itself is public), so it is deliberately un-audited. */
+async function canSeeInternals(db: Database, principal: Principal): Promise<boolean> {
+  const perms = await getPrincipalPermissions(db, principal.id);
+  return perms.some((p) => p.action === 'manage_schema');
+}
+
+/** List collections for discovery: full definitions for schema managers, the
+ *  public-safe projection for everyone else (including anonymous). */
+export async function listCollectionsForDiscovery(
+  db: Database,
+  principal: Principal,
+): Promise<CollectionDefinition[] | PublicCollectionView[]> {
+  const defs = await q.listCollections(db);
+  if (await canSeeInternals(db, principal)) return defs;
+  return defs.map(toPublicView);
+}
+
+/** Get one collection for discovery, projected per the caller's capability. */
+export async function getCollectionForDiscovery(
+  db: Database,
+  principal: Principal,
+  slug: string,
+): Promise<CollectionDefinition | PublicCollectionView | null> {
+  const def = await q.getCollection(db, slug);
+  if (!def) return null;
+  if (await canSeeInternals(db, principal)) return def;
+  return toPublicView(def);
 }

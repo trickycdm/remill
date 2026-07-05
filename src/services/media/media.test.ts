@@ -7,7 +7,7 @@ import * as docsService from '@/services/documents';
 import * as collectionsService from '@/services/collections';
 import type { Principal } from '@/access';
 import type { CollectionDefinition } from '@/fields/types';
-import { BadRequestError, InputValidationError, ConflictError } from '@/lib/errors';
+import { BadRequestError, InputValidationError, ConflictError, ForbiddenError } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
 
@@ -84,6 +84,42 @@ describe('media service — upload, sniff, alt, delete', () => {
     await expect(
       media.uploadMedia(db, r2.bucket, admin, { filename: 'empty', bytes: new Uint8Array(0), alt: 'x' }, NOW),
     ).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it('COR-6: getMediaById is authorize()-gated — denies a caller scoped away from media reads', async () => {
+    const rec = await media.uploadMedia(db, r2.bucket, admin, { filename: 'x.png', bytes: pngBytes(), alt: 'X' }, NOW);
+
+    // Admin may read it (this is the path get_media_url now uses).
+    const got = await media.getMediaById(db, admin, rec.id, NOW);
+    expect(got.id).toBe(rec.id);
+
+    // A token scoped to posts-reads-only must NOT be able to resolve media — even
+    // though the media collection is publicRead, the scope mask narrows first.
+    const scoped = await makePrincipal(db, NOW, {
+      id: 'prn_scoped',
+      kind: 'agent',
+      tokenScope: [{ collection: 'posts', action: 'read' }],
+    });
+    await expect(media.getMediaById(db, scoped, rec.id, NOW)).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('COR-7/TD-9: listMedia paginates by cursor (no offset), newest first', async () => {
+    for (const name of ['one.png', 'two.png', 'three.png']) {
+      await media.uploadMedia(db, r2.bucket, admin, { filename: name, bytes: pngBytes(), alt: name }, NOW);
+    }
+
+    const page1 = await media.listMedia(db, admin, { limit: 2 }, NOW);
+    expect(page1.rows).toHaveLength(2);
+    expect(page1.total).toBe(3);
+    expect(page1.nextCursor).toBeTruthy();
+
+    const page2 = await media.listMedia(db, admin, { limit: 2, cursor: page1.nextCursor }, NOW);
+    expect(page2.rows).toHaveLength(1);
+    expect(page2.nextCursor).toBeNull();
+
+    // No row appears twice across the pages.
+    const ids = new Set([...page1.rows, ...page2.rows].map((r) => r.id));
+    expect(ids.size).toBe(3);
   });
 
   it('DELETE is blocked while a document references the media', async () => {
