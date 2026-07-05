@@ -35,20 +35,28 @@ function FieldCell({ field, value }: { field: FieldDescriptor; value: unknown })
   return <span>{value == null ? '' : String(value)}</span>;
 }
 
-/** The generated edit/create form for a collection. Posts via Datastar to `action`. */
+/** The generated edit/create form for a collection. Posts via Datastar to `action`.
+ *  Pass `id` to associate an external submit (the EditorSidebar's Save button, item
+ *  4). `renderActions={false}` omits the inline footer + #form-result so the sidebar
+ *  owns them; leave it true for a standalone form. */
 export function GeneratedForm({
   def,
   doc,
   action,
   submitLabel,
+  id,
+  renderActions = true,
 }: {
   def: CollectionDefinition;
   doc?: DocumentRecord;
   action: string;
   submitLabel: string;
+  id?: string;
+  renderActions?: boolean;
 }) {
   return (
     <form
+      id={id}
       class="flex flex-col gap-6"
       data-signals="{busy: false}"
       data-on:submit={`@post('${action}', {contentType: 'form'})`}
@@ -58,16 +66,20 @@ export function GeneratedForm({
           <FieldEditor field={field} value={doc?.data[field.key]} />
         ))}
       </div>
-      {/* Morph target for the inline save-error fragment (200, #form-result). */}
-      <div id="form-result" />
-      <div class="flex items-center gap-3">
-        <Button type="submit" busy="$busy">
-          {submitLabel}
-        </Button>
-        <a href={`/admin/c/${def.slug}`} class="text-sm text-ink-muted hover:text-ink hover:underline">
-          Cancel
-        </a>
-      </div>
+      {renderActions ? (
+        <>
+          {/* Morph target for the inline save-error fragment (200, #form-result). */}
+          <div id="form-result" />
+          <div class="flex items-center gap-3">
+            <Button type="submit" busy="$busy">
+              {submitLabel}
+            </Button>
+            <a href={`/admin/c/${def.slug}`} class="text-sm text-ink-muted hover:text-ink hover:underline">
+              Cancel
+            </a>
+          </div>
+        </>
+      ) : null}
     </form>
   );
 }
