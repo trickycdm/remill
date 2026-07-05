@@ -55,3 +55,6 @@
 | 2026-07-05 09:40 | MERGE A | Stream A (Data & Access) merged: COR-3/5/7/8/9, TD-3/9/11/4, SEC-7. Migration 0003 (unique_key + partial unique indexes). Verify green, 81 tests. |
 | 2026-07-05 09:55 | MERGE B | Stream B (Fields & Forms) merged: COR-1/2/4, SEC-4(field), TD-1/2/10/13. FieldShell across 10 modules. Verify green, 117 tests. |
 | 2026-07-05 10:10 | MERGE C | Stream C (Platform/Security/MCP) merged: C1, SEC-2(KV rate-limit)/3/4/5/6/8, COR-6, COR-7/9/TD-9(media). Verify green, 135 tests. Zero merge conflicts (disjoint file sets). |
+| 2026-07-05 10:30 | MERGE D | Stream D (Cleanup/Docs) merged: TD-5/7/8/12/14, bundler-warning fix. TD-6 moot (json-for-script became live via B). Verify green, 147 tests. |
+| 2026-07-05 10:45 | VERIFY | Full e2e surfaced pre-existing non-hermetic suite (posts/author never seeded) + SEC-2 login-limit flakiness. Fixed: scripts/seed-e2e.ts + self-contained `bun run e2e`; per-file CF-Connecting-IP. 16/16 e2e stable (clean + warm-KV). Live smoke: security headers, SEC-5 projection, rate-limit 429, CSP-safe admin all confirmed. CLAUDE.md aligned to D18. |
+| 2026-07-05 10:45 | DONE | Review remediation COMPLETE. All 29 findings addressed. main: 0 tc / 0 lint / 147 unit / 16 e2e / build clean. review.md updated with resolution status. |

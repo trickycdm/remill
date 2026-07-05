@@ -4,6 +4,27 @@
 
 ---
 
+## ✅ Remediation status — 2026-07-05 (ALL 29 addressed)
+
+Fixed across 4 parallel/sequential streams (worktrees, zero merge conflicts), merged to `main`. Full verification green: **0 type errors · 0 lint · 147 unit/integration tests (was 66) · 16 Playwright e2e · production build (no warnings)**. Live-HTTP smoke confirmed security headers, the SEC-5 public projection (no `access`/`workflow` leak), the login rate-limit 429 at threshold, and that the new CSP doesn't break the Datastar admin.
+
+| Stream (branch) | Findings closed |
+|---|---|
+| **A** — Data & Access (`remediation/data-access`) | COR-3, COR-5, COR-7ᵈ, COR-8, COR-9, TD-3, TD-9ᵈ, TD-11, SEC-7, TD-4ᵈ |
+| **B** — Fields & Forms (`remediation/fields-forms`) | COR-1, COR-2, COR-4, SEC-4ᶠ, TD-1, TD-2, TD-10, TD-13 (accepted) |
+| **C** — Platform/Security/MCP (`remediation/platform-security`) | C1, SEC-2 (KV), SEC-3, SEC-4ᵇ, SEC-5, SEC-6, SEC-8, COR-6, COR-7ᵐ, TD-9ᵐ, TD-4ᵐ |
+| **D** — Cleanup/Docs (`remediation/cleanup`) | TD-5, TD-7, TD-8, TD-12, TD-14; bundler-warning fix |
+
+**Dispositions of note:**
+- **TD-6** (delete `json-for-script.ts`) — **moot**: it became *live* during remediation (Stream B's TD-10 select-options editor now uses `jsonForScript()`). Correctly not deleted.
+- **TD-13** (type-erasure seam) — **accepted** as intentional; comment added.
+- **COR-7** — cursor pagination added as an opt-in `cursor`/`nextCursor`; `offset` retained as a backward-compatible path (not fully retired, by design).
+- **New (surfaced during verification):** the e2e suite was non-hermetic (assumed a `posts` collection + seeded `author` that only existed as leftover dev-DB state) — fixed with `scripts/seed-e2e.ts` + a self-contained `bun run e2e`; and the SEC-2 login limiter made the suite flaky, fixed with per-file `CF-Connecting-IP` buckets.
+
+**Response-contract changes for consumers:** `GET /api/collections[/:slug]` and MCP `list_collections` now return a public-safe projection (no `access`/`workflow`) unless the caller has `manage_schema`; MCP `list_media` moved from `page` to `cursor`/`pageSize` (+ `nextCursor`). A `0003` migration adds DB-backed `unique` enforcement (`unique_key` + partial unique indexes) — run `db:migrate` / `db:migrate:remote` at deploy.
+
+---
+
 ## Executive summary
 
 remill delivers on its central thesis. **All three write paths (admin SSR, REST, MCP) genuinely funnel through one `authorize()`-gated, whitelist-validated pipeline** in `src/services/documents/index.ts`; anti-mass-assignment is enforced three ways (unknown-key loop, `whitelistOnly`, Zod `.strict()`); the `Grant` witness type makes "forgot to authorize" a *compile* error; `decide()` is default-deny + additive-only; SQL is fully parameterized (the field key is a bound value, not an interpolated identifier — the exact Blogmill hole is structurally closed); passwords use scrypt + per-password salt + constant-time compare; tokens are per-principal, SHA-256-hashed at rest. Layering (Routes → Services → Queries → D1) holds everywhere except one MCP module; there is **no `any`, no `@ts-ignore`, no unsafe cast** in production code beyond a small contained type-erasure seam.
