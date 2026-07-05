@@ -19,7 +19,7 @@ import type { Database } from '@/db/client';
 import type { Principal } from '@/access';
 import { buildToolsForPrincipal } from '@/mcp/tools';
 import { listCollections } from '@/services/collections';
-import { listDocuments } from '@/services/documents';
+import { getDocument, listDocuments } from '@/services/documents';
 import { AppError, ForbiddenError } from '@/lib/errors';
 
 const PROTOCOL_VERSION = '2024-11-05';
@@ -111,7 +111,6 @@ export async function handleMcp(
       const uri = String(params?.uri ?? '');
       const m = /^remill:\/\/([^/]+)\/(.+)$/.exec(uri);
       if (!m) return error(id, -32602, 'Invalid resource uri');
-      const { getDocument } = await import('@/services/documents');
       const doc = await getDocument(db, principal, m[1], m[2], now());
       return result(id, { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(doc, null, 2) }] });
     }
