@@ -30,7 +30,12 @@ const KEY_RE = /^[a-z][a-z0-9_]*$/;
 // authorizer actually consumes. An earlier `.catchall(role→actions)` map was accepted,
 // stored, and silently ignored by `decide()` — a security smell (it looked like it
 // granted access but did nothing). It is now rejected outright (strictObject).
-const WORKFLOW_SCHEMA = z.strictObject({ draftPublish: z.boolean().optional() });
+const WORKFLOW_SCHEMA = z.strictObject({
+  draftPublish: z.boolean().optional(),
+  // 'none' opts the collection OUT of the publish lifecycle (B4): docs are born
+  // published and the status affordances are suppressed on every surface.
+  lifecycle: z.enum(['publish', 'none']).optional(),
+});
 const ACCESS_SCHEMA = z.strictObject({ publicRead: z.boolean().optional() });
 
 export const listCollections = q.listCollections;
@@ -104,6 +109,11 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
       for (const iss of r.error.issues) {
         issues.push({ path: `workflow${iss.path.length ? `.${iss.path.join('.')}` : ''}`, message: iss.message });
       }
+    } else if (r.data.lifecycle === 'none' && r.data.draftPublish) {
+      issues.push({
+        path: 'workflow',
+        message: "lifecycle 'none' and draftPublish are contradictory — pick one.",
+      });
     }
   }
   if (input.access !== undefined) {

@@ -123,14 +123,28 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
     });
   }
 
+  // Lifecycle select (B4): 'draft' → draft/publish workflow; 'none' → no publish
+  // lifecycle (record-like data); 'publish' (default) → born published.
+  const lifecycle = firstString(body.workflow_lifecycle);
   return {
     slug: firstString(body.slug).trim(),
     name: firstString(body.name).trim(),
     shape: firstString(body.shape) === 'singleton' ? 'singleton' : 'collection',
     fields,
-    workflow: 'workflow_draft_publish' in body ? { draftPublish: true } : undefined,
+    workflow:
+      lifecycle === 'draft'
+        ? { draftPublish: true }
+        : lifecycle === 'none'
+          ? { lifecycle: 'none' }
+          : undefined,
     access: 'access_public_read' in body ? { publicRead: true } : undefined,
   };
+}
+
+/** The builder's 3-way lifecycle value for an existing definition. */
+function lifecycleValueOf(def: CollectionDefinition | undefined): 'draft' | 'publish' | 'none' {
+  if (def?.workflow?.lifecycle === 'none') return 'none';
+  return def?.workflow?.draftPublish ? 'draft' : 'publish';
 }
 
 /** The per-row `select` options editor. A fixed pool of `maxOptions` value+label
@@ -421,7 +435,7 @@ export function CollectionBuilder({
       {/* ── Identity ──────────────────────────────────────────────────────────── */}
       <div class="grid gap-5 sm:grid-cols-2">
         <FormField fieldId="col-name" label="Name" required>
-          <Input id="col-name" name="name" value={def?.name} placeholder="Blog posts" required />
+          <Input id="col-name" name="name" value={def?.name} placeholder="Projects" required />
         </FormField>
         <FormField
           fieldId="col-slug"
@@ -433,7 +447,7 @@ export function CollectionBuilder({
             id="col-slug"
             name="slug"
             value={def?.slug}
-            placeholder="posts"
+            placeholder="projects"
             required={!isEdit}
             disabled={isEdit}
             readonly={isEdit}
@@ -461,10 +475,23 @@ export function CollectionBuilder({
 
         <fieldset class="flex flex-col gap-3">
           <legend class="text-sm font-medium text-ink">Options</legend>
-          <label class="flex items-center gap-2.5 text-sm text-ink-muted">
-            <Toggle name="workflow_draft_publish" checked={def?.workflow?.draftPublish} />
-            Draft / publish workflow
-          </label>
+          <FormField
+            fieldId="col-lifecycle"
+            label="Lifecycle"
+            description="Draft & publish for authored content; none for record-like data (no status, no publish step)."
+          >
+            <Select id="col-lifecycle" name="workflow_lifecycle">
+              <option value="publish" selected={lifecycleValueOf(def) === 'publish'}>
+                Publish immediately
+              </option>
+              <option value="draft" selected={lifecycleValueOf(def) === 'draft'}>
+                Draft &amp; publish workflow
+              </option>
+              <option value="none" selected={lifecycleValueOf(def) === 'none'}>
+                None (records)
+              </option>
+            </Select>
+          </FormField>
           <label class="flex items-center gap-2.5 text-sm text-ink-muted">
             <Toggle name="access_public_read" checked={def?.access?.publicRead} />
             Public read access

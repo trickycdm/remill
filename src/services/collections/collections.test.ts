@@ -51,6 +51,18 @@ describe('collections service — definition validation', () => {
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 
+  it("B4: accepts lifecycle 'none'; rejects the contradictory none+draftPublish combo", async () => {
+    await svc.createCollection(db, admin, bad({ slug: 'records', workflow: { lifecycle: 'none' } }), NOW);
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({ slug: 'contradiction', workflow: { lifecycle: 'none', draftPublish: true } }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
   it('accepts a relation field with zero allowlist edits (registry IS the gate)', async () => {
     const def = await svc.createCollection(
       db,

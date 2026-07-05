@@ -20,6 +20,7 @@ import * as docs from '@/services/documents';
 import * as collectionsService from '@/services/collections';
 import { listMedia, getMediaById } from '@/services/media';
 import { parseSort, clampPage, clampPageSize } from '@/lib/list-query';
+import { hasLifecycle } from '@/lib/lifecycle';
 import { jsonSchemaFor } from '@/fields/registry';
 import type { CollectionDefinition, JSONSchema } from '@/fields/types';
 
@@ -107,7 +108,8 @@ export async function buildToolsForPrincipal(
           properties: {
             page: { type: 'integer' },
             pageSize: { type: 'integer' },
-            status: { type: 'string', enum: ['draft', 'published'] },
+            // lifecycle:'none' collections have no meaningful status axis (B4).
+            ...(hasLifecycle(def) ? { status: { type: 'string', enum: ['draft', 'published'] } } : {}),
             sort: { type: 'string', description: 'indexed field name, prefix "-" for descending' },
           },
         },
@@ -157,7 +159,7 @@ export async function buildToolsForPrincipal(
         },
       });
     }
-    if (couldDo(perms, principal, 'publish', slug, false)) {
+    if (hasLifecycle(def) && couldDo(perms, principal, 'publish', slug, false)) {
       tools.push({
         name: `publish_${slug}`,
         description: `Publish or unpublish a ${def.name} document.`,

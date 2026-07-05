@@ -30,6 +30,14 @@ FieldType contract against all six surfaces before merging.
 - Per-collection **arbitrary-code hooks are banned** in v1. Common behaviors are declarative flags:
   `workflow.draftPublish`, slug config (`{ from: "title" }`), timestamps. If a behavior needs code,
   it belongs in a field type or the engine — never in collection data.
+- **Lifecycle modes (B4).** `workflow` has three states: `{draftPublish: true}` (authored content —
+  born draft, explicit publish step), absent/default (born published, publish/unpublish available),
+  and `{lifecycle: 'none'}` (record-like data — born published, and the status column, status
+  filter, publish button, `publish_<slug>` tool, and OpenAPI publish path are ALL suppressed;
+  `setPublished` 400s). This is a **visibility opt-out, not a status removal**: `documents.status`
+  stays load-bearing in the access layer (the `published` condition, publicRead sugar), which is
+  exactly why lifecycle-none docs must be born published. Gate on `hasLifecycle(def)`
+  (`src/lib/lifecycle.ts`) — never re-derive the rule. `none` + `draftPublish` is rejected on write.
 
 ## The FieldType contract
 

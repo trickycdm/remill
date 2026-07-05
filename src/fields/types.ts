@@ -49,7 +49,11 @@ export interface CollectionDefinition {
   readonly name: string;
   readonly shape: CollectionShape;
   readonly fields: readonly FieldDescriptor[];
-  readonly workflow?: { readonly draftPublish?: boolean };
+  /** Declarative behaviors. `draftPublish` starts docs as drafts with an explicit
+   *  publish step; `lifecycle: 'none'` opts OUT of the publish lifecycle entirely
+   *  (docs born published, status affordances suppressed — record-like data).
+   *  The two are contradictory together and rejected on write. */
+  readonly workflow?: { readonly draftPublish?: boolean; readonly lifecycle?: 'publish' | 'none' };
   // `publicRead` is the ONLY collection-level access knob. Collection-scoped
   // permissions live in `role_permissions` (the authorizer's single source);
   // an inline role→action map is rejected on write (see collections service).

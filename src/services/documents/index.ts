@@ -18,6 +18,7 @@ import * as dq from '@/db/queries/documents';
 import { getCollection, listCollections as listCollectionDefs } from '@/db/queries/collections';
 import { authorize, compileReadFilter, resolveAccess, type Principal } from '@/access';
 import { newId } from '@/lib/id';
+import { hasLifecycle } from '@/lib/lifecycle';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
 import {
   InputValidationError,
@@ -174,6 +175,10 @@ async function checkUnique(
 }
 
 function initialStatus(def: CollectionDefinition): 'draft' | 'published' {
+  // lifecycle:'none' docs are ALWAYS born published — status stays load-bearing
+  // in the access layer (the `published` condition, publicRead), so opting out
+  // of the lifecycle means opting into permanent published-ness (B4).
+  if (!hasLifecycle(def)) return 'published';
   return def.workflow?.draftPublish ? 'draft' : 'published';
 }
 
@@ -631,6 +636,9 @@ export async function setPublished(
   if (!existing) throw new NotFoundError('Document');
 
   const def = await loadCollection(db, collectionSlug);
+  if (!hasLifecycle(def)) {
+    throw new BadRequestError(`'${collectionSlug}' has no publish lifecycle.`);
+  }
   const grant = await authorize(
     db,
     principal,

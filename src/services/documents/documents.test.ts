@@ -154,6 +154,23 @@ describe('documents service — the save pipeline', () => {
     expect(row?.relations?.author).toEqual({ id: ada.id, title: 'Ada Lovelace', collection: 'authors' });
   });
 
+  it("B4: lifecycle 'none' — docs born published; publish/unpublish rejected", async () => {
+    const RECORDS: CollectionDefinition = {
+      slug: 'companies',
+      name: 'Companies',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+      workflow: { lifecycle: 'none' },
+    };
+    await collectionsService.createCollection(db, admin, RECORDS, NOW);
+    const doc = await docs.createDocument(db, admin, 'companies', { name: 'ACME' }, NOW);
+    expect(doc.status).toBe('published'); // born published — no draft state exists
+
+    await expect(
+      docs.setPublished(db, admin, 'companies', doc.id, false, NOW),
+    ).rejects.toBeInstanceOf(BadRequestError);
+  });
+
   it('B3: backlinks — A referencing B appears under B, access-scoped, indexed-only', async () => {
     const AUTHORS: CollectionDefinition = {
       slug: 'authors',

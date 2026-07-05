@@ -70,7 +70,7 @@ export const slugField: FieldType<SlugConfig, string> = {
       help="Lowercase, hyphen-separated. Auto-generated if left blank."
     >
       <Input
-        {...controlProps({ field, signal }, { placeholder: 'my-post-slug', required: false })}
+        {...controlProps({ field, signal }, { placeholder: 'my-item-slug', required: false })}
         type="text"
         value={value ?? ''}
         pattern={SLUG_RE.source}

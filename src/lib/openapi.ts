@@ -9,6 +9,7 @@
 import type { Database } from '@/db/client';
 import { listCollections } from '@/db/queries/collections';
 import { jsonSchemaFor } from '@/fields/registry';
+import { hasLifecycle } from '@/lib/lifecycle';
 import type { CollectionDefinition, JSONSchema } from '@/fields/types';
 
 function documentSchema(def: CollectionDefinition): JSONSchema {
@@ -26,6 +27,8 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
   const tag = def.name;
   const body = { required: true, content: { 'application/json': { schema: ref } } };
   const listItem = { type: 'object', properties: { data: ref } };
+  // lifecycle:'none' collections advertise no status filter and no publish path (B4).
+  const lifecycle = hasLifecycle(def);
   return {
     [`/api/c/${def.slug}`]: {
       get: {
@@ -34,7 +37,7 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
         parameters: [
           { name: 'page', in: 'query', schema: { type: 'integer' } },
           { name: 'pageSize', in: 'query', schema: { type: 'integer' } },
-          { name: 'status', in: 'query', schema: { type: 'string', enum: ['draft', 'published'] } },
+          ...(lifecycle ? [{ name: 'status', in: 'query', schema: { type: 'string', enum: ['draft', 'published'] } }] : []),
           { name: 'sort', in: 'query', schema: { type: 'string' } },
         ],
         responses: { '200': { description: 'A page of documents' } },
@@ -47,10 +50,14 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
       patch: { tags: [tag], summary: `Update a ${def.name}`, requestBody: body, responses: { '200': { description: 'Updated' } } },
       delete: { tags: [tag], summary: `Delete a ${def.name}`, responses: { '200': { description: 'Deleted' } } },
     },
-    [`/api/c/${def.slug}/{id}/publish`]: {
-      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      post: { tags: [tag], summary: `Publish/unpublish a ${def.name}`, responses: { '200': { description: 'Updated' } } },
-    },
+    ...(lifecycle
+      ? {
+          [`/api/c/${def.slug}/{id}/publish`]: {
+            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+            post: { tags: [tag], summary: `Publish/unpublish a ${def.name}`, responses: { '200': { description: 'Updated' } } },
+          },
+        }
+      : {}),
     [`/api/c/${def.slug}/{id}/revisions`]: {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       get: { tags: [tag], summary: `Revision history`, responses: { '200': { description: 'Revisions' } } },
