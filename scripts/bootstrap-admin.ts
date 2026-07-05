@@ -75,7 +75,7 @@ function main(): void {
   // INSERT OR IGNORE keeps this idempotent — re-running does not clobber an existing
   // admin's password. Only the scrypt hash is stored, never the plaintext.
   const sql = [
-    `INSERT OR IGNORE INTO principals (id, kind, name, disabled, created_at) VALUES (${sqlString(ADMIN_PRINCIPAL_ID)}, 'user', 'Administrator', 0, ${sqlString(CREATED_AT)});`,
+    `INSERT OR IGNORE INTO principals (id, kind, subtype, name, disabled, created_at) VALUES (${sqlString(ADMIN_PRINCIPAL_ID)}, 'user', 'person', 'Administrator', 0, ${sqlString(CREATED_AT)});`,
     `INSERT OR IGNORE INTO users (principal_id, email, password_hash, created_at) VALUES (${sqlString(ADMIN_PRINCIPAL_ID)}, ${sqlString(email)}, ${sqlString(passwordHash)}, ${sqlString(CREATED_AT)});`,
     `INSERT OR IGNORE INTO principal_roles (id, principal_id, role, collection) VALUES (${sqlString(ADMIN_ROLE_ASSIGNMENT_ID)}, ${sqlString(ADMIN_PRINCIPAL_ID)}, 'admin', '*');`,
   ].join('\n');

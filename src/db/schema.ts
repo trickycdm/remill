@@ -47,6 +47,12 @@ export const auditLog = sqliteTable(
 export const principals = sqliteTable('principals', {
   id: text('id').primaryKey(), // prn_…
   kind: text('kind').notNull(), // 'user' | 'agent'  (CHECK added in migration)
+  // Display/grouping only — the PERSONA a human manages (person | service | agent).
+  // NOT security-relevant: authorize() and refuseAgentEscalation key off `kind`.
+  // Nullable (legacy rows read as person/agent via personaOf); the value set is
+  // enforced at the service layer, not a DB CHECK (SQLite can't add a column CHECK
+  // without a table rebuild, and this attribute is inert to the security model).
+  subtype: text('subtype'), // 'person' | 'service' | 'agent' | null
   name: text('name').notNull(),
   disabled: integer('disabled').notNull().default(0), // 0/1
   createdAt: text('created_at').notNull(),

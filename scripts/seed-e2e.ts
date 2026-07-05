@@ -48,7 +48,7 @@ function main(): void {
     `INSERT OR IGNORE INTO collections (slug, name, shape, fields_json, workflow_json, access_json, protected, created_at, updated_at) VALUES (` +
       `'posts', 'Posts', 'collection', ${sqlString(POSTS_FIELDS_JSON)}, ${sqlString(POSTS_WORKFLOW_JSON)}, NULL, 0, ${sqlString(CREATED_AT)}, ${sqlString(CREATED_AT)});`,
     // Seeded author human (assigned the system `author` role).
-    `INSERT OR IGNORE INTO principals (id, kind, name, disabled, created_at) VALUES (${sqlString(AUTHOR_PRINCIPAL_ID)}, 'user', 'Author', 0, ${sqlString(CREATED_AT)});`,
+    `INSERT OR IGNORE INTO principals (id, kind, subtype, name, disabled, created_at) VALUES (${sqlString(AUTHOR_PRINCIPAL_ID)}, 'user', 'person', 'Author', 0, ${sqlString(CREATED_AT)});`,
     `INSERT OR IGNORE INTO users (principal_id, email, password_hash, created_at) VALUES (${sqlString(AUTHOR_PRINCIPAL_ID)}, ${sqlString(AUTHOR_EMAIL)}, ${sqlString(passwordHash)}, ${sqlString(CREATED_AT)});`,
     `INSERT OR IGNORE INTO principal_roles (id, principal_id, role, collection) VALUES (${sqlString(AUTHOR_ROLE_ASSIGNMENT_ID)}, ${sqlString(AUTHOR_PRINCIPAL_ID)}, 'author', '*');`,
   ].join('\n');

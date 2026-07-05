@@ -8,9 +8,10 @@ import { nowIso } from '@/lib/now';
 
 const factory = createFactory<{ Bindings: Env }>();
 
-/** POST /admin/access/agents — create a new agent principal. */
+/** POST /admin/access/agents — create a new machine principal (Service or Agent). */
 export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
   const body = await c.req.parseBody();
-  await createAgent(getDb(c.env.DB), requirePrincipal(c), String(body.name ?? ''), nowIso());
+  const subtype = String(body.subtype ?? 'agent') === 'service' ? 'service' : 'agent';
+  await createAgent(getDb(c.env.DB), requirePrincipal(c), String(body.name ?? ''), nowIso(), subtype);
   return c.redirect('/admin/access', 303);
 });

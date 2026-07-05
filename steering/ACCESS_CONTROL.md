@@ -15,6 +15,14 @@
 - Agents are identities, not shared keys: each autonomous agent gets its own principal, tokens,
   role assignments, and audit trail. Never issue a "team" or "shared" token.
 - A built-in `anonymous` principal represents unauthenticated requests.
+- **Persona vs. kind (`principals.subtype`).** `kind` is the only *security* axis: `user` (human,
+  session, may hold `manage_access`) vs `agent` (machine, token, refused access-management by
+  `refuseAgentEscalation`). But a person manages **three personas** — Person, Service, Agent — because
+  a data-pulling system and an autonomous AI client are both `kind: 'agent'` yet operationally
+  distinct. `subtype` (`'person' | 'service' | 'agent' | null`) records which, for display / grouping /
+  filtering **only**. `authorize()` never reads it; the value set is enforced at the service layer
+  (`createUser` → `person`, `createAgent(…, subtype)` → `service | agent`), not a DB CHECK. Derive it
+  with `personaOf(kind, subtype)` in `src/lib/persona.ts` (legacy null machines read as `agent`).
 - Tokens carry an optional **narrowing scope mask**: effective permission = principal's permissions
   ∩ token mask. A token can shrink an agent's blast radius, **never widen it**.
 

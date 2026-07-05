@@ -41,10 +41,20 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/access');
 
-    // Create an agent principal.
-    await page.getByLabel('New agent identity').fill('e2e-bot');
-    await page.getByRole('button', { name: 'Create agent' }).click();
+    // Create an agent principal (default type = Agent).
+    await page.getByLabel('New machine identity').fill('e2e-bot');
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(page.getByText('e2e-bot')).toBeVisible();
+
+    // Create a service principal — it lands with a distinct "Service" persona badge.
+    await page.getByLabel('New machine identity').fill('e2e-puller');
+    await page.getByLabel('Type').selectOption('service');
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(page.getByText('e2e-puller')).toBeVisible();
+    // Both persona badges render as <span> pills (exact text avoids the plural group
+    // headers; .and(span) avoids the "Service"/"Agent" <option>s in the Type select).
+    await expect(page.getByText('Service', { exact: true }).and(page.locator('span')).first()).toBeVisible();
+    await expect(page.getByText('Agent', { exact: true }).and(page.locator('span')).first()).toBeVisible();
 
     // Issue a read-only token for it → the plaintext is shown once.
     const card = page.locator('div', { hasText: 'e2e-bot' });

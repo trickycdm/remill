@@ -6,6 +6,7 @@ import * as access from '@/services/access';
 import { findTokenByHash } from '@/db/queries/principals';
 import { hashToken } from '@/lib/token';
 import type { Principal } from '@/access';
+import { personaOf } from '@/lib/persona';
 import { ForbiddenError, InputValidationError, ConflictError } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
@@ -29,6 +30,27 @@ describe('access service — principals, roles, tokens', () => {
     const agent = principals.find((p) => p.id === agentId);
     expect(agent?.kind).toBe('agent');
     expect(agent?.roles.map((r) => r.role)).toContain('author');
+  });
+
+  it('records the machine persona (service vs agent) as a display subtype', async () => {
+    const serviceId = await access.createAgent(db, admin, 'data-puller', NOW, 'service');
+    const agentId = await access.createAgent(db, admin, 'ai-bot', NOW, 'agent');
+    const principals = await access.listPrincipals(db, admin, NOW);
+    const svc = principals.find((p) => p.id === serviceId)!;
+    const agent = principals.find((p) => p.id === agentId)!;
+
+    // Both are the same SECURITY kind (machine)…
+    expect(svc.kind).toBe('agent');
+    expect(agent.kind).toBe('agent');
+    // …but carry distinct personas for display/grouping.
+    expect(svc.subtype).toBe('service');
+    expect(personaOf(svc.kind, svc.subtype)).toBe('service');
+    expect(personaOf(agent.kind, agent.subtype)).toBe('agent');
+
+    // An unknown machine type is rejected.
+    await expect(access.createAgent(db, admin, 'weird', NOW, 'robot' as never)).rejects.toBeInstanceOf(
+      InputValidationError,
+    );
   });
 
   it('denies management to a principal without manage_access', async () => {

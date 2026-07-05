@@ -8,10 +8,12 @@ import { eq, desc, and } from 'drizzle-orm';
 import type { Database } from '@/db/client';
 import { principals, users, apiTokens, principalRoles } from '@/db/schema';
 import { newId } from '@/lib/id';
+import type { MachinePersona } from '@/lib/persona';
 
 export interface PrincipalRecord {
   readonly id: string;
   readonly kind: 'user' | 'agent';
+  readonly subtype: string | null; // persona hint: 'person' | 'service' | 'agent' | null
   readonly name: string;
   readonly disabled: boolean;
   readonly email: string | null; // present for kind 'user'
@@ -26,6 +28,7 @@ export async function listPrincipals(db: Database): Promise<PrincipalRecord[]> {
   return rows.map((p) => ({
     id: p.id,
     kind: p.kind as 'user' | 'agent',
+    subtype: p.subtype ?? null,
     name: p.name,
     disabled: p.disabled === 1,
     email: emailById.get(p.id) ?? null,
@@ -38,10 +41,16 @@ export async function getPrincipal(db: Database, id: string): Promise<PrincipalR
   return list.find((p) => p.id === id) ?? null;
 }
 
-/** Create an agent principal (agents have no password; they authenticate by token). */
-export async function createAgentPrincipal(db: Database, name: string, now: string): Promise<string> {
+/** Create a machine principal (service or agent — both `kind: 'agent'`, no
+ *  password; they authenticate by token). `subtype` records the persona. */
+export async function createAgentPrincipal(
+  db: Database,
+  name: string,
+  now: string,
+  subtype: MachinePersona = 'agent',
+): Promise<string> {
   const id = newId('principal');
-  await db.insert(principals).values({ id, kind: 'agent', name, disabled: 0, createdAt: now });
+  await db.insert(principals).values({ id, kind: 'agent', subtype, name, disabled: 0, createdAt: now });
   return id;
 }
 

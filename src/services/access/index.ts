@@ -17,6 +17,7 @@ import { generateToken, hashToken } from '@/lib/token';
 import type { PermissionSpec, RoleSpec } from '@/access/policy';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
 import type { Action, Condition } from '@/access/types';
+import type { MachinePersona } from '@/lib/persona';
 import { InputValidationError, NotFoundError, ForbiddenError, ConflictError } from '@/lib/errors';
 import type { ErrorDetails } from '@/lib/errors';
 
@@ -184,10 +185,25 @@ export async function listPrincipals(db: Database, principal: Principal, now: st
   return principalQ.listPrincipals(db);
 }
 
-export async function createAgent(db: Database, principal: Principal, name: string, now: string): Promise<string> {
+/**
+ * Create a machine principal — a Service (a system pulling data) or an Agent (an
+ * autonomous AI client). Both are `kind: 'agent'` for security; `subtype` is the
+ * persona label only. Requires `manage_access` (human-held; agents are refused).
+ */
+export async function createAgent(
+  db: Database,
+  principal: Principal,
+  name: string,
+  now: string,
+  subtype: MachinePersona = 'agent',
+): Promise<string> {
+  refuseAgentEscalation(principal);
   await authorize(db, principal, 'manage_access', ROOT, now);
   if (!name.trim()) throw new InputValidationError([{ path: 'name', message: 'Name is required.' }]);
-  return principalQ.createAgentPrincipal(db, name.trim(), now);
+  if (subtype !== 'service' && subtype !== 'agent') {
+    throw new InputValidationError([{ path: 'subtype', message: `Unknown machine type '${subtype}'.` }]);
+  }
+  return principalQ.createAgentPrincipal(db, name.trim(), now, subtype);
 }
 
 export async function listTokens(db: Database, principal: Principal, now: string, targetPrincipalId?: string) {
