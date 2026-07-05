@@ -19,6 +19,7 @@
 
 import type { ZodString, ZodType } from 'zod';
 import { FormField } from '@/components/ui';
+import { fieldLabel } from '@/lib/humanize';
 import type { FieldDescriptor, FieldEditProps } from '@/fields/types';
 
 /**
@@ -42,7 +43,7 @@ export function FieldShell({
   return (
     <FormField
       fieldId={signal}
-      label={field.label ?? field.key}
+      label={fieldLabel(field)}
       required={field.required}
       description={field.admin?.help ?? help}
     >

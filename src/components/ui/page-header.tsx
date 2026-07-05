@@ -9,10 +9,12 @@
 
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import { cx } from '@/components/ui/cx';
+import { Breadcrumb, type Crumb } from '@/components/ui/breadcrumb';
 
 export function PageHeader({
   title,
   eyebrow,
+  breadcrumb,
   description,
   actions,
   as: As = 'h1',
@@ -20,14 +22,19 @@ export function PageHeader({
 }: {
   title: unknown;
   eyebrow?: unknown;
+  /** Navigational trail shown above the title on nested pages (omit at depth 1). */
+  breadcrumb?: readonly Crumb[];
   description?: unknown;
   actions?: unknown;
   as?: 'h1' | 'h2';
   class?: string;
 }): JSX.Element {
   return (
-    <header class={cx('flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between', cls)}>
+    // `mb-8` owns the space below the hairline so page content never butts against
+    // it — previously each page compensated with an ad-hoc `mt-8` (item 6).
+    <header class={cx('mb-8 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between', cls)}>
       <div class="flex flex-col gap-2">
+        {breadcrumb && breadcrumb.length ? <Breadcrumb items={breadcrumb} /> : null}
         {eyebrow ? (
           <span class="font-mono text-eyebrow font-medium tracking-[0.14em] text-ink-subtle uppercase">
             {eyebrow}

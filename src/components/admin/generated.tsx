@@ -7,6 +7,7 @@
 
 import type { FC } from 'hono/jsx';
 import { resolveField } from '@/fields/registry';
+import { fieldLabel } from '@/lib/humanize';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import type { DocumentRecord } from '@/services/documents';
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, EmptyState } from '@/components/ui';
@@ -97,7 +98,7 @@ export function GeneratedTable({
       <TableHead>
         <TableRow>
           {cols.map((f) => (
-            <TableHeaderCell>{f.label ?? f.key}</TableHeaderCell>
+            <TableHeaderCell>{fieldLabel(f)}</TableHeaderCell>
           ))}
           <TableHeaderCell>Status</TableHeaderCell>
           <TableHeaderCell>Updated</TableHeaderCell>
