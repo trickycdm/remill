@@ -9,7 +9,7 @@ import { getSettings } from '@/services/settings';
 import { NotFoundError, ForbiddenError } from '@/lib/errors';
 import { nowIso } from '@/lib/now';
 import { PublicShell, PublicNotFound } from '@/components/layouts/public-shell';
-import { DocumentView } from '@/components/document-view';
+import { DocumentView, rawPageHtml } from '@/components/document-view';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -35,6 +35,11 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     const doc = ref.startsWith('doc_')
       ? await getDocument(db, principal, collection, ref, now)
       : await getDocumentBySlug(db, principal, collection, ref, now);
+    // Raw mode (D27): the html field IS the page — a full standalone document,
+    // bypassing RootLayout/PublicShell. authorize already gated above; the
+    // security headers middleware still applies.
+    const raw = rawPageHtml(def, doc);
+    if (raw !== null) return c.html(raw);
     const backlinks = await getBacklinks(db, principal, collection, doc.id, now);
     return c.render(
       <PublicShell settings={settings}>

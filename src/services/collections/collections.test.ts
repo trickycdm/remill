@@ -51,6 +51,31 @@ describe('collections service — definition validation', () => {
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 
+  it("D27: renderMode 'raw' requires an html field; bad values rejected; round-trips through storage", async () => {
+    // raw + html field → accepted, and the mode survives the DB round-trip.
+    await svc.createCollection(
+      db,
+      admin,
+      bad({ slug: 'pages', renderMode: 'raw', fields: [{ key: 'page', type: 'html', required: true }] }),
+      NOW,
+    );
+    expect((await svc.getCollection(db, 'pages'))?.renderMode).toBe('raw');
+
+    // raw without any html field → nothing could render; rejected.
+    await expect(
+      svc.createCollection(db, admin, bad({ slug: 'rawless', renderMode: 'raw' }), NOW),
+    ).rejects.toBeInstanceOf(InputValidationError);
+
+    // Outside the enum → rejected.
+    await expect(
+      svc.createCollection(db, admin, bad({ slug: 'weird', renderMode: 'fullscreen' as never }), NOW),
+    ).rejects.toBeInstanceOf(InputValidationError);
+
+    // 'shell' (the default, spelled out) is fine and stored as such.
+    await svc.createCollection(db, admin, bad({ slug: 'shelled', renderMode: 'shell' }), NOW);
+    expect((await svc.getCollection(db, 'shelled'))?.renderMode).toBe('shell');
+  });
+
   it("B4: accepts lifecycle 'none'; rejects the contradictory none+draftPublish combo", async () => {
     await svc.createCollection(db, admin, bad({ slug: 'records', workflow: { lifecycle: 'none' } }), NOW);
     await expect(

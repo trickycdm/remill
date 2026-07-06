@@ -34,6 +34,18 @@ describe('FieldView — the read-only render seam (C1)', () => {
     expect(html).not.toContain('<script>');
   });
 
+  it('html (D25): renders VERBATIM — the sanctioned trusted-HTML exception', () => {
+    const html = renderView(
+      { key: 'f', type: 'html' },
+      '<svg viewBox="0 0 1 1"></svg><script src="/vendor/chart.umd.js"></script>',
+    );
+    expect(html).toContain('class="rm-html"');
+    expect(html).toContain('<svg viewBox="0 0 1 1">');
+    expect(html).toContain('<script src="/vendor/chart.umd.js">');
+    // …while markdown stays sanitized (the exception is scoped to the html type).
+    expect(renderView({ key: 'f', type: 'markdown' }, '<script>x</script>')).not.toContain('<script>');
+  });
+
   it('relation: renders expanded title links, public vs admin URLs', () => {
     const field: FieldDescriptor = { key: 'f', type: 'relation', config: { collection: 'authors' } };
     const expanded = { id: 'doc_a', title: 'Ada', collection: 'authors' };

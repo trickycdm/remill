@@ -24,6 +24,7 @@ function toDomain(row: Row): CollectionDefinition {
     fields: JSON.parse(row.fieldsJson || '[]') as FieldDescriptor[],
     workflow: row.workflowJson ? JSON.parse(row.workflowJson) : undefined,
     access: row.accessJson ? JSON.parse(row.accessJson) : undefined,
+    renderMode: (row.renderMode as CollectionDefinition['renderMode']) ?? undefined,
     protected: row.protected === 1,
   };
 }
@@ -54,6 +55,7 @@ export async function insertCollection(
     fieldsJson: JSON.stringify(def.fields),
     workflowJson: def.workflow ? JSON.stringify(def.workflow) : null,
     accessJson: def.access ? JSON.stringify(def.access) : null,
+    renderMode: def.renderMode ?? null,
     protected: def.protected ? 1 : 0,
     createdAt: now,
     updatedAt: now,
@@ -75,6 +77,7 @@ export async function updateCollectionRow(
       fieldsJson: JSON.stringify(def.fields),
       workflowJson: def.workflow ? JSON.stringify(def.workflow) : null,
       accessJson: def.access ? JSON.stringify(def.access) : null,
+      renderMode: def.renderMode ?? null,
       updatedAt: now,
     })
     .where(eq(collections.slug, slug));

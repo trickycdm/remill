@@ -16,6 +16,20 @@ function displayTitleField(def: CollectionDefinition): FieldDescriptor | undefin
   return def.fields.find((f) => f.admin?.showInList) ?? def.fields[0];
 }
 
+/**
+ * Raw-mode page body (D27): when the collection opted into `renderMode: 'raw'`,
+ * the FIRST `html` field IS the standalone page (the author brings the whole
+ * document — no shell, no design-system CSS). Returns null when the collection
+ * is shell-mode or the value is empty — callers fall back to the shell render
+ * so a published page is never blank.
+ */
+export function rawPageHtml(def: CollectionDefinition, doc: ExpandedDocument): string | null {
+  if (def.renderMode !== 'raw') return null;
+  const htmlField = def.fields.find((f) => f.type === 'html');
+  const page = htmlField ? doc.data[htmlField.key] : undefined;
+  return typeof page === 'string' && page.trim() ? page : null;
+}
+
 export function DocumentView({
   def,
   doc,
@@ -48,7 +62,7 @@ export function DocumentView({
       </header>
 
       {rest.map((field) =>
-        field.type === 'markdown' ? (
+        field.type === 'markdown' || field.type === 'html' ? (
           // Body content renders bare — a labelled chrome around prose reads
           // like a form, not a page.
           <FieldView field={field} value={doc.data[field.key]} surface={surface} />

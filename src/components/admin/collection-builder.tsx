@@ -138,6 +138,7 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
           ? { lifecycle: 'none' }
           : undefined,
     access: 'access_public_read' in body ? { publicRead: true } : undefined,
+    renderMode: firstString(body.render_mode) === 'raw' ? 'raw' : undefined,
   };
 }
 
@@ -496,6 +497,20 @@ export function CollectionBuilder({
             <Toggle name="access_public_read" checked={def?.access?.publicRead} />
             Public read access
           </label>
+          <FormField
+            fieldId="col-render-mode"
+            label="Public rendering"
+            description="Branded page renders inside the site shell; raw HTML page serves the first html field as a standalone document (needs an html field)."
+          >
+            <Select id="col-render-mode" name="render_mode">
+              <option value="shell" selected={def?.renderMode !== 'raw'}>
+                Branded page (shell)
+              </option>
+              <option value="raw" selected={def?.renderMode === 'raw'}>
+                Raw HTML page
+              </option>
+            </Select>
+          </FormField>
         </fieldset>
       </div>
 

@@ -58,6 +58,12 @@ export interface CollectionDefinition {
   // permissions live in `role_permissions` (the authorizer's single source);
   // an inline role→action map is rejected on write (see collections service).
   readonly access?: { readonly publicRead?: boolean };
+  /** How the public routes render documents (D27). Default/absent = 'shell'
+   *  (branded PublicShell). 'raw' = the collection's FIRST `html` field IS the
+   *  page — returned as a full standalone document (no shell, no design-system
+   *  CSS); requires at least one html field; an empty value falls back to the
+   *  shell so a published page is never blank. */
+  readonly renderMode?: 'shell' | 'raw';
   readonly protected?: boolean;
 }
 

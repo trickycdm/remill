@@ -129,6 +129,15 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
       }
     }
   }
+  if (input.renderMode !== undefined) {
+    if (input.renderMode !== 'shell' && input.renderMode !== 'raw') {
+      issues.push({ path: 'renderMode', message: "renderMode must be 'shell' or 'raw'." });
+    } else if (input.renderMode === 'raw' && !(input.fields ?? []).some((f) => f.type === 'html')) {
+      // In raw mode the FIRST html field IS the page (D27) — without one there
+      // is nothing to render.
+      issues.push({ path: 'renderMode', message: "renderMode 'raw' requires at least one 'html' field." });
+    }
+  }
 
   if (issues.length) throw new InputValidationError(issues, 'Invalid collection definition');
 
@@ -139,6 +148,7 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     fields: input.fields,
     workflow: input.workflow,
     access: input.access,
+    renderMode: input.renderMode,
     protected: input.protected ?? false,
   };
 }
