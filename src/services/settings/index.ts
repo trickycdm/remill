@@ -28,6 +28,11 @@ export interface SiteSettings {
   readonly dateFormat?: string;
   readonly defaultPageSize?: number;
   readonly logo?: string;
+  /** Sender for outgoing mail (D20). Overrides env.EMAIL_FROM when set. */
+  readonly emailFrom?: string;
+  /** Widens the PUBLIC-page CSP to allow whitelisted CDN script hosts (D27).
+   *  Default false; admin/API/MCP/auth stay strict regardless. */
+  readonly allowCdnScripts?: boolean;
 }
 
 /** Coerce a raw JSON value to a trimmed non-empty string, else undefined. */
@@ -52,5 +57,7 @@ export async function getSettings(db: Database): Promise<SiteSettings> {
     dateFormat: str(data.dateFormat),
     defaultPageSize: pageSize,
     logo: str(data.logo),
+    emailFrom: str(data.emailFrom),
+    allowCdnScripts: data.allowCdnScripts === true,
   };
 }

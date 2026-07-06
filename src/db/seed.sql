@@ -54,13 +54,21 @@ VALUES (
   'settings',
   'Settings',
   'singleton',
-  '[{"key":"siteName","type":"text","required":true,"label":"Site name","admin":{"showInList":true}},{"key":"siteDescription","type":"text","label":"Site description"},{"key":"siteUrl","type":"text","label":"Site URL"},{"key":"defaultAuthorName","type":"text","label":"Default author name","admin":{"help":"Optional byline convention for authored content; irrelevant for record-like data."}},{"key":"timezone","type":"text","label":"Timezone","admin":{"placeholder":"UTC","help":"IANA name, e.g. UTC or America/New_York."}},{"key":"dateFormat","type":"select","label":"Date format","config":{"options":[{"value":"iso","label":"2026-07-05"},{"value":"long","label":"July 5, 2026"},{"value":"short","label":"Jul 5, 2026"}]}},{"key":"defaultPageSize","type":"number","label":"Default list page size"},{"key":"logo","type":"media","label":"Logo","admin":{"help":"Upload in the Media library, then paste its id."}}]',
+  '[{"key":"siteName","type":"text","required":true,"label":"Site name","admin":{"showInList":true}},{"key":"siteDescription","type":"text","label":"Site description"},{"key":"siteUrl","type":"text","label":"Site URL"},{"key":"emailFrom","type":"text","label":"Email from address","admin":{"help":"Verified sender for outgoing mail (share links, invites), e.g. bot@colmack.com. Overrides the EMAIL_FROM environment variable."}},{"key":"allowCdnScripts","type":"boolean","label":"Allow CDN scripts on public pages","admin":{"help":"WARNING: lets published HTML pages load scripts from cdn.jsdelivr.net and unpkg.com. This weakens the public-page CSP - leave OFF unless a page needs an external library. Admin pages are unaffected."}},{"key":"defaultAuthorName","type":"text","label":"Default author name","admin":{"help":"Optional byline convention for authored content; irrelevant for record-like data."}},{"key":"timezone","type":"text","label":"Timezone","admin":{"placeholder":"UTC","help":"IANA name, e.g. UTC or America/New_York."}},{"key":"dateFormat","type":"select","label":"Date format","config":{"options":[{"value":"iso","label":"2026-07-05"},{"value":"long","label":"July 5, 2026"},{"value":"short","label":"Jul 5, 2026"}]}},{"key":"defaultPageSize","type":"number","label":"Default list page size"},{"key":"logo","type":"media","label":"Logo","admin":{"help":"Upload in the Media library, then paste its id."}}]',
   NULL,
   NULL,
   1,
   '2026-07-04T00:00:00Z',
   '2026-07-04T00:00:00Z'
 );
+
+
+-- Existing installs: INSERT OR IGNORE leaves an existing settings row untouched,
+-- so new settings FIELDS are appended here idempotently (guarded by a LIKE probe).
+UPDATE collections SET fields_json = json_insert(fields_json, '$[#]', json('{"key":"emailFrom","type":"text","label":"Email from address","admin":{"help":"Verified sender for outgoing mail (share links, invites), e.g. bot@colmack.com. Overrides the EMAIL_FROM environment variable."}}'))
+WHERE slug = 'settings' AND fields_json NOT LIKE '%"emailFrom"%';
+UPDATE collections SET fields_json = json_insert(fields_json, '$[#]', json('{"key":"allowCdnScripts","type":"boolean","label":"Allow CDN scripts on public pages","admin":{"help":"WARNING: lets published HTML pages load scripts from cdn.jsdelivr.net and unpkg.com. This weakens the public-page CSP - leave OFF unless a page needs an external library. Admin pages are unaffected."}}'))
+WHERE slug = 'settings' AND fields_json NOT LIKE '%"allowCdnScripts"%';
 
 -- ---------------------------------------------------------------------------
 -- `media` — collection, protected. Editable metadata for uploaded assets;

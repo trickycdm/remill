@@ -147,7 +147,7 @@ export function SharePanel({
           <FormField
             fieldId={`share-link-email-${id}`}
             label="Share by link (optionally email it)"
-            description="Creates a read-only link anyone can open — no account needed. Email delivery is stubbed (logged, not sent)."
+            description="Creates a read-only link anyone can open — no account needed. Emailed too, if delivery is configured."
           >
             <Input id={`share-link-email-${id}`} name="email" type="email" placeholder="someone@example.com (optional)" />
           </FormField>

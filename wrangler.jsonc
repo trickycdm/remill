@@ -13,8 +13,13 @@
       "invocation_logs": true
     }
   },
+  // BASE_URL feeds resolveBaseUrl (share/join/email links + OpenAPI); it must
+  // match where the app is actually reachable. Local dev + the e2e preview both
+  // serve on 127.0.0.1:3100. EMAIL_FROM is the deploy-time default sender;
+  // settings.emailFrom (admin Settings) overrides it. The Resend key is a
+  // SECRET, never a var: `wrangler secret put RESEND_API_KEY` (local: .dev.vars).
   "vars": {
-    "BASE_URL": "http://localhost:3000"
+    "BASE_URL": "http://127.0.0.1:3100"
   },
   "d1_databases": [
     {

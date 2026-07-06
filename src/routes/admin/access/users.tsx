@@ -7,6 +7,7 @@ import { createUser } from '@/services/access';
 import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { getEmailTransport } from '@/lib/email';
+import { inviteEmail } from '@/lib/email/templates';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Card, CardContent, Button } from '@/components/ui';
@@ -40,14 +41,12 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   // Direct-password path: the person can sign in immediately.
   if (!inviteToken) return c.redirect('/admin/access', 303);
 
-  // Invite path: build the set-password link, "send" it (stubbed transport), and
-  // surface it once so the admin can hand it over locally without real email.
-  const link = `${resolveBaseUrl(c.env, await getSettings(db), c.req.url)}/auth/set-password/${inviteToken}`;
-  await getEmailTransport(c.env).send({
-    to: String(body.email ?? ''),
-    subject: 'Your remill invitation',
-    html: `<p>You've been invited to remill. Set your password:</p><p><a href="${link}">${link}</a></p>`,
-  });
+  // Invite path: build the set-password link, send it (real or stubbed by
+  // config), and surface it once so the admin can hand it over directly.
+  const settings = await getSettings(db);
+  const link = `${resolveBaseUrl(c.env, settings, c.req.url)}/auth/set-password/${inviteToken}`;
+  const transport = getEmailTransport(c.env, settings);
+  await transport.send({ to: String(body.email ?? ''), ...inviteEmail({ link, siteName: settings.siteName }) });
 
   const user = getUser(c);
   return c.render(
@@ -56,8 +55,9 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
       <Card>
         <CardContent class="pt-6">
           <p class="mb-3 text-sm text-ink-muted">
-            An invite email was queued (delivery is stubbed in this build). This single-use link expires in 7 days;
-            copy it now if you want to share it directly.
+            {transport.kind === 'resend'
+              ? 'An invite email was sent. This single-use link expires in 7 days; copy it now if you also want to share it directly.'
+              : 'An invite email was queued (delivery is stubbed in this build). This single-use link expires in 7 days; copy it now if you want to share it directly.'}
           </p>
           <code class="block overflow-x-auto rounded-md bg-hover px-4 py-3 font-mono text-sm break-all">{link}</code>
           <div class="mt-5">

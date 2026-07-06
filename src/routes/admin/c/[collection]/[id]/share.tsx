@@ -8,6 +8,7 @@ import { grantItem, revokeItem, createShareLink } from '@/services/access';
 import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { getEmailTransport } from '@/lib/email';
+import { shareNotificationEmail } from '@/lib/email/templates';
 import type { Action } from '@/access';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
@@ -49,15 +50,12 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
       },
       now,
     );
-    const url = `${resolveBaseUrl(c.env, await getSettings(db), c.req.url)}/s/${token}`;
+    const settings = await getSettings(db);
+    const url = `${resolveBaseUrl(c.env, settings, c.req.url)}/s/${token}`;
     const email = String(body.email ?? '').trim();
+    const transport = getEmailTransport(c.env, settings);
     if (email) {
-      await getEmailTransport(c.env).send({
-        to: email,
-        subject: 'A document was shared with you',
-        html: `<p>You have been given read access to a document:</p><p><a href="${url}">${url}</a></p>`,
-        text: url,
-      });
+      await transport.send({ to: email, ...shareNotificationEmail({ url, siteName: settings.siteName }) });
     }
     // The plaintext token exists only in THIS response (its hash is what's
     // stored), so render the link once — a redirect would lose it.
@@ -75,10 +73,16 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
             </p>
             <Input type="text" value={url} readonly aria-label="Share link URL" data-on:focus="evt.target.select()" />
             {email ? (
-              <p class="text-sm text-ink-muted">
-                An email to <strong>{email}</strong> was handed to the transport — currently the
-                console stub, which logs instead of sending. Share the link above directly.
-              </p>
+              transport.kind === 'resend' ? (
+                <p class="text-sm text-ink-muted">
+                  An email with this link was sent to <strong>{email}</strong>.
+                </p>
+              ) : (
+                <p class="text-sm text-ink-muted">
+                  An email to <strong>{email}</strong> was handed to the transport — currently the
+                  console stub, which logs instead of sending. Share the link above directly.
+                </p>
+              )
             ) : null}
             <div>
               <Button href={back} variant="secondary" size="sm">

@@ -8,6 +8,7 @@ import * as access from '@/services/access';
 import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { getEmailTransport } from '@/lib/email';
+import { teamJoinEmail } from '@/lib/email/templates';
 import { personaOf, PERSONA_LABEL } from '@/lib/persona';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Card, CardContent, Badge, Input, Button, FormField, Breadcrumb, Select, EmptyState } from '@/components/ui';
@@ -250,19 +251,23 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
     );
 
     const team = (await access.listTeams(db)).find((t) => t.id === teamId);
-    const base = resolveBaseUrl(c.env, await getSettings(db), c.req.url);
-    const link = `${base}/auth/join/${token}`;
+    const settings = await getSettings(db);
+    const link = `${resolveBaseUrl(c.env, settings, c.req.url)}/auth/join/${token}`;
 
     const email = String(body.email ?? '').trim();
+    const transport = getEmailTransport(c.env, settings);
     if (email) {
-      await getEmailTransport(c.env).send({
+      await transport.send({
         to: email,
-        subject: `You're invited to join ${team?.name ?? 'a team'} on remill`,
-        html: `<p>You've been invited to join <strong>${team?.name ?? 'a team'}</strong>. Create your account:</p><p><a href="${link}">${link}</a></p>`,
-        text: link,
+        ...teamJoinEmail({ link, teamName: team?.name ?? 'a team', siteName: settings.siteName }),
       });
     }
 
+    const emailNote = email
+      ? transport.kind === 'resend'
+        ? ` — it was emailed to ${email}`
+        : ` — the email to ${email} was stubbed (logged, not sent), so share it directly`
+      : '';
     const user = getUser(c);
     return c.render(
       <AdminShell user={user} current="access">
@@ -271,7 +276,7 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
           <CardContent class="pt-6">
             <p class="mb-3 text-sm text-ink-muted">
               Anyone with this link can create an account on {team?.name ? `the "${team.name}" team` : 'this team'} until it
-              expires{email ? ` — it was also emailed to ${email}` : ''}. Copy it now; only its hash is stored.
+              expires{emailNote}. Copy it now; only its hash is stored.
             </p>
             <code class="block overflow-x-auto rounded-md bg-hover px-4 py-3 font-mono text-sm break-all">{link}</code>
             <div class="mt-5">
