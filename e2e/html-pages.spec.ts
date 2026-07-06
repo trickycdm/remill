@@ -5,6 +5,11 @@ import { loginAsAdmin } from './helpers/auth';
 // this file separately from the others.
 test.use({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.88' } });
 
+// Serial retries re-run the whole group in a FRESH worker against the SAME D1
+// state — unique-per-attempt names keep re-creates from colliding.
+const RUN = Date.now().toString(36);
+const SLUG = `pages-${RUN}`;
+
 const PAGE_HTML = `<!doctype html>
 <html>
 <head><title>Q3 metrics</title></head>
@@ -33,7 +38,7 @@ test.describe.serial('HTML pages — raw renderMode, vendored charts, CSP toggle
 
     await page.goto('/admin/collections/new');
     await page.getByLabel(/^Name/).fill('Pages');
-    await page.getByLabel(/^Slug/).fill('pages');
+    await page.getByLabel(/^Slug/).fill(SLUG);
     await page.getByLabel('Public read access').check();
     await page.getByLabel('Public rendering').selectOption('raw');
     await page.getByLabel('Key for field 1', { exact: true }).fill('title');
@@ -42,19 +47,18 @@ test.describe.serial('HTML pages — raw renderMode, vendored charts, CSP toggle
     await page.getByLabel('Key for field 2', { exact: true }).fill('page');
     await page.getByLabel('Type for field 2', { exact: true }).selectOption('html');
     await page.getByRole('button', { name: /Create collection/i }).click();
-    await page.waitForURL(/\/admin\/collections\/pages$/);
+    await page.waitForURL(new RegExp(`/admin/collections/${SLUG}$`));
 
-    await page.goto('/admin/c/pages/new');
-    await page.getByLabel(/^title/).fill('Q3 metrics');
-    await page.getByLabel(/^page/).fill(PAGE_HTML);
+    await page.goto(`/admin/c/${SLUG}/new`);
+    await page.getByLabel(/^title/i).fill('Q3 metrics');
+    await page.getByLabel(/^page/i).fill(PAGE_HTML);
     await page.getByRole('button', { name: /Create /i }).click();
-    await page.waitForURL(/\/admin\/c\/pages\/doc_/);
+    await page.waitForURL(new RegExp(`/admin/c/${SLUG}/doc_`));
     const id = page.url().match(/(doc_[A-Za-z0-9_-]+)/)?.[1];
     expect(id).toBeTruthy();
 
-    // Born published (publish-immediately lifecycle) → publish button may exist
-    // for draft workflows only; ensure the doc is published for the public read.
-    pageUrl = `/pages/${id}`;
+    // Publish-immediately lifecycle → the doc is born published.
+    pageUrl = `/${SLUG}/${id}`;
   });
 
   test('an anonymous visitor gets the FULL-BLEED page and the vendored chart executes', async ({ browser }) => {
@@ -62,9 +66,11 @@ test.describe.serial('HTML pages — raw renderMode, vendored charts, CSP toggle
     const page = await context.newPage();
     await page.goto(pageUrl);
 
-    // Raw mode: the author's document, not the branded shell.
+    // Raw mode: the author's document, not the branded shell (no masthead
+    // header, no #main-content shell landmark).
     await expect(page.locator('#raw-title')).toHaveText('Quarterly metrics');
-    await expect(page.locator('header.rm-masthead, [class*=masthead]')).toHaveCount(0);
+    await expect(page.locator('#main-content')).toHaveCount(0);
+    await expect(page.locator('header')).toHaveCount(0);
 
     // The vendored Chart.js loaded same-origin and RAN under the strict CSP.
     await page.waitForFunction(() => typeof (window as { Chart?: unknown }).Chart === 'function');

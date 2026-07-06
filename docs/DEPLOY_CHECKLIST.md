@@ -15,14 +15,27 @@
 - [ ] **`SESSION_SECRET`** — set as a Worker secret (`wrangler secret put SESSION_SECRET`), ≥32 chars,
       generated with `openssl rand -hex 32`. Not in `wrangler.jsonc`; read at runtime by the session
       middleware.
+- [ ] **Email via Resend (D20)** — `wrangler secret put RESEND_API_KEY` (local: `.dev.vars`; never
+      committed). Set a From address: `settings.emailFrom` (admin Settings) takes precedence over the
+      `EMAIL_FROM` var, and it MUST be a Resend-verified domain sender. Without key + From the
+      console stub is used (links still shown on-screen). **ROTATE any key that transited an
+      insecure channel.**
+- [ ] **`BASE_URL` var must match the real public origin** — share/join/email links are minted from
+      `resolveBaseUrl` (`env.BASE_URL` > `settings.siteUrl` > request origin), so a wrong `BASE_URL`
+      mints wrong links.
 
 ## Database migration + seed
 
-- [ ] **Apply migrations remotely** — `bun run db:migrate:remote`. Includes `0003` (DB-backed `unique`
-      enforcement: `unique_key` column + partial unique indexes), `0004` (`principals.subtype` persona
-      column + backfill), and `0005` (`invite_tokens` — single-use, expiring set-password links).
+- [ ] **Apply migrations remotely** — `bun run db:migrate:remote`. Migrations now run `0000`–`0006`:
+      includes `0003` (DB-backed `unique` enforcement: `unique_key` column + partial unique indexes),
+      `0004` (`principals.subtype` persona column + backfill), `0005` (`invite_tokens` — single-use,
+      expiring set-password links), and `0006` (`teams` / `team_members` / `team_invites` — D24).
 - [ ] **Seed system data** — `bun run db:seed:remote` (roles/permissions + protected `settings`/`media`
       collections). Contains NO credentials (safe for prod, C1).
+- [ ] **Re-seed after deploying sharing-fabric v2** — `bun run db:seed:remote` (idempotent): brings
+      the new `share_link` `role_permissions` rows (admin + editor) AND the `emailFrom` /
+      `allowCdnScripts` settings-field backfills (guarded `json_insert` UPDATEs, safe on
+      already-seeded installs). Local devs run `bun run db:seed` once.
 - [ ] **Bootstrap the first admin (C1)** — out of band, NOT via the seed:
       `ADMIN_BOOTSTRAP_EMAIL=you@site.com ADMIN_BOOTSTRAP_PASSWORD='…≥16 chars…' bun run db:bootstrap:remote`
       (omit the password to auto-generate + print one once). The script refuses weak/known passwords
@@ -65,4 +78,4 @@
       `wrangler deploy`).
 
 ---
-_Last updated: 2026-07-05 (after the 29-finding review remediation)._
+_Last updated: 2026-07-06 (after sharing-fabric v2 — teams, share links, Resend, HTML pages)._

@@ -6,7 +6,12 @@ import { loginAsAdmin } from './helpers/auth';
 const SPEC_IP = '203.0.113.77';
 test.use({ extraHTTPHeaders: { 'CF-Connecting-IP': SPEC_IP } });
 
-const STU_EMAIL = 'stu@e2e.local';
+// Serial retries re-run the whole group in a FRESH worker against the SAME D1
+// state — unique-per-attempt names keep re-creates from colliding.
+const RUN = Date.now().toString(36);
+const TEAM = `Tech team ${RUN}`;
+const MEMOS = `memos-${RUN}`;
+const STU_EMAIL = `stu-${RUN}@e2e.local`;
 const STU_PASSWORD = 'stu-password-1';
 
 // Teams (D24) end to end through the real UI: create a team, mint a join link,
@@ -19,11 +24,11 @@ test.describe.serial('Teams — join links, team grants, shared-with-me', () => 
   test('admin creates a team and mints a join link (shown once)', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/access/teams');
-    await page.getByLabel(/^Name/).fill('Tech team');
+    await page.getByLabel(/^Name/).fill(TEAM);
     await page.getByLabel(/^Description/).fill('e2e team');
     await page.getByRole('button', { name: /Create team/i }).click();
     await page.waitForURL('**/admin/access/teams');
-    await expect(page.getByText('Tech team')).toBeVisible();
+    await expect(page.getByText(TEAM, { exact: true }).first()).toBeVisible();
 
     // Mint a join link with the reader preset (the default).
     await page.getByRole('button', { name: /Mint join link/i }).click();
@@ -57,30 +62,30 @@ test.describe.serial('Teams — join links, team grants, shared-with-me', () => 
 
     // Stu appears as a member of the team (joined via the link).
     await page.goto('/admin/access/teams');
-    await expect(page.getByRole('button', { name: /Remove Stu from Tech team/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: new RegExp(`Remove Stu from ${TEAM}`, 'i') })).toBeVisible();
 
     // A fresh collection + draft doc, shared to the team from the edit view.
     await page.goto('/admin/collections/new');
     await page.getByLabel(/^Name/).fill('Memos');
-    await page.getByLabel(/^Slug/).fill('memos');
+    await page.getByLabel(/^Slug/).fill(MEMOS);
     await page.getByLabel('Key for field 1', { exact: true }).fill('title');
     await page.getByLabel('Indexed for field 1', { exact: true }).check();
     await page.getByRole('button', { name: /Create collection/i }).click();
-    await page.waitForURL(/\/admin\/collections\/memos$/);
+    await page.waitForURL(new RegExp(`/admin/collections/${MEMOS}$`));
 
-    await page.goto('/admin/c/memos/new');
-    await page.getByLabel(/^title/).fill('Quarterly architecture memo');
+    await page.goto(`/admin/c/${MEMOS}/new`);
+    await page.getByLabel(/^title/i).fill('Quarterly architecture memo');
     await page.getByRole('button', { name: /Create /i }).click();
-    await page.waitForURL(/\/admin\/c\/memos\/doc_/);
+    await page.waitForURL(new RegExp(`/admin/c/${MEMOS}/doc_`));
 
     // Share panel: pick the team subject (read is pre-checked) and grant.
-    await page.getByLabel('Grant to').selectOption({ label: 'Tech team' });
+    await page.getByLabel('Grant to').selectOption({ label: TEAM });
     await page.getByRole('button', { name: /Grant access/i }).click();
-    await expect(page.getByText('team', { exact: true })).toBeVisible();
+    await expect(page.getByText('team', { exact: true }).first()).toBeVisible();
 
     // The matrix shows the team grant with its resolved name.
     await page.goto('/admin/access/matrix');
-    await expect(page.getByText('Tech team').first()).toBeVisible();
+    await expect(page.getByText(TEAM, { exact: true }).first()).toBeVisible();
   });
 
   test('the team member finds the doc under "Shared with me" and can open it', async ({ browser }) => {

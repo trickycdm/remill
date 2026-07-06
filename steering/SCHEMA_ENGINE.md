@@ -1,6 +1,7 @@
 # Schema Engine
 
-> **STATUS: IMPLEMENTED (Phase 2 + Track B).** The registry + 11 field types live in `src/fields/`; the collections
+> **STATUS: IMPLEMENTED (Phase 2 + Track B; sharing fabric v2 added `html` + `renderMode`, D25/D27).**
+> The registry + 12 field types live in `src/fields/`; the collections
 > and documents services in `src/services/`; the witnessed queries in `src/db/queries/`. Surfaces 3–4
 > (admin UI) are composed by the generated admin (Phase 4); surfaces 5–6 (REST/MCP) by Phases 6–7 —
 > the field types already expose the `EditComponent`/`CellComponent`/`jsonSchema` those phases consume.
@@ -42,6 +43,11 @@ FieldType contract against all six surfaces before merging.
   stays load-bearing in the access layer (the `published` condition, publicRead sugar), which is
   exactly why lifecycle-none docs must be born published. Gate on `hasLifecycle(def)`
   (`src/lib/lifecycle.ts`) — never re-derive the rule. `none` + `draftPublish` is rejected on write.
+- **Render mode (D27).** `renderMode: 'shell' | 'raw'` picks the public render for the collection:
+  `shell` (default) wraps `document-view` in the public shell; `raw` serves the **first** `html`
+  field's value verbatim as the whole page (`rawPageHtml(def, doc)`, bypassing the layout) on
+  `/:collection/:slug` and `/s/:token` alike. Validated on write — `raw` requires at least one
+  `html` field — and an empty value falls back to shell rendering.
 
 ## The FieldType contract
 
@@ -49,6 +55,7 @@ FieldType contract against all six surfaces before merging.
 interface FieldType<Config, Value> {
   key: string                    // 'text' | 'markdown' | 'number' | 'boolean' | 'datetime'
                                  // | 'select' | 'media' | 'tags' | 'slug' | 'json' | 'relation'
+                                 // | 'html'
   configSchema: ZodType<Config>  // validates per-field options stored in fields_json
   valueSchema: (cfg: Config) => ZodType<Value>   // (2) one validator for ALL surfaces
   toIndex?: (v: Value) =>                        // (1) promoted to document_index for query/sort;
@@ -87,6 +94,12 @@ Rules:
   renders through the sanitizing renderer (`src/lib/markdown` — raw HTML escaped, dangerous
   protocols stripped; NEVER enable `allowDangerousHtml`); `relation` renders title links (public
   vs admin URLs by `surface`); `media` an `<img>`. Storage always keeps the raw source (D3).
+- **`html`** (`src/fields/html.tsx`, D25) is the trusted-raw-HTML type: its `ViewComponent`
+  renders the value VERBATIM (`dangerouslySetInnerHTML` into `div.rm-html`) — the second
+  sanctioned markup exception after `markdown` (SECURITY_STANDARDS §7). Trust model:
+  collection-level write permission ONLY (the reserved field-level `access` hook stays unused in
+  v1); writable over REST/MCP by design — scope html-bearing collections to trusted roles. The
+  value is length-bounded (SEC-4) and `toIndex` strips tags, so query/sort see text, not markup.
 - Transforms (`beforeSave`/`beforeRender`) must be pure with respect to the context given — no
   reaching into globals, no direct DB access. They receive what they need via ctx.
 - Field-level access control is **deferred post-v1**, but the hook point is reserved: a field
@@ -109,7 +122,8 @@ Rules:
     { "key": "tags",   "type": "tags",      "index": true }
   ],
   "workflow": { "draftPublish": true },     // declarative behaviors, not code hooks
-  "access": { "publicRead": true }          // sugar: anonymous may read published docs
+  "access": { "publicRead": true },         // sugar: anonymous may read published docs
+  "renderMode": "shell"                     // 'shell' (default) | 'raw' — see render mode (D27)
 }
 ```
 

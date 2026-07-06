@@ -20,8 +20,9 @@ rendered public pages + share links.)
 > streamable-HTTP JSON-RPC endpoint, not an `agents`-SDK DO (decision D18). **Tracks B
 > (relations/graph/lifecycle) and C (render/public pages/share links) of
 > [`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md)
-> have also shipped** (B5 composites deferred). Each steering doc carries its own STATUS header;
-> the worklogs have the step-by-step record.
+> have also shipped** (B5 composites deferred), followed by **sharing fabric v2**: teams (D24),
+> agent-mintable share links (D26), Resend email (D20 realized), and raw HTML pages (D25/D27).
+> Each steering doc carries its own STATUS header; the worklogs have the step-by-step record.
 
 ## The one idea
 
@@ -56,7 +57,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
-  Public ──────────▶ /:c/:slug   Rendered pages + /s/:token share links (anonymous)
+  Public ──────────▶ /:c/:slug   Rendered pages (shell or raw HTML, D27) + /s/:token share links (anonymous)
 
   Routes / DOs → Services (src/services/) → Queries (src/db/queries/) → D1
                         ↑
@@ -72,17 +73,23 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **Queries** `src/db/queries/` — the **only** layer importing Drizzle; row↔domain mapping is private
   here; no Drizzle types leak upward.
 - **Fields** `src/fields/` — the FieldType registry; one module per type, including `relation.tsx`
-  (graph edges and backlinks). The most important interface in the codebase (SCHEMA_ENGINE.md).
+  (graph edges and backlinks) and `html.tsx` (D25 trusted raw HTML; powers `renderMode: 'raw'`
+  pages, D27). The most important interface in the codebase (SCHEMA_ENGINE.md).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
   (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
-  invite a person via `users.tsx`, custom roles, token scoping, the `matrix/` overview); item-grant
-  sharing via `src/components/admin/share-panel.tsx`, the `/api/c/:collection/:id/grants` route, and
-  the MCP `share_<slug>` tools; public invite consumption at `src/routes/auth/set-password/[token].tsx`.
+  invite a person via `users.tsx`, custom roles, token scoping, teams — a grant subject kind, D24 —
+  at `/admin/access/teams`, the `matrix/` overview); item-grant sharing via
+  `src/components/admin/share-panel.tsx`, the `/api/c/:collection/:id/grants` route, and the MCP
+  `share_<slug>` tools; the `share_link` action (D26) lets granted agents mint expiring anonymous
+  links over MCP; public invite consumption at `src/routes/auth/set-password/[token].tsx`, team
+  join links at `/auth/join/:token`, "Shared with me" at `/admin/shared`.
 - **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
-  module owning the MCP protocol surface (decision D18).
+  module owning the MCP protocol surface (decision D18). Tools include `share_<slug>`
+  (subjectKind principal|role|team), `share_link_<slug>` (D26), and `list_teams`.
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
-  Person/Service/Agent display persona), `email/` (`EmailTransport` + console stub), `lifecycle.ts`
-  (hasLifecycle), `markdown/` (micromark, sanitized); **`src/components/`** Hono JSX with
+  Person/Service/Agent display persona), `email/` (`EmailTransport` — Resend + styled templates,
+  D20 realized; console stub fallback), `base-url.ts` (resolveBaseUrl for minted links),
+  `lifecycle.ts` (hasLifecycle), `markdown/` (micromark, sanitized); **`src/components/`** Hono JSX with
   `field-view.tsx` (ViewComponent), `document-view.tsx`, `layouts/public-shell.tsx` (read-only
   render); **`src/client/`** browser islands.
 
@@ -96,6 +103,8 @@ everything) while structurally eliminating its security holes. Every write path 
 runs through **one whitelist-validated, `authorize()`-gated pipeline**. Undeclared fields are rejected
 (anti-mass-assignment). Humans and agents are both **principals**; agents are identities with their own
 tokens, roles, and audit trail — never shared keys. Default-deny, additive-only, everything audited.
+(One documented trusted exception: the `html` field type renders verbatim markup — D25,
+SECURITY_STANDARDS §7.)
 See [`steering/SECURITY_STANDARDS.md`](steering/SECURITY_STANDARDS.md) and
 [`steering/ACCESS_CONTROL.md`](steering/ACCESS_CONTROL.md).
 
@@ -139,5 +148,5 @@ When a rule here conflicts with existing code, flag it — the doc is usually ri
 
 Background context in `docs/`, read on demand: `docs/PROJECT_BRIEF.md` (the whole-system overview —
 scope, the six surfaces, the Blogmill lineage, current state & direction) and `docs/TECH_DECISIONS.md`
-(the D1–D23 decision log). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
+(the D1–D27 decision log). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
 the **active roadmap** (Tracks A–C) in `plans/2026-07-05-platform_knowledge_publishing_roadmap/`.

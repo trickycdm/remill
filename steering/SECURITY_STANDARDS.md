@@ -1,8 +1,9 @@
 # Security Standards
 
 > **STATUS: IMPLEMENTED (in force).** The built system enforces these standards — sessions + scrypt,
-> hashed scope-masked tokens, the one whitelist-validated pipeline, and the invite flow (single-use
-> expiring set-password tokens + the console `EmailTransport` stub) are live code. The Blogmill holes
+> hashed scope-masked tokens, the one whitelist-validated pipeline, the invite flow (single-use
+> expiring set-password tokens), Resend email delivery behind `EmailTransport` (D20 realized), and
+> the per-surface CSP fork (D27) are live code. The Blogmill holes
 > named below are the reason each rule exists — remill's mandate is to make them *structurally
 > impossible*, not merely avoided (success criterion §5 of the brief).
 
@@ -34,8 +35,10 @@ closes one of those, or a class like it. New code must comply; fix violations as
   `rmk_` bearer key), 32 bytes of Web-Crypto entropy, SHA-256-hashed at rest (the hash is the
   grant's `subjectId`), plaintext rendered exactly once at mint. Resolution returns the same null
   for unknown/expired/revoked (no enumeration oracle), and consumption still runs through
-  `authorize()` — the token is a credential, not a bypass. Minting is human-only
-  (`refuseAgentEscalation`) and `manage_access`-gated per document.
+  `authorize()` — the token is a credential, not a bypass. Minting is gated per document by the
+  `share_link` action (D26) — separately grantable, NOT agent-refused — so an agent may mint
+  expiring read-only links when a human grants it that capability; identity/role/token mutations
+  (`assignRole`, `issueToken`, `createUser`, `createAgent`, team CRUD) still refuse agents.
 
 ## 1. Whitelist validation on EVERY write path (the anti-mass-assignment rule)
 
@@ -87,10 +90,20 @@ onto the record — any field an attacker named got written. remill's fix, from 
   **unusable random hash** stored, so login is impossible until they set one. A missing/expired/consumed
   token must be indistinguishable to the client (no enumeration oracle). Creating an invite requires
   `manage_access` and refuses agents (SEC-8).
-- **Email delivery is stubbed** (`src/lib/email/`): the `ConsoleEmailTransport` does not send and logs
-  only redacted metadata (recipient *domain*, subject) — never the address, body, or link/token (PII
-  discipline). The actionable link is surfaced once on-screen to the authenticated admin. A real
-  provider is selected in `getEmailTransport` later; callers depend only on the `EmailTransport` interface.
+- **Team join links (D24) follow the same invite-token discipline** with two deliberate deltas:
+  `rmj_`-prefixed, hashed at rest, plaintext shown once — but **multi-use** (optional `maxUses`)
+  and expiry **required** (clamped ≤90 days), with a validated role preset (never `anonymous`).
+  Acceptance (`/auth/join/:token`) is un-gated — the token IS the credential — and rate-limited at
+  the login tier; an existing email raises `ConflictError`, never a silent account attach. Team
+  creation/membership/invite management requires `manage_access` and refuses agents (SEC-8).
+- **Email delivery (D20 realized):** `getEmailTransport(env, settings)` selects the
+  `ResendEmailTransport` (plain fetch POST to the Resend API, Bearer `RESEND_API_KEY`) when a key
+  and a From address exist — From precedence `settings.emailFrom` > `env.EMAIL_FROM`. The
+  `ConsoleEmailTransport` stub remains the keyless/test default; it does not send and logs only
+  redacted metadata (recipient *domain*, subject) — never the address, body, or link/token (PII
+  discipline). Sends are **log-and-never-throw**: the actionable link is always also surfaced
+  on-screen, so delivery failure never blocks a flow. Templates (`src/lib/email/templates.ts`) are
+  inline-CSS with every interpolation escaped. Callers depend only on the `EmailTransport` interface.
 - **Changing a password verifies the CURRENT password first** (`verifyPassword`, constant-time), and
   rejects a mismatch with a **generic** message — never reveal whether the account or the password was
   wrong. Enforce a minimum length, then re-hash. A change email/password path is scoped to the session
@@ -100,7 +113,9 @@ onto the record — any field an attacker named got written. remill's fix, from 
 ## 5. Secrets
 
 - **No secrets in source.** Managed as Worker bindings via `wrangler secret put <NAME>`; local dev via
-  a gitignored `.dev.vars` (copy from `.dev.vars.example`). At minimum `SESSION_SECRET` (≥32 chars).
+  a gitignored `.dev.vars` (copy from `.dev.vars.example`). At minimum `SESSION_SECRET` (≥32 chars);
+  `RESEND_API_KEY` (email, D20) follows the same rule — `.dev.vars` locally, `wrangler secret put`
+  in prod, never committed.
 - Never embed a secret in rendered HTML or a log line. There is no client-bundle secret convention —
   any value reaching the browser is server-rendered or a non-secret data attribute.
 
@@ -118,7 +133,13 @@ onto the record — any field an attacker named got written. remill's fix, from 
   HTML strings from user content.
 - **Markdown** content is parsed server-side and **sanitised** before rendering (agents and untrusted
   users author Markdown). Never render raw user Markdown as HTML.
-- **The only sanctioned `dangerouslySetInnerHTML`** is `jsonForScript` (`src/lib/json-for-script.ts`)
+- **The `html` field type (D25) is the SECOND sanctioned raw-markup exception** (the first is
+  markdown, which sanitizes via micromark): `src/fields/html.tsx` renders its value VERBATIM via
+  `dangerouslySetInnerHTML` into `div.rm-html`. Its trust model is **collection-level write
+  permission only** (field-level access remains reserved, v1) — the field is writable over
+  REST/MCP **by design**, so scope html-bearing collections to trusted roles. Do not add a third
+  exception without a decision-log entry.
+- Outside those two field types, **the only sanctioned `dangerouslySetInnerHTML`** is `jsonForScript` (`src/lib/json-for-script.ts`)
   for `data-signals` / bootstrap payloads — it escapes for safe inline embedding. Never
   hand-concatenate user-controlled values into a `<script>` or a `data-on:*` expression.
 
@@ -126,13 +147,21 @@ onto the record — any field an attacker named got written. remill's fix, from 
 
 - Set security headers on all responses: `Strict-Transport-Security`, `X-Frame-Options: DENY`,
   `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a
-  Content-Security-Policy. The real policy (`src/main.tsx`) is
+  Content-Security-Policy. The real policy (`src/middleware/security-headers.ts`) is
   `script-src 'self' 'unsafe-inline' 'unsafe-eval'`. **`'unsafe-eval'` is a required, justified
   exception, not an oversight:** Datastar v1 compiles its `data-*` attribute expressions with the
   `Function` constructor, which CSP classifies as eval — the admin cannot run without it. `'unsafe-inline'`
   covers the theme-init snippet and the `data-signals` bootstrap. Datastar is **vendored same-origin
   (`'self'`), not loaded from a CDN.** `style-src 'self' 'unsafe-inline'` covers Tailwind; media serving
   uses `img-src 'self' data:` (publicRead assets are additionally designed for cross-origin embedding).
+- **The CSP is forked per surface (D27)** in `src/middleware/security-headers.ts`:
+  `PROTECTED_PREFIXES` (`/admin`, `/api`, `/mcp`, `/auth`, `/media`) always get the strict policy;
+  public paths widen `script-src` to exactly `https://cdn.jsdelivr.net` + `https://unpkg.com` and
+  ONLY while the `allowCdnScripts` settings toggle (default off, warning help copy) is on —
+  decided by one un-gated `getSettings` PK read per public request. **Classifier caveat: it is
+  prefix-based** — any new top-level protected route MUST be added to `PROTECTED_PREFIXES` or it
+  silently gets the public policy. Chart.js is vendored at `public/vendor/chart.umd.js` (served
+  under `'self'`), so charts work with the toggle OFF.
 - **SEC-5 — public collection discovery is a deliberate, bounded exception** to the no-enumeration
   posture: discovery stays public (remill is agent-native), but an unauthenticated or unprivileged
   caller receives a **public-safe projection** that omits the internal `access`/`workflow` config —

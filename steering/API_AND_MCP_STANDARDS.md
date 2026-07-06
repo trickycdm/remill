@@ -6,7 +6,8 @@
 > `api-auth.ts` (bearer/scope resolution), `src/lib/openapi.ts` (generated OpenAPI 3.1). The list
 > filter/sort over `document_index` lives in `src/db/queries/documents.ts` + the documents service.
 > MCP code: `src/mcp/tools.ts` (permission-filtered tool generation), `src/mcp/handler.ts` (JSON-RPC
-> dispatch), `src/routes/mcp.tsx`.
+> dispatch), `src/routes/mcp.tsx`. Sharing fabric v2 added team subjects, `share_link_<slug>`, and
+> `list_teams` (D24/D26).
 >
 > **MCP transport deviation from D10 (deliberate, per §8):** the plan specified an `McpAgent` on a
 > Durable Object via the Cloudflare `agents` SDK. We instead serve MCP as a direct streamable-HTTP
@@ -85,12 +86,22 @@ tokens** as REST.
 - **Tools are generated per collection** from field descriptors (surface 6), not hand-listed:
   - Per collection: `list_<slug>`, `get_<slug>`, `backlinks_<slug>` (reverse links, read-gated),
     `create_<slug>`, `update_<slug>`, `publish_<slug>`,
-    `share_<slug>` (item grant; visible only with `manage_access`)
+    `share_<slug>` (item grant; `subjectKind: 'principal' | 'role' | 'team'`; visible only with
+    `manage_access`), and `share_link_<slug>` (anonymous share link, D26 — see below)
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
   - Schema management: `list_collections`, `create_collection`, `update_collection`
     (require `manage_schema`).
+  - Teams: `list_teams` (visible only with `manage_access`).
   - Media: `list_media`, `get_media_url`.
   - Resources: published documents exposed as MCP resources for read-heavy clients.
+- **`share_link_<slug>` (D26)** mints an anonymous share link for one document. Visibility and
+  gating key on the `share_link` action — not `manage_access`, and not agent-refused. The grant is
+  read-only (`actions: ['read']` hardcoded); `expiresAt` is REQUIRED and clamped to 30 days; the
+  tool returns `{ grantId, url, expiresAt }`. The plaintext URL **intentionally enters agent
+  context** — the grant is revocable at any time from the Share panel or the access matrix.
+- **Absolute URLs come from `resolveBaseUrl`** (`src/lib/base-url.ts`: `env.BASE_URL` >
+  `settings.siteUrl` > request origin), threaded route → `handleMcp` → `buildToolsForPrincipal`, so
+  URL-minting tools never hand-build an origin. Admin share/invite links use the same resolver.
 - **Permission-filtered tool listing**: the registered tool set is intersected with the connecting
   principal's effective permissions. An agent without `publish` **never sees** `publish_<slug>`.
   Capability discovery IS permission discovery — this keeps agents from planning actions they can't
