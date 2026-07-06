@@ -14,7 +14,8 @@
 import type { Database } from '@/db/client';
 import { scopeMatches, type Principal, type Action } from '@/access';
 // COR-6: the MCP surface must go through SERVICES, never the queries layer directly.
-import { getPrincipalPermissions, grantItem, listTeams } from '@/services/access';
+import { getPrincipalPermissions, grantItem, listTeams, createShareLink } from '@/services/access';
+import { InputValidationError } from '@/lib/errors';
 import { listCollections, getCollection, listCollectionsForDiscovery } from '@/services/collections';
 import * as docs from '@/services/documents';
 import * as collectionsService from '@/services/collections';
@@ -57,11 +58,18 @@ function docInputSchema(def: CollectionDefinition): JSONSchema {
   return { type: 'object', properties, ...(required.length ? { required } : {}) };
 }
 
-/** Build the permission-filtered tool set for a principal. */
+/** Agent-minted share links MUST expire; requested expiries are clamped to 30
+ *  days (D26). Humans in the admin Share panel may still mint open-ended links. */
+const SHARE_LINK_MAX_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Build the permission-filtered tool set for a principal. `baseUrl` is the
+ *  absolute origin for tools that mint URLs (threaded from the route — this
+ *  module has no request Context). */
 export async function buildToolsForPrincipal(
   db: Database,
   principal: Principal,
   now: () => string,
+  baseUrl = '',
 ): Promise<McpTool[]> {
   const perms = await getPrincipalPermissions(db, principal.id);
   const collections = await listCollections(db);
@@ -208,6 +216,37 @@ export async function buildToolsForPrincipal(
             now(),
           ),
         }),
+      });
+    }
+    if (couldDo(perms, principal, 'share_link', slug, false)) {
+      tools.push({
+        name: `share_link_${slug}`,
+        description: `Mint an anonymous, expiring, READ-ONLY share link for one ${def.name} document. Anyone with the URL can open it — no account needed. Expiry is required and clamped to 30 days.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'the document id to share' },
+            expiresAt: { type: 'string', description: 'REQUIRED ISO-8601 expiry (clamped to 30 days out)' },
+          },
+          required: ['id', 'expiresAt'],
+        },
+        handler: async (args) => {
+          const requested = Date.parse(String(args.expiresAt ?? ''));
+          if (Number.isNaN(requested)) {
+            throw new InputValidationError([{ path: 'expiresAt', message: 'A valid ISO-8601 expiry is required.' }]);
+          }
+          const nowIso = now();
+          const expiresAt = new Date(Math.min(requested, new Date(nowIso).getTime() + SHARE_LINK_MAX_TTL_MS)).toISOString();
+          const { grantId, token } = await createShareLink(
+            db,
+            principal,
+            { collection: slug, documentId: String(args.id ?? ''), actions: ['read'], expiresAt },
+            nowIso,
+          );
+          // The plaintext token intentionally enters the agent's context — that
+          // IS the capability; it stays revocable from the Share panel/matrix.
+          return { grantId, url: `${baseUrl}/s/${token}`, expiresAt };
+        },
       });
     }
   }

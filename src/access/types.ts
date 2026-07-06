@@ -4,13 +4,17 @@
  * decision-log entry (plan §8). Default-deny, additive-only, no negative rules.
  */
 
-/** The closed action vocabulary. */
+/** The closed action vocabulary. `share_link` (D26) is the right to mint an
+ *  anonymous, expiring `/s/:token` share link for a readable document — split
+ *  out of `manage_access` so it can be granted to an agent WITHOUT giving it
+ *  any access-management power. */
 export const ACTIONS = [
   'read',
   'create',
   'update',
   'delete',
   'publish',
+  'share_link',
   'manage_schema',
   'manage_access',
 ] as const;

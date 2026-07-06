@@ -20,12 +20,15 @@ export interface RoleSpec {
   readonly permissions: readonly PermissionSpec[];
 }
 
+// Keep in sync with ACTIONS (types.ts) and seed.sql — the drift-guard test in
+// src/db/seed.test.ts fails loudly if the three diverge.
 const ALL_ACTIONS: readonly Action[] = [
   'read',
   'create',
   'update',
   'delete',
   'publish',
+  'share_link',
   'manage_schema',
   'manage_access',
 ];
@@ -41,7 +44,7 @@ export const SYSTEM_ROLES: readonly RoleSpec[] = [
     slug: 'editor',
     name: 'Editor',
     description: 'Create, edit, publish, and delete any content. No schema or access management.',
-    permissions: (['read', 'create', 'update', 'delete', 'publish'] as Action[]).map((action) => ({
+    permissions: (['read', 'create', 'update', 'delete', 'publish', 'share_link'] as Action[]).map((action) => ({
       collection: '*',
       action,
     })),

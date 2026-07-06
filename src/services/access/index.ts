@@ -198,8 +198,13 @@ export async function createShareLink(
   },
   now: string,
 ): Promise<{ grantId: string; token: string }> {
-  refuseAgentEscalation(principal);
-  await authorize(db, principal, 'manage_access', { collection: input.collection, documentId: input.documentId }, now);
+  // D26: gated by the dedicated `share_link` action, NOT manage_access — so the
+  // capability is grantable to an agent (via a role or a one-document item
+  // grant) without any access-management power. The agents-never-escalate rule
+  // (SEC-8) still guards every identity/role/token mutation above; a share
+  // link only ADDs anonymous read on one document, is audited, expirable, and
+  // revocable from the Share panel/matrix like any grant.
+  await authorize(db, principal, 'share_link', { collection: input.collection, documentId: input.documentId }, now);
   const bad = input.actions.filter((a) => !ACTIONS.includes(a));
   if (bad.length) throw new InputValidationError(bad.map((a) => ({ path: 'actions', message: `Unknown action '${a}'.` })));
   if (!input.actions.length) throw new InputValidationError([{ path: 'actions', message: 'Grant at least one action.' }]);
