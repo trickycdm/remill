@@ -129,7 +129,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                           ))}
                         </Select>
                       </FormField>
-                      <Button type="submit" variant="secondary">
+                      <Button type="submit" variant="secondary" aria-label={`Add member to ${team.name}`}>
                         Add
                       </Button>
                     </form>
@@ -189,7 +189,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                       <FormField fieldId={`email-${team.id}`} label="Email link to (optional)">
                         <Input id={`email-${team.id}`} name="email" type="email" placeholder="stu@example.com" />
                       </FormField>
-                      <Button type="submit" variant="secondary">
+                      <Button type="submit" variant="secondary" aria-label={`Mint join link for ${team.name}`}>
                         Mint join link
                       </Button>
                     </form>
@@ -199,7 +199,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                   <form method="post" action="/admin/access/teams" class="mt-4 border-t border-border pt-3">
                     <input type="hidden" name="op" value="delete" />
                     <input type="hidden" name="teamId" value={team.id} />
-                    <Button type="submit" variant="danger">
+                    <Button type="submit" variant="danger" aria-label={`Delete team ${team.name}`}>
                       Delete team
                     </Button>
                   </form>

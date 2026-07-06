@@ -30,8 +30,9 @@ test.describe.serial('Teams — join links, team grants, shared-with-me', () => 
     await page.waitForURL('**/admin/access/teams');
     await expect(page.getByText(TEAM, { exact: true }).first()).toBeVisible();
 
-    // Mint a join link with the reader preset (the default).
-    await page.getByRole('button', { name: /Mint join link/i }).click();
+    // Mint a join link with the reader preset (the default) — the button is
+    // aria-labelled per team card, so duplicate cards from retries can't collide.
+    await page.getByRole('button', { name: `Mint join link for ${TEAM}`, exact: true }).click();
     await expect(page.getByText('Join link created')).toBeVisible();
     joinLink = (await page.locator('code').textContent())?.trim() ?? '';
     expect(joinLink).toContain('/auth/join/rmj_');
@@ -102,7 +103,7 @@ test.describe.serial('Teams — join links, team grants, shared-with-me', () => 
     const row = page.getByRole('link', { name: 'Quarterly architecture memo' });
     await expect(row).toBeVisible();
     await row.click();
-    await page.waitForURL(/\/admin\/c\/memos\/doc_[A-Za-z0-9_-]+\/view/);
+    await page.waitForURL(new RegExp(`/admin/c/${MEMOS}/doc_[A-Za-z0-9_-]+/view`));
     await expect(page.getByText('Quarterly architecture memo').first()).toBeVisible();
     await context.close();
   });
