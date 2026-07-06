@@ -111,6 +111,22 @@ export async function getDocumentCollection(db: Database, id: string): Promise<s
   return rows[0]?.collection ?? null;
 }
 
+/** Batch variant of getDocumentCollection — `{id → collection}` for a set of
+ *  ids. Metadata only, NO witness (content never flows through here); used to
+ *  group a principal's granted document ids by collection ("Shared with me"). */
+export async function getDocumentCollections(db: Database, ids: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const CHUNK = 80;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const rows = await db
+      .select({ id: documents.id, collection: documents.collection })
+      .from(documents)
+      .where(inArray(documents.id, [...ids.slice(i, i + CHUNK)]));
+    for (const r of rows) out.set(r.id, r.collection);
+  }
+  return out;
+}
+
 /** Read one document by id (scoped to a collection). Witness required. */
 export async function getDocument(
   db: Database,

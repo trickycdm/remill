@@ -43,14 +43,16 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const principal = requirePrincipal(c);
   const now = nowIso();
 
-  const [principals, collections, tokens, grants] = await Promise.all([
+  const [principals, collections, tokens, grants, teams] = await Promise.all([
     access.listPrincipals(db, principal, now),
     listCollections(db),
     access.listTokens(db, principal, now),
     access.listAllItemGrants(db, principal, now),
+    access.listTeams(db),
   ]);
   const slugs = collections.map((col) => col.slug);
   const nameById = new Map(principals.map((p) => [p.id, p.name]));
+  const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
 
   // Effective permissions per principal (un-gated capability read).
   const permsList = await Promise.all(principals.map((p) => getPrincipalPermissions(db, p.id)));
@@ -123,9 +125,27 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
               {grants.map((g) => (
                 <TableRow>
                   <TableCell>
-                    <Badge tone={g.subjectKind === 'role' ? 'accent' : 'info'}>{g.subjectKind}</Badge>{' '}
+                    <Badge
+                      tone={
+                        g.subjectKind === 'role'
+                          ? 'accent'
+                          : g.subjectKind === 'team'
+                            ? 'success'
+                            : g.subjectKind === 'link'
+                              ? 'warning'
+                              : 'info'
+                      }
+                    >
+                      {g.subjectKind}
+                    </Badge>{' '}
                     <span class="text-sm">
-                      {g.subjectKind === 'principal' ? (nameById.get(g.subjectId) ?? g.subjectId) : g.subjectId}
+                      {g.subjectKind === 'principal'
+                        ? (nameById.get(g.subjectId) ?? g.subjectId)
+                        : g.subjectKind === 'team'
+                          ? (teamNameById.get(g.subjectId) ?? g.subjectId)
+                          : g.subjectKind === 'link'
+                            ? `link …${g.subjectId.slice(0, 8)}`
+                            : g.subjectId}
                     </span>
                   </TableCell>
                   <TableCell>

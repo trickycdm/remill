@@ -16,6 +16,9 @@ import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference 
 import { resolveField, isMultiValued, referencesOf } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
 import { getCollection, listCollections as listCollectionDefs } from '@/db/queries/collections';
+import { getGrantedDocumentIds } from '@/db/queries/grants';
+import { getPrincipalRoleSlugs } from '@/db/queries/roles';
+import { getPrincipalTeamIds } from '@/db/queries/teams';
 import { authorize, compileReadFilter, resolveAccess, anonymousPrincipal, type Principal } from '@/access';
 import { newId } from '@/lib/id';
 import { hasLifecycle } from '@/lib/lifecycle';
@@ -331,6 +334,86 @@ export async function getBacklinks(
         title: typeof raw === 'string' && raw.length ? raw : null,
         status: row.status,
         updatedAt: row.updatedAt,
+      });
+    }
+  }
+  return out;
+}
+
+/** One row of the "Shared with me" surface: a document the principal can read
+ *  because someone granted it (directly, via a role, or via a team — D24). */
+export interface SharedWithMeRow {
+  readonly id: string;
+  readonly collection: string;
+  readonly title: string | null;
+  readonly status: string;
+  readonly actions: readonly string[];
+  /** null = at least one applicable grant never expires. */
+  readonly expiresAt: string | null;
+}
+
+/**
+ * The documents item-granted to this principal (as itself, its roles, or its
+ * teams — never link subjects). UN-GATED identity-scoped read: a principal may
+ * always learn what was shared with it. Content still flows through the gated
+ * pipeline — per collection we authorize('read') + compile the read filter and
+ * batch-read under the witness (getBacklinks pattern), so a grant a collection
+ * denies anyway (e.g. revoked role) yields no row.
+ */
+export async function listSharedWithMe(db: Database, principal: Principal, now: string): Promise<SharedWithMeRow[]> {
+  const [roleSlugs, teamIds] = await Promise.all([
+    getPrincipalRoleSlugs(db, principal.id),
+    getPrincipalTeamIds(db, principal.id),
+  ]);
+  const granted = (await getGrantedDocumentIds(db, principal.id, roleSlugs, now, undefined, teamIds)).filter((g) =>
+    g.actions.includes('read'),
+  );
+  if (!granted.length) return [];
+
+  // Union actions + keep the longest-lived expiry per document: any unexpired
+  // grant keeps access, and null ("never expires") wins outright.
+  const byDoc = new Map<string, { actions: Set<string>; expiresAt: string | null; hasNoExpiry: boolean }>();
+  for (const g of granted) {
+    const entry = byDoc.get(g.documentId) ?? { actions: new Set<string>(), expiresAt: null, hasNoExpiry: false };
+    g.actions.forEach((a) => entry.actions.add(a));
+    if (g.expiresAt === null) entry.hasNoExpiry = true;
+    else if (!entry.hasNoExpiry && (entry.expiresAt === null || g.expiresAt > entry.expiresAt)) {
+      entry.expiresAt = g.expiresAt;
+    }
+    byDoc.set(g.documentId, entry);
+  }
+
+  const collectionsById = await dq.getDocumentCollections(db, [...byDoc.keys()]);
+  const idsByCollection = new Map<string, string[]>();
+  for (const [id, collection] of collectionsById) {
+    idsByCollection.set(collection, [...(idsByCollection.get(collection) ?? []), id]);
+  }
+
+  const out: SharedWithMeRow[] = [];
+  for (const [slug, ids] of idsByCollection) {
+    let rows: DocumentRecord[];
+    let def: CollectionDefinition;
+    try {
+      def = await loadCollection(db, slug);
+      const resolved = await resolveAccess(db, principal.id, slug);
+      const grant = await authorize(db, principal, 'read', { collection: slug }, now, resolved);
+      const filter = await compileReadFilter(db, principal, slug, now, resolved);
+      rows = await dq.getDocumentsByIds(db, slug, ids, filter, grant);
+    } catch (e) {
+      if (!(e instanceof ForbiddenError)) throw e;
+      continue; // collection unreadable for this principal — its grants are inert
+    }
+    const titleKey = pickTitleField(def);
+    for (const row of rows) {
+      const raw = titleKey ? row.data[titleKey] : undefined;
+      const entry = byDoc.get(row.id);
+      out.push({
+        id: row.id,
+        collection: slug,
+        title: typeof raw === 'string' && raw.length ? raw : null,
+        status: row.status,
+        actions: [...(entry?.actions ?? [])],
+        expiresAt: entry?.hasNoExpiry ? null : (entry?.expiresAt ?? null),
       });
     }
   }

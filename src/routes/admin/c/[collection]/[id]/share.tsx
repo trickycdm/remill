@@ -5,6 +5,8 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { grantItem, revokeItem, createShareLink } from '@/services/access';
+import { getSettings } from '@/services/settings';
+import { resolveBaseUrl } from '@/lib/base-url';
 import { getEmailTransport } from '@/lib/email';
 import type { Action } from '@/access';
 import { nowIso } from '@/lib/now';
@@ -47,7 +49,7 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
       },
       now,
     );
-    const url = `${new URL(c.req.url).origin}/s/${token}`;
+    const url = `${resolveBaseUrl(c.env, await getSettings(db), c.req.url)}/s/${token}`;
     const email = String(body.email ?? '').trim();
     if (email) {
       await getEmailTransport(c.env).send({
@@ -89,7 +91,8 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
     );
   }
 
-  // subject is encoded "principal:<id>" | "role:<slug>" so one <select> covers both.
+  // subject is encoded "principal:<id>" | "role:<slug>" | "team:<id>" so one
+  // <select> covers all three.
   const [kind, ...rest] = String(body.subject ?? '').split(':');
   const subjectId = rest.join(':');
   const rawExpiry = String(body.expiresAt ?? '').trim();
@@ -100,7 +103,7 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
     db,
     principal,
     {
-      subjectKind: kind === 'role' ? 'role' : 'principal',
+      subjectKind: kind === 'role' ? 'role' : kind === 'team' ? 'team' : 'principal',
       subjectId,
       documentId: id,
       collection,

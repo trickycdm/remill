@@ -4,6 +4,8 @@ import { requireAuth, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { createUser } from '@/services/access';
+import { getSettings } from '@/services/settings';
+import { resolveBaseUrl } from '@/lib/base-url';
 import { getEmailTransport } from '@/lib/email';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
@@ -40,7 +42,7 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
 
   // Invite path: build the set-password link, "send" it (stubbed transport), and
   // surface it once so the admin can hand it over locally without real email.
-  const link = new URL(`/auth/set-password/${inviteToken}`, c.req.url).toString();
+  const link = `${resolveBaseUrl(c.env, await getSettings(db), c.req.url)}/auth/set-password/${inviteToken}`;
   await getEmailTransport(c.env).send({
     to: String(body.email ?? ''),
     subject: 'Your remill invitation',

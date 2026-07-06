@@ -19,6 +19,7 @@ import { decide, scopeMatches } from '@/access/permissions';
 import { appendAudit } from '@/db/queries/audit';
 import { getPrincipalPermissions, getPrincipalRoleSlugs, type EffectivePermission } from '@/db/queries/roles';
 import { getApplicableGrants, getGrantedDocumentIds } from '@/db/queries/grants';
+import { getPrincipalTeamIds } from '@/db/queries/teams';
 import { getCollection } from '@/db/queries/collections';
 import { getDocumentMetaForAuth } from '@/db/queries/documents';
 import { ForbiddenError } from '@/lib/errors';
@@ -104,16 +105,15 @@ export async function authorize(
     }
   }
 
-  const grants = resolved.documentId
-    ? await getApplicableGrants(
-        db,
-        resolved.documentId,
-        principal.id,
-        await getPrincipalRoleSlugs(db, principal.id),
-        now,
-        principal.linkId,
-      )
-    : [];
+  let grants: Awaited<ReturnType<typeof getApplicableGrants>> = [];
+  if (resolved.documentId) {
+    // Roles and teams are both subject-resolution inputs (D24) — resolve together.
+    const [roleSlugs, teamIds] = await Promise.all([
+      getPrincipalRoleSlugs(db, principal.id),
+      getPrincipalTeamIds(db, principal.id),
+    ]);
+    grants = await getApplicableGrants(db, resolved.documentId, principal.id, roleSlugs, now, principal.linkId, teamIds);
+  }
 
   const allowed = decide({ principal, action, resource: resolved, permissions, grants, publicRead, tokenScope: principal.tokenScope });
 
@@ -170,8 +170,11 @@ export async function compileReadFilter(
     clauses.push(sql`${documents.createdBy} = ${principal.id}`);
   }
 
-  const roleSlugs = await getPrincipalRoleSlugs(db, principal.id);
-  const granted = await getGrantedDocumentIds(db, principal.id, roleSlugs, now, principal.linkId);
+  const [roleSlugs, teamIds] = await Promise.all([
+    getPrincipalRoleSlugs(db, principal.id),
+    getPrincipalTeamIds(db, principal.id),
+  ]);
+  const granted = await getGrantedDocumentIds(db, principal.id, roleSlugs, now, principal.linkId, teamIds);
   const readableIds = granted.filter((g) => g.actions.includes('read')).map((g) => g.documentId);
   if (readableIds.length) clauses.push(inArray(documents.id, readableIds));
 

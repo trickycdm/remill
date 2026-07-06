@@ -148,4 +148,39 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(posts?.access).toBeUndefined();
     expect(posts?.workflow).toBeUndefined();
   });
+
+  it('share_<slug> supports team subjects; list_teams resolves names (manage_access only)', async () => {
+    const adminToken = await tokenFor('sharer-bot', 'admin');
+    const teamId = await access.createTeam(db, admin, { name: 'Tech team' }, NOW);
+    const member = await makePrincipal(db, NOW, { id: 'prn_tm', role: 'reader' });
+    await access.addTeamMember(db, admin, teamId, member.id, NOW);
+
+    // Visibility: list_teams and share_posts require manage_access.
+    const adminTools = toolNames(await mcp(adminToken, 'tools/list'));
+    expect(adminTools).toEqual(expect.arrayContaining(['list_teams', 'share_posts']));
+    const editorTools = toolNames(await mcp(editorToken, 'tools/list'));
+    expect(editorTools).not.toContain('list_teams');
+    expect(editorTools).not.toContain('share_posts');
+
+    // The agent resolves "the tech team" by name, then grants it read on a draft.
+    const teams = JSON.parse((await mcp(adminToken, 'tools/call', { name: 'list_teams' })).body.result.content[0].text) as {
+      id: string;
+      name: string;
+    }[];
+    expect(teams.find((t) => t.name === 'Tech team')?.id).toBe(teamId);
+
+    const draft = await mcp(adminToken, 'tools/call', { name: 'create_posts', arguments: { title: 'Team-shared draft' } });
+    const doc = JSON.parse(draft.body.result.content[0].text);
+
+    const grant = await mcp(adminToken, 'tools/call', {
+      name: 'share_posts',
+      arguments: { id: doc.id, subjectKind: 'team', subjectId: teamId, actions: ['read'] },
+    });
+    expect(grant.body.result.isError).toBeFalsy();
+
+    // The member can now read the draft through the gated pipeline.
+    const { getDocument } = await import('@/services/documents');
+    const seen = await getDocument(db, member, 'posts', doc.id, NOW);
+    expect(seen.data.title).toBe('Team-shared draft');
+  });
 });

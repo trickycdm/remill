@@ -14,7 +14,7 @@
 import type { Database } from '@/db/client';
 import { scopeMatches, type Principal, type Action } from '@/access';
 // COR-6: the MCP surface must go through SERVICES, never the queries layer directly.
-import { getPrincipalPermissions, grantItem } from '@/services/access';
+import { getPrincipalPermissions, grantItem, listTeams } from '@/services/access';
 import { listCollections, getCollection, listCollectionsForDiscovery } from '@/services/collections';
 import * as docs from '@/services/documents';
 import * as collectionsService from '@/services/collections';
@@ -90,6 +90,17 @@ export async function buildToolsForPrincipal(
       inputSchema: { type: 'object', properties: { slug: { type: 'string' }, definition: { type: 'object' } }, required: ['slug', 'definition'] },
       handler: async (args) =>
         collectionsService.updateCollection(db, principal, String(args.slug), args.definition as CollectionDefinition, now()),
+    });
+  }
+
+  // Team discovery — resolve "the tech team" to a team id for share_<slug>.
+  // Visible with manage_access (the same capability the share tools need).
+  if (couldDo(perms, principal, 'manage_access', '*', false)) {
+    tools.push({
+      name: 'list_teams',
+      description: 'List the teams (named groups of people) that documents can be shared with.',
+      inputSchema: { type: 'object', properties: {} },
+      handler: async () => listTeams(db),
     });
   }
 
@@ -170,13 +181,13 @@ export async function buildToolsForPrincipal(
     if (couldDo(perms, principal, 'manage_access', slug, false)) {
       tools.push({
         name: `share_${slug}`,
-        description: `Grant a principal or role scoped actions on one ${def.name} document (item grant, optionally expiring).`,
+        description: `Grant a principal, role, or team scoped actions on one ${def.name} document (item grant, optionally expiring).`,
         inputSchema: {
           type: 'object',
           properties: {
             id: { type: 'string', description: 'the document id to share' },
-            subjectKind: { type: 'string', enum: ['principal', 'role'] },
-            subjectId: { type: 'string', description: 'principal id or role slug' },
+            subjectKind: { type: 'string', enum: ['principal', 'role', 'team'] },
+            subjectId: { type: 'string', description: 'principal id, role slug, or team id' },
             actions: { type: 'array', items: { type: 'string' }, description: 'actions to grant, e.g. ["read"]' },
             expiresAt: { type: 'string', description: 'optional ISO-8601 expiry' },
           },
@@ -187,7 +198,7 @@ export async function buildToolsForPrincipal(
             db,
             principal,
             {
-              subjectKind: args.subjectKind === 'role' ? 'role' : 'principal',
+              subjectKind: args.subjectKind === 'role' ? 'role' : args.subjectKind === 'team' ? 'team' : 'principal',
               subjectId: String(args.subjectId ?? ''),
               documentId: String(args.id ?? ''),
               collection: slug,

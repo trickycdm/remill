@@ -7,7 +7,7 @@ import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
 import { getDocument, updateDocument, listRevisions, getBacklinks } from '@/services/documents';
 import { getSettings } from '@/services/settings';
-import { getPrincipalPermissions, listItemGrants, listPrincipals, listRoles } from '@/services/access';
+import { getPrincipalPermissions, listItemGrants, listPrincipals, listRoles, listTeams } from '@/services/access';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
@@ -45,6 +45,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         grants: await listItemGrants(db, principal, slug, id, now),
         principals: await listPrincipals(db, principal, now),
         roles: await listRoles(db),
+        teams: await listTeams(db),
       }
     : null;
 
@@ -99,7 +100,14 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       <BacklinksPanel backlinks={backlinks} />
 
       {share && (
-        <SharePanel slug={slug} id={id} grants={share.grants} principals={share.principals} roles={share.roles} />
+        <SharePanel
+          slug={slug}
+          id={id}
+          grants={share.grants}
+          principals={share.principals}
+          roles={share.roles}
+          teams={share.teams}
+        />
       )}
     </AdminShell>,
   );

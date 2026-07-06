@@ -13,9 +13,10 @@ import * as roleQ from '@/db/queries/roles';
 import * as grantQ from '@/db/queries/grants';
 import * as principalQ from '@/db/queries/principals';
 import * as inviteQ from '@/db/queries/invites';
+import * as teamQ from '@/db/queries/teams';
 import { getUserByEmail } from '@/db/queries/users';
 import { recentAudit } from '@/db/queries/audit';
-import { generateToken, generateShareToken, hashToken } from '@/lib/token';
+import { generateToken, generateShareToken, generateJoinToken, hashToken } from '@/lib/token';
 import { hashPassword } from '@/lib/password';
 import type { PermissionSpec, RoleSpec } from '@/access/policy';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
@@ -148,7 +149,7 @@ export async function grantItem(
   db: Database,
   principal: Principal,
   input: {
-    subjectKind: 'principal' | 'role';
+    subjectKind: 'principal' | 'role' | 'team';
     subjectId: string;
     documentId: string;
     collection: string;
@@ -375,4 +376,172 @@ export async function issueToken(
 export async function revokeToken(db: Database, principal: Principal, tokenId: string, now: string): Promise<void> {
   await authorize(db, principal, 'manage_access', ROOT, now);
   await principalQ.revokeToken(db, tokenId);
+}
+
+// ---------------------------------------------------------------------------
+// Teams (D24) — named groups of principals used as item-grant subjects.
+// Teams never carry role permissions; a team grant only ADDs read (etc.) on one
+// document. All mutations are manage_access-gated and human-only (SEC-8).
+// ---------------------------------------------------------------------------
+
+const TEAM_INVITE_MAX_TTL_MS = 90 * 24 * 60 * 60 * 1000; // join links expire in ≤ 90 days
+
+/** Un-gated name/id listing (mirrors listRoles): subject pickers need the names;
+ *  membership and invites stay behind manage_access below. */
+export const listTeams = teamQ.listTeams;
+
+export async function createTeam(
+  db: Database,
+  principal: Principal,
+  input: { name: string; description?: string },
+  now: string,
+): Promise<string> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  const name = input.name.trim();
+  if (!name) throw new InputValidationError([{ path: 'name', message: 'Team name is required.' }]);
+  return teamQ.createTeam(db, name, input.description?.trim() || null, now);
+}
+
+/** Deleting a team also revokes its item grants — memberships/invites cascade in
+ *  the DB, but grants are kind-polymorphic (no FK) and must not linger as inert
+ *  rows that would silently re-activate if a team id were ever reused. */
+export async function deleteTeam(db: Database, principal: Principal, teamId: string, now: string): Promise<void> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  await grantQ.revokeGrantsForSubject(db, 'team', teamId);
+  await teamQ.deleteTeam(db, teamId);
+}
+
+export async function addTeamMember(
+  db: Database,
+  principal: Principal,
+  teamId: string,
+  memberPrincipalId: string,
+  now: string,
+): Promise<void> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  if (!(await teamQ.getTeam(db, teamId))) throw new NotFoundError('Team');
+  if (!(await principalQ.getPrincipal(db, memberPrincipalId))) throw new NotFoundError('Principal');
+  await teamQ.addTeamMember(db, teamId, memberPrincipalId, principal.id, now);
+}
+
+export async function removeTeamMember(
+  db: Database,
+  principal: Principal,
+  teamId: string,
+  memberPrincipalId: string,
+  now: string,
+): Promise<void> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  await teamQ.removeTeamMember(db, teamId, memberPrincipalId);
+}
+
+export async function listTeamMembers(db: Database, principal: Principal, teamId: string, now: string) {
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  return teamQ.listTeamMembers(db, teamId);
+}
+
+/**
+ * Mint a multi-use team-join link. The role preset is what joiners get assigned
+ * (picked by the admin, default `reader`); expiry is REQUIRED and clamped to 90
+ * days. Returns the plaintext token exactly once — only its hash is stored.
+ */
+export async function createTeamInvite(
+  db: Database,
+  principal: Principal,
+  input: { teamId: string; role?: string; maxUses?: number; expiresAt: string },
+  now: string,
+): Promise<{ inviteId: string; token: string }> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  if (!(await teamQ.getTeam(db, input.teamId))) throw new NotFoundError('Team');
+
+  const role = input.role?.trim() || 'reader';
+  const issues: ErrorDetails[] = [];
+  if (role === 'anonymous' || !(await roleQ.getRole(db, role))) {
+    issues.push({ path: 'role', message: `Unknown role '${role}'.` });
+  }
+  if (input.maxUses !== undefined && (!Number.isInteger(input.maxUses) || input.maxUses <= 0)) {
+    issues.push({ path: 'maxUses', message: 'Max uses must be a positive integer.' });
+  }
+  const expires = Date.parse(input.expiresAt ?? '');
+  if (Number.isNaN(expires) || expires <= new Date(now).getTime()) {
+    issues.push({ path: 'expiresAt', message: 'A future expiry is required.' });
+  }
+  if (issues.length) throw new InputValidationError(issues, 'Invalid invite');
+
+  const clamped = Math.min(expires, new Date(now).getTime() + TEAM_INVITE_MAX_TTL_MS);
+  const token = generateJoinToken();
+  const inviteId = await teamQ.createTeamInviteRow(
+    db,
+    {
+      teamId: input.teamId,
+      tokenHash: await hashToken(token),
+      role,
+      maxUses: input.maxUses ?? null,
+      expiresAt: new Date(clamped).toISOString(),
+      createdBy: principal.id,
+    },
+    now,
+  );
+  return { inviteId, token };
+}
+
+export async function listTeamInvites(db: Database, principal: Principal, teamId: string, now: string) {
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  return teamQ.listTeamInvites(db, teamId);
+}
+
+export async function revokeTeamInvite(db: Database, principal: Principal, inviteId: string, now: string): Promise<void> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  await teamQ.revokeTeamInvite(db, inviteId, now);
+}
+
+/** Whether a join token is currently usable (for the GET form). Un-gated; one
+ *  boolean, no detail — unknown/revoked/expired/spent are indistinguishable. */
+export async function teamInviteIsValid(db: Database, token: string, now: string): Promise<boolean> {
+  return (await teamQ.findValidTeamInviteByHash(db, await hashToken(token), now)) !== null;
+}
+
+/**
+ * Consume a team-join link: create the person, assign the invite's role preset,
+ * add them to the team, count the use. Deliberately UN-GATED — the token IS the
+ * credential (invite-token precedent, src/services/invites). An existing email
+ * is a ConflictError: possessing a join link proves nothing about mailbox
+ * ownership, so it must never attach an existing account to a team.
+ */
+export async function acceptTeamInvite(
+  db: Database,
+  token: string,
+  input: { name: string; email: string; password: string },
+  now: string,
+): Promise<{ principalId: string }> {
+  const invite = await teamQ.findValidTeamInviteByHash(db, await hashToken(token), now);
+  if (!invite) throw new ForbiddenError('This invite link is invalid or has expired.');
+
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  const issues: ErrorDetails[] = [];
+  if (!name) issues.push({ path: 'name', message: 'Name is required.' });
+  if (!EMAIL_RE.test(email)) issues.push({ path: 'email', message: 'A valid email is required.' });
+  if (input.password.length < MIN_PASSWORD_LENGTH) {
+    issues.push({ path: 'password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+  }
+  if (issues.length) throw new InputValidationError(issues, 'Invalid registration');
+
+  if (await getUserByEmail(db, email)) {
+    throw new ConflictError('An account with this email already exists. Sign in and ask an admin to add you to the team.');
+  }
+
+  const principalId = await principalQ.createUserPrincipal(db, { name, email, passwordHash: hashPassword(input.password) }, now);
+  // No acting principal here — the consumed token is the authority (invite
+  // precedent): assign the preset via the query layer, never via assignRole().
+  await roleQ.assignRole(db, principalId, invite.role, '*');
+  await teamQ.addTeamMember(db, invite.teamId, principalId, null, now);
+  await teamQ.incrementTeamInviteUse(db, invite.id);
+  return { principalId };
 }

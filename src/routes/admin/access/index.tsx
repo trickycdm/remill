@@ -225,6 +225,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         <a href="/admin/access/roles" class="text-accent-text hover:underline">
           Manage roles →
         </a>
+        <a href="/admin/access/teams" class="text-accent-text hover:underline">
+          Manage teams →
+        </a>
       </div>
 
       {/* Roles */}

@@ -7,6 +7,7 @@
 
 const TOKEN_PREFIX = 'rmk_'; // "remill key" — helps humans/scanners recognise it
 const SHARE_TOKEN_PREFIX = 'rms_'; // "remill share" — a link token, never an API key
+const JOIN_TOKEN_PREFIX = 'rmj_'; // "remill join" — a team-join link token (D24)
 
 function randomToken(prefix: string): string {
   const bytes = new Uint8Array(32);
@@ -23,6 +24,11 @@ export function generateToken(): string {
  *  distinct prefix so a leaked link can never be mistaken for a bearer key. */
 export function generateShareToken(): string {
   return randomToken(SHARE_TOKEN_PREFIX);
+}
+
+/** Generate a team-join link token (D24) — distinct prefix for the same reason. */
+export function generateJoinToken(): string {
+  return randomToken(JOIN_TOKEN_PREFIX);
 }
 
 /** SHA-256 hex hash of a token, for storage and constant-time-ish lookup. */
