@@ -1,5 +1,14 @@
 # Sharing fabric v2: teams, agent share links, Resend email, HTML pages
 
+> **STATUS: COMPLETE (2026-07-06).** All four tracks shipped on `feature/sharing-fabric-v2`
+> (Phase 0 → Track 4 + docs: commits `958d7d2…9cef5ae` + this finalization; worklog.md has the
+> step record).
+> Verified: 0 type / 0 lint / **244 unit** / **36/36 e2e ×2 on fresh D1** / build clean, plus a
+> live MCP round trip against the built preview (agent token → `create_posts` → `publish_posts` →
+> `share_link_posts` with the 2036 expiry clamped to 30d → anonymous GET of the `/s/` URL renders
+> the page) and a read-only Resend API check (key valid; **colmack.com verified, sending
+> enabled**). Outstanding: ROTATE the Resend key (it transited chat); merge to main on request.
+
 ## Context
 
 The MCP end-to-end validation (2026-07-06, post-roadmap merge `79838cb`) confirmed the publish

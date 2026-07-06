@@ -113,13 +113,21 @@ Priority: **1** `getByRole` (buttons, links, headings, nav) → **2** `getByLabe
 XPath, and positional selectors are discouraged — brittle and they don't validate accessibility. New
 `data-testid`s use `<feature>-<element>` (e.g. `document-list`, `field-editor-body`).
 
-Two accessible-name traps in THIS codebase (each cost a failed run, 2026-07-05):
+Four accessible-name traps in THIS codebase (each cost a failed run, 2026-07-05/06):
 
 - **`FormField` appends "(required)" to the accessible name** — `getByLabel('Name', { exact: true })`
   misses a required field ("Name (required)"). Use an anchored regex: `getByLabel(/^Name/)`.
 - **Fixed-pool rows are numbered** (`Key for field 1` … `Key for field 12`, builder TD-10 idiom) —
   non-exact `getByLabel('Key for field 1')` substring-matches fields 10–12 and trips strict mode.
   Row-scoped aria-labels always take `{ exact: true }` (they carry no suffix, so exact is safe).
+- **Generated-form labels are HUMANIZED from field keys** (`title` → "Title") — a case-sensitive
+  regex like `getByLabel(/^title/)` silently misses it. Anchored label regexes on generated forms
+  take the `i` flag: `getByLabel(/^title/i)`.
+- **Serial-group retries re-run in a FRESH worker against the SAME D1** — anything the first
+  attempt created (collections, teams, accounts) still exists, so re-creates hit "already exists"
+  and once-unique names now match twice (strict mode). Derive per-attempt-unique names at module
+  scope (`const RUN = Date.now().toString(36)`; fresh worker ⇒ fresh value) and give repeated
+  per-card actions team/row-scoped aria-labels (`Mint join link for ${team.name}`).
 
 ## Writing tests
 
