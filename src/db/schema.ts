@@ -111,6 +111,7 @@ export const collections = sqliteTable('collections', {
   workflowJson: text('workflow_json'), // { draftPublish?: boolean, ... }
   accessJson: text('access_json'), // { publicRead?: boolean } | role→action map
   protected: integer('protected').notNull().default(0), // seeded/system collections (0/1)
+  renderMode: text('render_mode'), // null/'shell' = branded PublicShell | 'raw' = html field is the page (D27)
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
@@ -281,6 +282,68 @@ export const inviteTokens = sqliteTable(
   (t) => [
     uniqueIndex('invite_tokens_hash_unique').on(t.tokenHash),
     index('invite_tokens_principal_idx').on(t.principalId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Teams — named groups of principals used as item-grant subjects ("share with
+// the tech team"). Membership is subject RESOLUTION, not decision logic: teams
+// never carry role permissions; a team grant only ADDs access to one document
+// (additive-only, ACCESS_CONTROL.md). Decision D24.
+// ---------------------------------------------------------------------------
+
+export const teams = sqliteTable('teams', {
+  id: text('id').primaryKey(), // tem_…
+  name: text('name').notNull(),
+  description: text('description'),
+  createdAt: text('created_at').notNull(),
+});
+
+export const teamMembers = sqliteTable(
+  'team_members',
+  {
+    id: text('id').primaryKey(), // tmm_…
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => principals.id, { onDelete: 'cascade' }),
+    addedBy: text('added_by'), // attribution only, never authorization
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('team_members_unique').on(t.teamId, t.principalId),
+    index('team_members_principal_idx').on(t.principalId),
+  ],
+);
+
+// Team-join invite links — unlike invite_tokens (single-use, bound to an
+// EXISTING principal), a join link is multi-use and creates the principal at
+// acceptance time, carrying the team + role preset instead. Same discipline:
+// hash at rest, plaintext shown once, expiry REQUIRED, no enumeration oracle.
+export const teamInvites = sqliteTable(
+  'team_invites',
+  {
+    id: text('id').primaryKey(), // tin_…
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(), // SHA-256 hex — never plaintext
+    role: text('role')
+      .notNull()
+      .default('reader')
+      .references(() => roles.slug, { onDelete: 'cascade' }),
+    maxUses: integer('max_uses'), // null = unlimited until expiry/revocation
+    useCount: integer('use_count').notNull().default(0),
+    expiresAt: text('expires_at').notNull(), // join links always expire
+    revokedAt: text('revoked_at'), // null = active
+    createdBy: text('created_by').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('team_invites_hash_unique').on(t.tokenHash),
+    index('team_invites_team_idx').on(t.teamId),
   ],
 );
 

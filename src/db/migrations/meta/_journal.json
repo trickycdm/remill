@@ -43,6 +43,13 @@
       "when": 1783273570900,
       "tag": "0005_lame_mattie_franklin",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1783320118979,
+      "tag": "0006_freezing_tempest",
+      "breakpoints": true
     }
   ]
 }
