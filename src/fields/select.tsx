@@ -79,4 +79,9 @@ export const selectField: FieldType<SelectConfig, SelectValue> = {
         : [];
     return <span>{labels.join(', ')}</span>;
   },
+  ViewComponent: ({ value, config }) => {
+    const labelFor = (v: string) => config.options.find((o) => o.value === v)?.label ?? v;
+    const labels = Array.isArray(value) ? value.map(labelFor) : value != null ? [labelFor(value)] : [];
+    return labels.length ? <span>{labels.join(', ')}</span> : null;
+  },
 };

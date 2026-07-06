@@ -8,10 +8,11 @@
 import type { FC } from 'hono/jsx';
 import { resolveField } from '@/fields/registry';
 import { fieldLabel } from '@/lib/humanize';
-import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
-import type { DocumentRecord } from '@/services/documents';
+import type { CollectionDefinition, FieldDescriptor, ExpandedReference } from '@/fields/types';
+import type { DocumentRecord, ExpandedDocument } from '@/services/documents';
 import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
+import { hasLifecycle } from '@/lib/lifecycle';
 import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, EmptyState } from '@/components/ui';
 
 type EditProps = { field: FieldDescriptor; config: unknown; value: unknown; signal: string };
@@ -27,12 +28,21 @@ export function FieldEditor({ field, value }: { field: FieldDescriptor; value: u
 
 /** Render one list cell using the field type's CellComponent (or a text fallback).
  *  Resolves the field's config (via resolveField) so cells can render human labels
- *  (e.g. select's option label) rather than the raw stored value (TD-2). */
-function FieldCell({ field, value }: { field: FieldDescriptor; value: unknown }) {
+ *  (e.g. select's option label) rather than the raw stored value (TD-2). Passes the
+ *  read path's relation expansion through when the row carries one (B2). */
+function FieldCell({
+  field,
+  value,
+  expanded,
+}: {
+  field: FieldDescriptor;
+  value: unknown;
+  expanded?: ExpandedReference | ExpandedReference[];
+}) {
   const { ft, config } = resolveField(field);
   if (ft.CellComponent) {
-    const Cell = ft.CellComponent as unknown as FC<{ value: unknown; config: unknown }>;
-    return <Cell value={value} config={config} />;
+    const Cell = ft.CellComponent as unknown as FC<{ value: unknown; config: unknown; expanded?: unknown }>;
+    return <Cell value={value} config={config} expanded={expanded} />;
   }
   return <span>{value == null ? '' : String(value)}</span>;
 }
@@ -94,11 +104,14 @@ export function GeneratedTable({
   settings,
 }: {
   def: CollectionDefinition;
-  rows: DocumentRecord[];
+  rows: ExpandedDocument[];
   settings?: SiteSettings;
 }) {
   const columns = def.fields.filter((f) => f.admin?.showInList);
   const cols = columns.length ? columns : def.fields.slice(0, 1);
+  // lifecycle:'none' collections suppress the Status affordance — a record is
+  // not a draft blog post (B4).
+  const showStatus = hasLifecycle(def);
 
   if (rows.length === 0) {
     return (
@@ -117,7 +130,7 @@ export function GeneratedTable({
           {cols.map((f) => (
             <TableHeaderCell>{fieldLabel(f)}</TableHeaderCell>
           ))}
-          <TableHeaderCell>Status</TableHeaderCell>
+          {showStatus ? <TableHeaderCell>Status</TableHeaderCell> : null}
           <TableHeaderCell>Updated</TableHeaderCell>
         </TableRow>
       </TableHead>
@@ -127,17 +140,21 @@ export function GeneratedTable({
             {cols.map((f, i) => (
               <TableCell>
                 {i === 0 ? (
+                  // The first column is wrapped in the row link — skip expansion
+                  // there (a relation cell would nest <a> inside <a>).
                   <a href={`/admin/c/${def.slug}/${doc.id}`} class="font-medium text-accent-text hover:underline">
                     <FieldCell field={f} value={doc.data[f.key]} />
                   </a>
                 ) : (
-                  <FieldCell field={f} value={doc.data[f.key]} />
+                  <FieldCell field={f} value={doc.data[f.key]} expanded={doc.relations?.[f.key]} />
                 )}
               </TableCell>
             ))}
-            <TableCell>
-              <Badge tone={doc.status === 'published' ? 'success' : 'neutral'}>{doc.status}</Badge>
-            </TableCell>
+            {showStatus ? (
+              <TableCell>
+                <Badge tone={doc.status === 'published' ? 'success' : 'neutral'}>{doc.status}</Badge>
+              </TableCell>
+            ) : null}
             <TableCell>
               <span class="font-mono text-xs text-ink-subtle">{formatDate(doc.updatedAt, settings)}</span>
             </TableCell>

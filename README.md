@@ -1,23 +1,26 @@
 # remill
 
-A **single-tenant, lightweight, agent-native CMS** on Cloudflare Workers. One collection definition
-generates six surfaces — storage, validation, the admin list view, the admin edit form, the REST API,
-and the MCP tools — so humans and AI agents author the same content through the same
-whitelist-validated, authorization-gated pipeline.
+A **single-tenant, lightweight, agent-native headless data platform** on Cloudflare Workers. One
+collection definition generates six surfaces — storage, validation, the admin list view, the admin
+edit form, the REST API, and the MCP tools — so humans and AI agents author the same content through
+the same whitelist-validated, authorization-gated pipeline.
 
 - **Admin**: Datastar server-rendered management UI (no client framework).
 - **REST API**: content-negotiated JSON + generated OpenAPI.
-- **MCP**: agents are first-class clients — they can read, write, publish, and define content types.
+- **MCP**: agents are first-class clients — they can read, write, publish, share, and define content types.
 
 Runs on one Worker, one D1 database, one R2 bucket. Deployable with `wrangler deploy`.
 
 ## Status
 
-Under active construction, phase by phase. **Phase 0 (steering) lands first, before application code.**
-See the build plan and worklog:
+The CMS foundation (all 8 phases) is **complete and verified**, and Track A of the platform roadmap
+(access legibility: personas, invites, custom roles, per-collection token scopes, item-grant sharing,
+the access matrix) has shipped. Active work: relational data & the knowledge graph (Track B), then
+publishing & share links (Track C).
 
-- Plan: [`plans/2026-07-04-cms-foundation/plan.md`](plans/2026-07-04-cms-foundation/plan.md)
-- Worklog: [`plans/2026-07-04-cms-foundation/worklog.md`](plans/2026-07-04-cms-foundation/worklog.md)
+- Overview: [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md)
+- Active roadmap: [`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md)
+  (+ [`worklog.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/worklog.md))
 
 ## For contributors (human or agent)
 
@@ -35,11 +38,10 @@ holes. See [`docs/PROJECT_BRIEF.md`](docs/PROJECT_BRIEF.md).
 
 ## Local development
 
-Wired in Phase 1. Once scaffolded:
-
 ```bash
 bun install
-bun run dev          # Vite dev with Workers emulation
+bun run db:migrate && bun run db:seed   # local D1 schema + seed data
+bun run dev          # Vite dev with Workers emulation (port 3100)
 bun run test:run     # unit tests
 bun run e2e          # Playwright + axe
 ```

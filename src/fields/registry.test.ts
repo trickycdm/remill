@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requireFieldType, resolveField, jsonSchemaFor, isIndexable, listFieldTypeKeys } from '@/fields/registry';
+import { requireFieldType, resolveField, jsonSchemaFor, isIndexable, isMultiValued, listFieldTypeKeys } from '@/fields/registry';
 import type { CollectionDefinition, FieldDescriptor, JSONSchema, SaveCtx } from '@/fields/types';
 
 /** A minimal SaveCtx for exercising beforeSave transforms directly. */
@@ -48,6 +48,15 @@ const CASES: Array<{
   // media round-trips its id: value validates, toIndex returns the id verbatim, and
   // its derived schema is a bounded string (SEC-4). Previously absent from CASES.
   { type: 'media', field: { key: 'f', type: 'media' }, valid: 'med_abc123', invalid: 123, expectIndex: 'med_abc123', jsonType: 'string' },
+  // relation (single): a doc_ id, indexed verbatim; multi behavior has its own suite below.
+  {
+    type: 'relation',
+    field: { key: 'f', type: 'relation', config: { collection: 'authors' } },
+    valid: 'doc_abc123',
+    invalid: 'med_abc123',
+    expectIndex: 'doc_abc123',
+    jsonType: 'string',
+  },
 ];
 
 describe('field-type registry — round-trip every type', () => {
@@ -119,6 +128,65 @@ describe('field-type registry — round-trip every type', () => {
     expect(properties.views.type).toBe('number');
     expect(properties.kind.type).toBe('string');
     expect(properties.kind.enum).toEqual(['a', 'b']);
+  });
+});
+
+describe('relation — the graph edge field type (B1)', () => {
+  const single: FieldDescriptor = { key: 'f', type: 'relation', config: { collection: 'authors' } };
+  const multi: FieldDescriptor = {
+    key: 'f',
+    type: 'relation',
+    config: { collection: 'authors', multiple: true },
+  };
+
+  it('config requires a target collection slug', () => {
+    const ft = requireFieldType('relation');
+    expect(ft.configSchema.safeParse({}).success).toBe(false);
+    expect(ft.configSchema.safeParse({ collection: 'Bad Slug' }).success).toBe(false);
+    expect(ft.configSchema.safeParse({ collection: 'authors', extra: true }).success).toBe(false);
+    expect(ft.configSchema.safeParse({ collection: 'authors', multiple: true, titleField: 'name' }).success).toBe(true);
+  });
+
+  it('multiple: validates an id array; toIndex returns the array (one row per element)', () => {
+    const ft = requireFieldType('relation');
+    const { valueSchema } = resolveField(multi);
+    expect(valueSchema.safeParse(['doc_a', 'doc_b']).success).toBe(true);
+    expect(valueSchema.safeParse(['doc_a', 'nope']).success).toBe(false);
+    expect(ft.toIndex?.(['doc_a', 'doc_b'] as never)).toEqual(['doc_a', 'doc_b']);
+    expect(ft.toIndex?.([] as never)).toBeNull();
+  });
+
+  it('multiple: beforeSave normalizes the comma-string widget shape and dedupes', () => {
+    const ft = requireFieldType('relation');
+    expect(ft.beforeSave?.('doc_a, doc_b , doc_a' as never, saveCtx(multi))).toEqual(['doc_a', 'doc_b']);
+    // The union's string branch bypasses per-element regex — beforeSave re-checks it.
+    expect(() => ft.beforeSave?.('doc_a, not-an-id' as never, saveCtx(multi))).toThrow(/document id/);
+  });
+
+  it('multiple + required: an empty normalized list is rejected', () => {
+    const req: FieldDescriptor = { ...multi, required: true };
+    const ft = requireFieldType('relation');
+    expect(() => ft.beforeSave?.('' as never, saveCtx(req))).toThrow(/At least one/);
+  });
+
+  it('isMultiValued reads the descriptor config (single: no, multiple: yes; scalars: no)', () => {
+    expect(isMultiValued(single)).toBe(false);
+    expect(isMultiValued(multi)).toBe(true);
+    expect(isMultiValued({ key: 'f', type: 'text' })).toBe(false);
+    expect(isMultiValued({ key: 'f', type: 'tags' })).toBe(false); // tags joins to ONE row
+  });
+
+  it('multiple: explicit jsonSchema is a bounded id-array (surfaces 5 & 6)', () => {
+    const schema = jsonSchemaFor(multi);
+    expect(schema.type).toBe('array');
+    expect((schema.items as Record<string, unknown>).pattern).toContain('doc_');
+  });
+
+  it('SEC-4: bounds the id length and the multi list size', () => {
+    const { valueSchema } = resolveField(single);
+    expect(valueSchema.safeParse(`doc_${'a'.repeat(100)}`).success).toBe(false);
+    const { valueSchema: multiSchema } = resolveField(multi);
+    expect(multiSchema.safeParse(Array.from({ length: 101 }, (_, i) => `doc_${i}`)).success).toBe(false);
   });
 });
 

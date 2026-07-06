@@ -41,10 +41,88 @@ describe('collections service — definition validation', () => {
     expect(await svc.getCollection(db, 'articles')).not.toBeNull();
   });
 
+  it('accepts publicRead but rejects an inline role→action access map (dead config removed)', async () => {
+    // publicRead is the only collection access knob — accepted.
+    await svc.createCollection(db, admin, bad({ slug: 'pub', access: { publicRead: true } }), NOW);
+    // A role→action map (once accepted, stored, and silently ignored) is now rejected.
+    const roleMap = { editor: ['read', 'update'] } as unknown as { publicRead?: boolean };
+    await expect(
+      svc.createCollection(db, admin, bad({ slug: 'roled', access: roleMap }), NOW),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
+  it("B4: accepts lifecycle 'none'; rejects the contradictory none+draftPublish combo", async () => {
+    await svc.createCollection(db, admin, bad({ slug: 'records', workflow: { lifecycle: 'none' } }), NOW);
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({ slug: 'contradiction', workflow: { lifecycle: 'none', draftPublish: true } }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
+  it('accepts a relation field with zero allowlist edits (registry IS the gate)', async () => {
+    const def = await svc.createCollection(
+      db,
+      admin,
+      bad({
+        slug: 'graph',
+        fields: [
+          { key: 'title', type: 'text', required: true, index: true },
+          { key: 'author', type: 'relation', config: { collection: 'people' }, index: true },
+          { key: 'refs', type: 'relation', config: { collection: 'graph', multiple: true }, index: true },
+        ],
+      }),
+      NOW,
+    );
+    expect(def.slug).toBe('graph');
+  });
+
+  it('rejects unique on a multi-valued relation (shared unique_key → false collisions)', async () => {
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({
+          slug: 'rel-u',
+          fields: [
+            { key: 'title', type: 'text', required: true, index: true },
+            { key: 'refs', type: 'relation', config: { collection: 'people', multiple: true }, index: true, unique: true },
+          ],
+        }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
+  it('rejects a relation without a target collection (config gate)', async () => {
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({
+          slug: 'rel-bad',
+          fields: [{ key: 'ref', type: 'relation', index: true }],
+        }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
   it('rejects a bad slug', async () => {
     await expect(svc.createCollection(db, admin, bad({ slug: 'Bad Slug' }), NOW)).rejects.toBeInstanceOf(
       InputValidationError,
     );
+  });
+
+  it('C2: rejects URL-reserved slugs (static route segments would shadow them)', async () => {
+    for (const slug of ['admin', 'api', 's', 'vendor']) {
+      await expect(svc.createCollection(db, admin, bad({ slug }), NOW)).rejects.toBeInstanceOf(
+        InputValidationError,
+      );
+    }
   });
 
   it('rejects an unknown field type', async () => {
@@ -165,9 +243,7 @@ describe('collections service — discovery projection (SEC-5) + access/workflow
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 
-  it('SEC-6: accepts publicRead plus a valid role→actions map', async () => {
-    await expect(
-      svc.createCollection(db, admin, { ...posts, slug: 'ok-acc', access: { publicRead: true, editor: ['read', 'create'] } }, NOW),
-    ).resolves.toBeTruthy();
-  });
+  // (The former "SEC-6 accepts a role→actions map" test was removed: that map was
+  // dead config — stored but never consumed by the authorizer — and is now rejected.
+  // See "rejects an inline role→action access map" above.)
 });

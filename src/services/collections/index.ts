@@ -12,25 +12,31 @@
 import { z } from 'zod';
 import type { Database } from '@/db/client';
 import type { CollectionDefinition } from '@/fields/types';
-import { requireFieldType, isIndexable } from '@/fields/registry';
+import { requireFieldType, isIndexable, isMultiValued } from '@/fields/registry';
 import * as q from '@/db/queries/collections';
-import { authorize, ACTIONS, type Principal } from '@/access';
+import { authorize, type Principal } from '@/access';
 import { getPrincipalPermissions } from '@/db/queries/roles';
 import { InputValidationError, NotFoundError, ConflictError, ForbiddenError } from '@/lib/errors';
-import { RESERVED_FIELD_KEYS } from '@/config/constants';
+import { RESERVED_FIELD_KEYS, RESERVED_COLLECTION_SLUGS } from '@/config/constants';
 import type { ErrorDetails } from '@/lib/errors';
 
 const SLUG_RE = /^[a-z][a-z0-9-]*$/;
 const KEY_RE = /^[a-z][a-z0-9_]*$/;
 
 // SEC-6: `access` and `workflow` are persisted verbatim, so they MUST be validated
-// before they reach the database. `workflow` is a closed shape; `access` allows the
-// `publicRead` sugar plus an optional role→actions map (each value a list of the
-// closed action vocabulary).
-const WORKFLOW_SCHEMA = z.strictObject({ draftPublish: z.boolean().optional() });
-const ACCESS_SCHEMA = z
-  .object({ publicRead: z.boolean().optional() })
-  .catchall(z.array(z.enum(ACTIONS)));
+// before they reach the database. Both are CLOSED shapes. `access` carries ONLY the
+// `publicRead` sugar — collection-scoped permissions live in `role_permissions`
+// (`principal_roles` assignments scoped to a collection), the single mechanism the
+// authorizer actually consumes. An earlier `.catchall(role→actions)` map was accepted,
+// stored, and silently ignored by `decide()` — a security smell (it looked like it
+// granted access but did nothing). It is now rejected outright (strictObject).
+const WORKFLOW_SCHEMA = z.strictObject({
+  draftPublish: z.boolean().optional(),
+  // 'none' opts the collection OUT of the publish lifecycle (B4): docs are born
+  // published and the status affordances are suppressed on every surface.
+  lifecycle: z.enum(['publish', 'none']).optional(),
+});
+const ACCESS_SCHEMA = z.strictObject({ publicRead: z.boolean().optional() });
 
 export const listCollections = q.listCollections;
 export const getCollection = q.getCollection;
@@ -51,6 +57,11 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
 
   if (!SLUG_RE.test(input.slug)) {
     issues.push({ path: 'slug', message: 'Slug must be lowercase, start with a letter (a-z0-9-).' });
+  }
+  // A collection named after a static top-level route would be shadowed on the
+  // public surface (C2) — reject up front rather than 404 mysteriously later.
+  if ((RESERVED_COLLECTION_SLUGS as readonly string[]).includes(input.slug)) {
+    issues.push({ path: 'slug', message: `'${input.slug}' is a reserved path segment.` });
   }
   if (!input.name?.trim()) issues.push({ path: 'name', message: 'Name is required.' });
   if (input.shape !== 'collection' && input.shape !== 'singleton') {
@@ -81,6 +92,11 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
       if (f.unique && !f.index) {
         issues.push({ path: `${at}.unique`, message: `A unique field must also be indexed.` });
       }
+      // A multi-valued field writes N index rows sharing one unique_key — two docs
+      // sharing ANY element would falsely collide. Reject at definition time.
+      if (f.unique && isMultiValued(f)) {
+        issues.push({ path: `${at}.unique`, message: `A multi-valued field cannot be unique.` });
+      }
     } catch (e) {
       if (e instanceof z.ZodError) {
         for (const iss of e.issues) {
@@ -98,6 +114,11 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
       for (const iss of r.error.issues) {
         issues.push({ path: `workflow${iss.path.length ? `.${iss.path.join('.')}` : ''}`, message: iss.message });
       }
+    } else if (r.data.lifecycle === 'none' && r.data.draftPublish) {
+      issues.push({
+        path: 'workflow',
+        message: "lifecycle 'none' and draftPublish are contradictory — pick one.",
+      });
     }
   }
   if (input.access !== undefined) {

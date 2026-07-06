@@ -6,12 +6,23 @@
  */
 
 const TOKEN_PREFIX = 'rmk_'; // "remill key" — helps humans/scanners recognise it
+const SHARE_TOKEN_PREFIX = 'rms_'; // "remill share" — a link token, never an API key
 
-/** Generate a new opaque token (returned to the caller once, never stored). */
-export function generateToken(): string {
+function randomToken(prefix: string): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  return TOKEN_PREFIX + base64url(bytes);
+  return prefix + base64url(bytes);
+}
+
+/** Generate a new opaque API token (returned to the caller once, never stored). */
+export function generateToken(): string {
+  return randomToken(TOKEN_PREFIX);
+}
+
+/** Generate a share-link token (C3) — same entropy/hashing as API tokens, but a
+ *  distinct prefix so a leaked link can never be mistaken for a bearer key. */
+export function generateShareToken(): string {
+  return randomToken(SHARE_TOKEN_PREFIX);
 }
 
 /** SHA-256 hex hash of a token, for storage and constant-time-ish lookup. */

@@ -1,9 +1,9 @@
 # Database Standards
 
-> **STATUS: TARGET — the fixed-table schema and query layer land in Phase 1; the `document_index`
-> sync and revision append land with the schema engine (Phase 2); the access tables in Phase 3.** The
-> authoritative column definitions live in `src/db/schema.ts` — this doc documents *which tables exist
-> and why*, never the exact column lists (they belong in code).
+> **STATUS: IMPLEMENTED.** The fixed-table schema, query layer, `document_index` sync, revision
+> append, and access tables are live (migrations `0000`–`0005`, the latest adding `principals.subtype`
+> and `invite_tokens`). The authoritative column definitions live in `src/db/schema.ts` — this doc
+> documents *which tables exist and why*, never the exact column lists (they belong in code).
 
 Standards for all database-touching code. remill runs on **D1 (SQLite) with Drizzle for the fixed
 tables only** — dynamic content is schema-as-data (SCHEMA_ENGINE.md), so Drizzle migrations stay rare.

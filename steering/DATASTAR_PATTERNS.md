@@ -1,8 +1,8 @@
 # Datastar Patterns
 
-> **STATUS: TARGET — the mechanism library (`src/lib/datastar-response.ts`, `json-for-script.ts`,
-> `datastar-chat-stream.ts`) lands in Phase 1; admin interactivity is built on it from Phase 4.** This
-> doc is ported from a battle-tested Datastar v1 codebase — its gotchas are hard-won; do not relearn them.
+> **STATUS: IMPLEMENTED.** The mechanism library (`src/lib/datastar-response.ts`,
+> `src/lib/json-for-script.ts`) and the Datastar-driven admin are live. This doc is ported from a
+> battle-tested Datastar v1 codebase — its gotchas are hard-won; do not relearn them.
 
 The admin has no React runtime, no TanStack Query, no client-side routing. Every page is a fresh server
 render; **[Datastar v1](https://data-star.dev) is the sole hypermedia runtime** — declarative `data-*`

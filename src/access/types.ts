@@ -34,6 +34,11 @@ export interface Principal {
   /** Optional narrowing scope mask from the bearer token (REST/MCP). Sessions
    *  carry none. Effective permission = principal's permissions ∩ this mask. */
   readonly tokenScope?: readonly { readonly collection: string; readonly action: Action }[];
+  /** The HASHED share-link token this request arrived through (C3), matched
+   *  against `item_grants` rows with subjectKind 'link'. Carried only by the
+   *  public share route's synthetic anonymous principal — it ADDS one document's
+   *  granted actions and nothing else (additive, like every grant). */
+  readonly linkId?: string;
 }
 
 /** What an action targets. `collection` is always known; document specifics are

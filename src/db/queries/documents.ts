@@ -9,7 +9,7 @@
  * document, its index, and its history never drift apart (DATABASE_STANDARDS.md).
  */
 
-import { and, eq, sql, desc, count, type SQL } from 'drizzle-orm';
+import { and, eq, sql, desc, count, inArray, type SQL } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { Database } from '@/db/client';
 import { documents, documentIndex, documentRevisions } from '@/db/schema';
@@ -97,6 +97,18 @@ export async function getSingletonData(
     .limit(1);
   const r = rows[0];
   return r ? (JSON.parse(r.dataJson || '{}') as Record<string, unknown>) : null;
+}
+
+/** The collection a document lives in, by id — metadata only, NO witness (the
+ *  share-link route needs the collection to route the gated read; content never
+ *  flows through here — getDocumentMetaForAuth precedent). */
+export async function getDocumentCollection(db: Database, id: string): Promise<string | null> {
+  const rows = await db
+    .select({ collection: documents.collection })
+    .from(documents)
+    .where(eq(documents.id, id))
+    .limit(1);
+  return rows[0]?.collection ?? null;
 }
 
 /** Read one document by id (scoped to a collection). Witness required. */
@@ -201,6 +213,65 @@ export async function listDocuments(
 
   const totalRows = await db.select({ n: count() }).from(documents).where(baseWhere);
   return { rows: rows.map(toDomain), total: totalRows[0]?.n ?? 0 };
+}
+
+/** Batch-read documents by id within ONE collection, with the caller's compiled
+ *  access predicate applied in-query — ids the reader cannot see simply don't
+ *  come back (never post-filter). Used by relation read-expansion (B2). Chunked
+ *  to respect D1's per-statement bound-parameter budget. Witness required. */
+export async function getDocumentsByIds(
+  db: Database,
+  collection: string,
+  ids: readonly string[],
+  accessFilter: SQL | undefined,
+  _grant: Grant,
+): Promise<DocumentRecord[]> {
+  const CHUNK = 80;
+  const out: DocumentRecord[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const rows = await db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.collection, collection),
+          inArray(documents.id, [...ids.slice(i, i + CHUNK)]),
+          accessFilter,
+        ),
+      );
+    out.push(...rows.map(toDomain));
+  }
+  return out;
+}
+
+/** Documents in ONE source collection whose indexed relation field(s) reference
+ *  `targetDocId` — the reverse edge lookup (backlinks, B3). This is a CONTENT
+ *  read, so the caller's compiled access predicate applies in-query (unlike
+ *  `isIndexValueTaken` below, which is an access-blind uniqueness pre-check and
+ *  must never serve user-facing reads). Witness required. */
+export async function listBacklinks(
+  db: Database,
+  sourceCollection: string,
+  fieldKeys: readonly string[],
+  targetDocId: string,
+  accessFilter: SQL | undefined,
+  limit: number,
+  _grant: Grant,
+): Promise<DocumentRecord[]> {
+  if (!fieldKeys.length) return [];
+  const rows = await db
+    .select()
+    .from(documents)
+    .where(
+      and(
+        eq(documents.collection, sourceCollection),
+        sql`${documents.id} IN (SELECT ${documentIndex.documentId} FROM ${documentIndex} WHERE ${documentIndex.collection} = ${sourceCollection} AND ${inArray(documentIndex.fieldKey, [...fieldKeys])} AND ${documentIndex.valueText} = ${targetDocId})`,
+        accessFilter,
+      ),
+    )
+    .orderBy(sql`${documents.createdAt} DESC, ${documents.id} DESC`)
+    .limit(limit);
+  return rows.map(toDomain);
 }
 
 /** The next 1-based revision number for a document. */

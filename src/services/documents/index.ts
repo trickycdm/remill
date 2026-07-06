@@ -12,23 +12,34 @@
 
 import { z } from 'zod';
 import type { Database } from '@/db/client';
-import type { CollectionDefinition, FieldDescriptor, SaveCtx } from '@/fields/types';
-import { resolveField } from '@/fields/registry';
+import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference } from '@/fields/types';
+import { resolveField, isMultiValued, referencesOf } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
-import { getCollection } from '@/db/queries/collections';
-import { authorize, compileReadFilter, resolveAccess, type Principal } from '@/access';
+import { getCollection, listCollections as listCollectionDefs } from '@/db/queries/collections';
+import { authorize, compileReadFilter, resolveAccess, anonymousPrincipal, type Principal } from '@/access';
 import { newId } from '@/lib/id';
+import { hasLifecycle } from '@/lib/lifecycle';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
 import {
   InputValidationError,
   NotFoundError,
   ConflictError,
   BadRequestError,
+  ForbiddenError,
   type ErrorDetails,
 } from '@/lib/errors';
 import type { DocumentRecord } from '@/db/queries/documents';
 
 export type { DocumentRecord } from '@/db/queries/documents';
+export type { ExpandedReference } from '@/fields/types';
+
+/** A read result: the raw document plus (when the collection has referencing
+ *  fields) the expansion of each reference into `{id, title, collection}`.
+ *  `relations` is a SIBLING of data — data keeps the raw ids, so round-trip
+ *  writes are unaffected (B2). */
+export type ExpandedDocument = DocumentRecord & {
+  readonly relations?: Readonly<Record<string, ExpandedReference | ExpandedReference[]>>;
+};
 
 async function loadCollection(db: Database, slug: string): Promise<CollectionDefinition> {
   const def = await getCollection(db, slug);
@@ -108,7 +119,10 @@ function coerceNumericFilter(field: FieldDescriptor, raw: string): string {
   return raw;
 }
 
-/** Build document_index rows for every indexed field (SCHEMA_ENGINE.md surface 1). */
+/** Build document_index rows for every indexed field (SCHEMA_ENGINE.md surface 1).
+ *  A multi-valued `toIndex` returns an array — one row PER ELEMENT, so each edge of
+ *  a multi-relation is independently filterable and reverse-lookupable (B1). The
+ *  sync layer replaces a document's rows wholesale, so N rows need no query change. */
 function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): dq.IndexValue[] {
   const rows: dq.IndexValue[] = [];
   for (const field of def.fields) {
@@ -117,14 +131,17 @@ function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): d
     if (!ft.toIndex) continue;
     const idx = ft.toIndex(data[field.key] as never);
     if (idx === null || idx === undefined) continue;
-    rows.push({
-      fieldKey: field.key,
-      valueText: typeof idx === 'string' ? idx : null,
-      valueNum: typeof idx === 'number' ? idx : null,
-      // Populate the DB uniqueness backing only for unique fields (COR-8). A unique
-      // field is always indexed (collection validation enforces unique ⇒ index).
-      uniqueKey: field.unique ? `${def.slug}:${field.key}` : null,
-    });
+    for (const v of Array.isArray(idx) ? idx : [idx]) {
+      rows.push({
+        fieldKey: field.key,
+        valueText: typeof v === 'string' ? v : null,
+        valueNum: typeof v === 'number' ? v : null,
+        // Populate the DB uniqueness backing only for unique fields (COR-8). A unique
+        // field is always indexed, and never multi-valued (collection validation
+        // enforces unique ⇒ index and rejects unique on multi-valued fields).
+        uniqueKey: field.unique ? `${def.slug}:${field.key}` : null,
+      });
+    }
   }
   return rows;
 }
@@ -145,16 +162,179 @@ async function checkUnique(
     const { ft } = resolveField(field);
     const idx = ft.toIndex?.(data[field.key] as never);
     if (idx === null || idx === undefined) continue;
-    if (typeof idx === 'string' && idx === '') continue;
-    const kind: dq.IndexKind = typeof idx === 'number' ? 'num' : 'text';
-    if (await dq.isIndexValueTaken(db, def.slug, field.key, idx, kind, excludeId)) {
-      throw new ConflictError(`${field.label ?? field.key} '${idx}' is already taken.`);
+    // Unique + multi-valued is rejected at definition time; iterate defensively
+    // per element so the check stays correct even for a scalar-or-array toIndex.
+    for (const val of Array.isArray(idx) ? idx : [idx]) {
+      if (typeof val === 'string' && val === '') continue;
+      const kind: dq.IndexKind = typeof val === 'number' ? 'num' : 'text';
+      if (await dq.isIndexValueTaken(db, def.slug, field.key, val, kind, excludeId)) {
+        throw new ConflictError(`${field.label ?? field.key} '${val}' is already taken.`);
+      }
     }
   }
 }
 
 function initialStatus(def: CollectionDefinition): 'draft' | 'published' {
+  // lifecycle:'none' docs are ALWAYS born published — status stays load-bearing
+  // in the access layer (the `published` condition, publicRead), so opting out
+  // of the lifecycle means opting into permanent published-ness (B4).
+  if (!hasLifecycle(def)) return 'published';
   return def.workflow?.draftPublish ? 'draft' : 'published';
+}
+
+// ---------------------------------------------------------------------------
+// Relation read-expansion (B2)
+// ---------------------------------------------------------------------------
+
+/** The target's display-title field: the configured `titleField` when it exists
+ *  on the target, else the target's first text/slug field. */
+function pickTitleField(def: CollectionDefinition, configured?: string): string | undefined {
+  if (configured && def.fields.some((f) => f.key === configured)) return configured;
+  return def.fields.find((f) => f.type === 'text' || f.type === 'slug')?.key;
+}
+
+/**
+ * Expand every referencing field's id(s) into `{id, title, collection}`,
+ * batch-loading each target collection ONCE per call (no N+1). Titles are a
+ * permission-gated read: targets the reader cannot see — and dangling/deleted
+ * ids — expand with `title: null` (the raw ids were already visible in data;
+ * only the looked-up content is gated). Rows come back unchanged when the
+ * collection has no referencing fields.
+ */
+async function expandRelations(
+  db: Database,
+  principal: Principal,
+  def: CollectionDefinition,
+  rows: DocumentRecord[],
+  now: string,
+): Promise<ExpandedDocument[]> {
+  const refFields = def.fields
+    .map((field) => ({ field, ref: referencesOf(field) }))
+    .filter((x): x is { field: FieldDescriptor; ref: { collection: string; titleField?: string } } => x.ref !== null);
+  if (!refFields.length || !rows.length) return rows;
+
+  // Collect the referenced ids per target collection.
+  const wanted = new Map<string, Set<string>>();
+  for (const { field, ref } of refFields) {
+    const set = wanted.get(ref.collection) ?? new Set<string>();
+    wanted.set(ref.collection, set);
+    for (const row of rows) {
+      const v = row.data[field.key];
+      for (const id of Array.isArray(v) ? v : v == null ? [] : [v]) {
+        if (typeof id === 'string') set.add(id);
+      }
+    }
+  }
+
+  // Batch-load each target's READABLE docs (authorize + compiled filter — an
+  // unpublished target reads as title:null for a publicRead-only reader).
+  const loaded = new Map<string, { def: CollectionDefinition | null; docs: Map<string, DocumentRecord> }>();
+  for (const [target, ids] of wanted) {
+    const entry = { def: null as CollectionDefinition | null, docs: new Map<string, DocumentRecord>() };
+    loaded.set(target, entry);
+    if (!ids.size) continue;
+    entry.def = await getCollection(db, target);
+    if (!entry.def) continue; // target collection deleted → all titles null
+    try {
+      const resolved = await resolveAccess(db, principal.id, target);
+      const grant = await authorize(db, principal, 'read', { collection: target }, now, resolved);
+      const filter = await compileReadFilter(db, principal, target, now, resolved);
+      for (const doc of await dq.getDocumentsByIds(db, target, [...ids], filter, grant)) {
+        entry.docs.set(doc.id, doc);
+      }
+    } catch (e) {
+      // Reader can't read the target collection at all — expansion stays null.
+      if (!(e instanceof ForbiddenError)) throw e;
+    }
+  }
+
+  return rows.map((row) => {
+    const relations: Record<string, ExpandedReference | ExpandedReference[]> = {};
+    for (const { field, ref } of refFields) {
+      const v = row.data[field.key];
+      if (v == null) continue;
+      const entry = loaded.get(ref.collection);
+      const titleKey = entry?.def ? pickTitleField(entry.def, ref.titleField) : undefined;
+      const expand = (id: unknown): ExpandedReference => {
+        const target = typeof id === 'string' ? entry?.docs.get(id) : undefined;
+        const raw = target && titleKey ? target.data[titleKey] : undefined;
+        return {
+          id: String(id),
+          title: typeof raw === 'string' && raw.length ? raw : null,
+          collection: ref.collection,
+        };
+      };
+      relations[field.key] = Array.isArray(v) ? v.map(expand) : expand(v);
+    }
+    return Object.keys(relations).length ? { ...row, relations } : row;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Backlinks — the reverse edges of the graph (B3)
+// ---------------------------------------------------------------------------
+
+/** One reverse edge: a document that references the asked-about document. */
+export interface Backlink {
+  readonly id: string;
+  /** The SOURCE collection the referrer lives in. */
+  readonly collection: string;
+  readonly title: string | null;
+  readonly status: 'draft' | 'published';
+  readonly updatedAt: string;
+}
+
+/** Referrers returned per source collection — a display cap, not pagination. */
+const BACKLINKS_LIMIT = 50;
+
+/**
+ * Documents that REFERENCE the given document through indexed relation fields.
+ * Access-gated twice: asking requires `read` on the target document, and each
+ * SOURCE collection is read under the caller's own compiled filter — a referrer
+ * the reader cannot see is simply absent, never a leak. Only INDEXED relation
+ * fields produce backlinks (the edges live in `document_index`).
+ */
+export async function getBacklinks(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  now: string,
+): Promise<Backlink[]> {
+  const grant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const target = await dq.getDocument(db, collectionSlug, id, grant);
+  if (!target) throw new NotFoundError('Document');
+
+  const out: Backlink[] = [];
+  for (const def of await listCollectionDefs(db)) {
+    const fieldKeys = def.fields
+      .filter((f) => f.index && referencesOf(f)?.collection === collectionSlug)
+      .map((f) => f.key);
+    if (!fieldKeys.length) continue;
+    let rows: DocumentRecord[];
+    try {
+      const resolved = await resolveAccess(db, principal.id, def.slug);
+      const srcGrant = await authorize(db, principal, 'read', { collection: def.slug }, now, resolved);
+      const filter = await compileReadFilter(db, principal, def.slug, now, resolved);
+      rows = await dq.listBacklinks(db, def.slug, fieldKeys, id, filter, BACKLINKS_LIMIT, srcGrant);
+    } catch (e) {
+      // The reader can't read this source collection — its edges are invisible.
+      if (!(e instanceof ForbiddenError)) throw e;
+      continue;
+    }
+    const titleKey = pickTitleField(def);
+    for (const row of rows) {
+      const raw = titleKey ? row.data[titleKey] : undefined;
+      out.push({
+        id: row.id,
+        collection: def.slug,
+        title: typeof raw === 'string' && raw.length ? raw : null,
+        status: row.status,
+        updatedAt: row.updatedAt,
+      });
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,11 +347,13 @@ export async function getDocument(
   collectionSlug: string,
   id: string,
   now: string,
-): Promise<DocumentRecord> {
+): Promise<ExpandedDocument> {
   const grant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
   const doc = await dq.getDocument(db, collectionSlug, id, grant);
   if (!doc) throw new NotFoundError('Document');
-  return doc;
+  const def = await loadCollection(db, collectionSlug);
+  const [expanded] = await expandRelations(db, principal, def, [doc], now);
+  return expanded;
 }
 
 export interface ListParams {
@@ -188,7 +370,7 @@ export interface ListParams {
 }
 
 export interface ListResult {
-  readonly rows: DocumentRecord[];
+  readonly rows: ExpandedDocument[];
   readonly total: number;
   readonly page: number;
   readonly pageSize: number;
@@ -238,13 +420,12 @@ export async function listDocuments(
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, params.pageSize ?? DEFAULT_PAGE_SIZE));
 
-  // Resolve filter/sort index kinds from the collection definition (COR-3): a
-  // number/boolean field indexes into value_num, everything else into value_text.
+  // The definition drives filter/sort index kinds (COR-3) and relation expansion.
+  const def = await loadCollection(db, collectionSlug);
   let filters: dq.ListFilter[] = [];
   let sort: dq.ListSort | undefined;
   const rawFilters = Object.entries(params.filters ?? {});
   if (rawFilters.length || params.sort) {
-    const def = await loadCollection(db, collectionSlug);
     filters = rawFilters.map(([fieldKey, value]) => {
       const field = assertIndexed(def, fieldKey, 'filter');
       const kind = indexKind(field);
@@ -252,6 +433,12 @@ export async function listDocuments(
     });
     if (params.sort) {
       const field = assertIndexed(def, params.sort.field, 'sort');
+      // A multi-valued field has N index rows per document; the sort correlated
+      // subquery would pick an arbitrary one — reject rather than sort randomly.
+      // (Filtering stays allowed: matching ANY element is the wanted semantics.)
+      if (isMultiValued(field)) {
+        throw new BadRequestError(`Field '${params.sort.field}' is multi-valued; cannot sort by it.`);
+      }
       sort = { fieldKey: params.sort.field, dir: params.sort.dir, kind: indexKind(field) };
     }
   }
@@ -278,7 +465,54 @@ export async function listDocuments(
   // A full page under the default sort implies there may be more → emit a cursor.
   const nextCursor =
     !sort && rows.length === pageSize ? encodeCursor(rows[rows.length - 1]) : undefined;
-  return { rows, total, page, pageSize, nextCursor };
+  const expanded = await expandRelations(db, principal, def, rows, now);
+  return { rows: expanded, total, page, pageSize, nextCursor };
+}
+
+/** Resolve a document by its indexed slug-field value (the public URL path,
+ *  C2). Reuses the GATED list path, so the caller's compiled filter applies —
+ *  anonymous readers resolve publicRead + published documents only. 404s when
+ *  the collection has no indexed slug field (id URLs still work). */
+export async function getDocumentBySlug(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  slugValue: string,
+  now: string,
+): Promise<ExpandedDocument> {
+  const def = await loadCollection(db, collectionSlug);
+  const slugField = def.fields.find((f) => f.type === 'slug' && f.index);
+  if (!slugField) throw new NotFoundError('Document');
+  const res = await listDocuments(
+    db,
+    principal,
+    collectionSlug,
+    { filters: { [slugField.key]: slugValue }, pageSize: 1 },
+    now,
+  );
+  const doc = res.rows[0];
+  if (!doc) throw new NotFoundError('Document');
+  return doc;
+}
+
+/**
+ * Read the document a resolved SHARE-LINK grant points at (C3), as an anonymous
+ * principal carrying the link identity — the read still runs through
+ * `authorize()`, which matches the link grant like any other grant. Returns the
+ * definition too (the share page renders through DocumentView). Throws
+ * NotFound/Forbidden for a dangling target or a grant without `read`.
+ */
+export async function getSharedDocument(
+  db: Database,
+  linkGrant: { documentId: string; subjectId: string },
+  now: string,
+): Promise<{ doc: ExpandedDocument; def: CollectionDefinition }> {
+  const collection = await dq.getDocumentCollection(db, linkGrant.documentId);
+  if (!collection) throw new NotFoundError('Document');
+  const principal: Principal = { ...anonymousPrincipal('rest'), linkId: linkGrant.subjectId };
+  const doc = await getDocument(db, principal, collection, linkGrant.documentId, now);
+  const def = await loadCollection(db, collection);
+  return { doc, def };
 }
 
 export async function listRevisions(
@@ -448,6 +682,9 @@ export async function setPublished(
   if (!existing) throw new NotFoundError('Document');
 
   const def = await loadCollection(db, collectionSlug);
+  if (!hasLifecycle(def)) {
+    throw new BadRequestError(`'${collectionSlug}' has no publish lifecycle.`);
+  }
   const grant = await authorize(
     db,
     principal,

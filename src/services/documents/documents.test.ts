@@ -5,10 +5,11 @@ import { eq } from 'drizzle-orm';
 import { documentIndex } from '@/db/schema';
 import * as collectionsService from '@/services/collections';
 import * as docs from '@/services/documents';
-import type { Principal } from '@/access';
+import { createShareLink, resolveShareLink, revokeItem } from '@/services/access';
+import { anonymousPrincipal, type Principal } from '@/access';
 import { seedRoles, makePrincipal } from '@/test/access';
 import type { CollectionDefinition } from '@/fields/types';
-import { InputValidationError, ConflictError, ForbiddenError, NotFoundError } from '@/lib/errors';
+import { InputValidationError, ConflictError, ForbiddenError, NotFoundError, BadRequestError } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
 
@@ -71,6 +72,304 @@ describe('documents service — the save pipeline', () => {
     expect(byField.slug?.valueText).toBe('indexed-post');
     expect(byField.views?.valueNum).toBe(42);
     expect(byField.body).toBeUndefined(); // body is not indexed
+  });
+
+  it('multi-valued relation: one document_index row per referenced id; re-synced on update (B1)', async () => {
+    const PEOPLE: CollectionDefinition = {
+      slug: 'people',
+      name: 'People',
+      shape: 'collection',
+      fields: [
+        { key: 'name', type: 'text', required: true, index: true },
+        { key: 'posts', type: 'relation', config: { collection: 'posts', multiple: true }, index: true },
+      ],
+    };
+    await collectionsService.createCollection(db, admin, PEOPLE, NOW);
+
+    const person = await docs.createDocument(
+      db,
+      admin,
+      'people',
+      { name: 'Ada', posts: ['doc_a1', 'doc_b2', 'doc_c3'] },
+      NOW,
+    );
+    const edges = (await indexRows(db, person.id)).filter((r) => r.fieldKey === 'posts');
+    expect(edges.map((r) => r.valueText).sort()).toEqual(['doc_a1', 'doc_b2', 'doc_c3']);
+    expect(edges.every((r) => r.uniqueKey === null)).toBe(true);
+
+    // The comma-string widget shape normalizes + dedupes; scalars elsewhere unaffected.
+    const bob = await docs.createDocument(db, admin, 'people', { name: 'Bob', posts: 'doc_b2, doc_b2, doc_z9' }, NOW);
+    expect(bob.data.posts).toEqual(['doc_b2', 'doc_z9']);
+
+    // Filtering matches ANY element (contains semantics) — both reference doc_b2.
+    const hits = await docs.listDocuments(db, admin, 'people', { filters: { posts: 'doc_b2' } }, NOW);
+    expect(hits.rows.map((r) => r.data.name).sort()).toEqual(['Ada', 'Bob']);
+
+    // Update replaces the whole edge set (delete-then-insert sync).
+    await docs.updateDocument(db, admin, 'people', person.id, { posts: ['doc_z9'] }, NOW);
+    const after = (await indexRows(db, person.id)).filter((r) => r.fieldKey === 'posts');
+    expect(after.map((r) => r.valueText)).toEqual(['doc_z9']);
+  });
+
+  it('B2: read-expansion resolves {id, title, collection} — single, multi, dangling', async () => {
+    const AUTHORS: CollectionDefinition = {
+      slug: 'authors',
+      name: 'Authors',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+    };
+    const BOOKS: CollectionDefinition = {
+      slug: 'books',
+      name: 'Books',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'author', type: 'relation', config: { collection: 'authors' } },
+        { key: 'related', type: 'relation', config: { collection: 'books', multiple: true }, index: true },
+      ],
+    };
+    await collectionsService.createCollection(db, admin, AUTHORS, NOW);
+    await collectionsService.createCollection(db, admin, BOOKS, NOW);
+    const ada = await docs.createDocument(db, admin, 'authors', { name: 'Ada Lovelace' }, NOW);
+    const first = await docs.createDocument(db, admin, 'books', { title: 'Notes', author: ada.id }, NOW);
+    const sequel = await docs.createDocument(
+      db,
+      admin,
+      'books',
+      { title: 'Sequel', author: ada.id, related: [first.id, 'doc_gone'] },
+      NOW,
+    );
+
+    const read = await docs.getDocument(db, admin, 'books', sequel.id, NOW);
+    expect(read.relations?.author).toEqual({ id: ada.id, title: 'Ada Lovelace', collection: 'authors' });
+    expect(read.relations?.related).toEqual([
+      { id: first.id, title: 'Notes', collection: 'books' },
+      { id: 'doc_gone', title: null, collection: 'books' }, // dangling → graceful null
+    ]);
+    // data keeps the RAW ids — the write round-trip shape is untouched.
+    expect(read.data.author).toBe(ada.id);
+    expect(read.data.related).toEqual([first.id, 'doc_gone']);
+
+    const listed = await docs.listDocuments(db, admin, 'books', {}, NOW);
+    const row = listed.rows.find((r) => r.id === sequel.id);
+    expect(row?.relations?.author).toEqual({ id: ada.id, title: 'Ada Lovelace', collection: 'authors' });
+  });
+
+  it('C3: a share link grants an outsider read of a NON-public doc; expiry + revoke honored', async () => {
+    // posts is not publicRead and this doc stays a draft — maximally private.
+    const doc = await docs.createDocument(db, admin, 'posts', { title: 'Secret Note' }, NOW);
+    await expect(
+      docs.getDocument(db, anonymousPrincipal('rest'), 'posts', doc.id, NOW),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    const { grantId, token } = await createShareLink(
+      db,
+      admin,
+      { collection: 'posts', documentId: doc.id, actions: ['read'] },
+      NOW,
+    );
+    expect(token.startsWith('rms_')).toBe(true); // never mistakable for an API key
+
+    // Token → grant → gated read as the link-carrying anonymous principal.
+    const grant = await resolveShareLink(db, token, NOW);
+    expect(grant?.documentId).toBe(doc.id);
+    const shared = await docs.getSharedDocument(db, grant!, NOW);
+    expect(shared.doc.id).toBe(doc.id);
+    expect(shared.def.slug).toBe('posts');
+
+    // The link identity adds ONE document — a different doc stays forbidden.
+    const other = await docs.createDocument(db, admin, 'posts', { title: 'Other' }, NOW);
+    await expect(
+      docs.getDocument(db, { ...anonymousPrincipal('rest'), linkId: grant!.subjectId }, 'posts', other.id, NOW),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    // Unknown, expired, and revoked all resolve to the same null (no oracle).
+    expect(await resolveShareLink(db, 'rms_garbage', NOW)).toBeNull();
+    const { token: shortLived } = await createShareLink(
+      db,
+      admin,
+      { collection: 'posts', documentId: doc.id, actions: ['read'], expiresAt: '2026-07-04T13:00:00Z' },
+      NOW,
+    );
+    expect(await resolveShareLink(db, shortLived, NOW)).not.toBeNull();
+    expect(await resolveShareLink(db, shortLived, '2026-07-04T14:00:00Z')).toBeNull();
+    await revokeItem(db, admin, grantId, 'posts', doc.id, NOW);
+    expect(await resolveShareLink(db, token, NOW)).toBeNull();
+  });
+
+  it('C2: getDocumentBySlug — anonymous resolves published publicRead docs only', async () => {
+    const PAGES: CollectionDefinition = {
+      slug: 'pages',
+      name: 'Pages',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'slug', type: 'slug', config: { from: 'title' }, unique: true, index: true },
+        { key: 'body', type: 'markdown' },
+      ],
+      workflow: { draftPublish: true },
+      access: { publicRead: true },
+    };
+    await collectionsService.createCollection(db, admin, PAGES, NOW);
+    const page = await docs.createDocument(db, admin, 'pages', { title: 'Hello World' }, NOW);
+    const anon = anonymousPrincipal('rest');
+
+    // Draft: invisible to anonymous (filter compiles to published-only)…
+    await expect(docs.getDocumentBySlug(db, anon, 'pages', 'hello-world', NOW)).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+    // …published: resolvable by its slug value.
+    await docs.setPublished(db, admin, 'pages', page.id, true, NOW);
+    const found = await docs.getDocumentBySlug(db, anon, 'pages', 'hello-world', NOW);
+    expect(found.id).toBe(page.id);
+
+    // A non-publicRead collection stays forbidden for anonymous (route → 404).
+    await expect(docs.getDocumentBySlug(db, anon, 'posts', 'anything', NOW)).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
+  });
+
+  it("B4: lifecycle 'none' — docs born published; publish/unpublish rejected", async () => {
+    const RECORDS: CollectionDefinition = {
+      slug: 'companies',
+      name: 'Companies',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+      workflow: { lifecycle: 'none' },
+    };
+    await collectionsService.createCollection(db, admin, RECORDS, NOW);
+    const doc = await docs.createDocument(db, admin, 'companies', { name: 'ACME' }, NOW);
+    expect(doc.status).toBe('published'); // born published — no draft state exists
+
+    await expect(
+      docs.setPublished(db, admin, 'companies', doc.id, false, NOW),
+    ).rejects.toBeInstanceOf(BadRequestError);
+  });
+
+  it('B3: backlinks — A referencing B appears under B, access-scoped, indexed-only', async () => {
+    const AUTHORS: CollectionDefinition = {
+      slug: 'authors',
+      name: 'Authors',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+      access: { publicRead: true }, // anyone can read a published author…
+    };
+    const BOOKS: CollectionDefinition = {
+      slug: 'books',
+      name: 'Books',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        // Indexed relation — produces backlinks (edges live in document_index).
+        { key: 'author', type: 'relation', config: { collection: 'authors' }, index: true },
+        // NOT indexed — must never produce a backlink.
+        { key: 'mention', type: 'relation', config: { collection: 'authors' } },
+      ],
+      // …but books are NOT publicRead: their edges are invisible to outsiders.
+    };
+    await collectionsService.createCollection(db, admin, AUTHORS, NOW);
+    await collectionsService.createCollection(db, admin, BOOKS, NOW);
+    const ada = await docs.createDocument(db, admin, 'authors', { name: 'Ada' }, NOW);
+    const book = await docs.createDocument(
+      db,
+      admin,
+      'books',
+      { title: 'Notes', author: ada.id, mention: ada.id },
+      NOW,
+    );
+
+    // Admin traverses the reverse edge (once — the unindexed field adds nothing).
+    const links = await docs.getBacklinks(db, admin, 'authors', ada.id, NOW);
+    expect(links).toEqual([
+      { id: book.id, collection: 'books', title: 'Notes', status: 'published', updatedAt: NOW },
+    ]);
+
+    // The roleless reader may read the author but not books — edges invisible.
+    const asNobody = await docs.getBacklinks(db, nobody, 'authors', ada.id, NOW);
+    expect(asNobody).toEqual([]);
+
+    // Removing the reference removes the backlink (index re-sync).
+    await docs.updateDocument(db, admin, 'books', book.id, { author: undefined }, NOW);
+    expect(await docs.getBacklinks(db, admin, 'authors', ada.id, NOW)).toEqual([]);
+  });
+
+  it('B2: a configured titleField overrides the first-text-field default', async () => {
+    const TARGETS: CollectionDefinition = {
+      slug: 'targets',
+      name: 'Targets',
+      shape: 'collection',
+      fields: [
+        { key: 'code', type: 'text', required: true, index: true },
+        { key: 'display', type: 'text' },
+      ],
+    };
+    const SOURCES: CollectionDefinition = {
+      slug: 'sources',
+      name: 'Sources',
+      shape: 'collection',
+      fields: [
+        { key: 'name', type: 'text', required: true, index: true },
+        { key: 'target', type: 'relation', config: { collection: 'targets', titleField: 'display' } },
+      ],
+    };
+    await collectionsService.createCollection(db, admin, TARGETS, NOW);
+    await collectionsService.createCollection(db, admin, SOURCES, NOW);
+    const t = await docs.createDocument(db, admin, 'targets', { code: 'T-1', display: 'The One' }, NOW);
+    const s = await docs.createDocument(db, admin, 'sources', { name: 'S', target: t.id }, NOW);
+    const read = await docs.getDocument(db, admin, 'sources', s.id, NOW);
+    expect(read.relations?.target).toEqual({ id: t.id, title: 'The One', collection: 'targets' });
+  });
+
+  it('B2: expansion is permission-scoped — an unreadable target expands with title:null', async () => {
+    const SECRETS: CollectionDefinition = {
+      slug: 'secrets',
+      name: 'Secrets',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+      // NOT publicRead — the roleless reader below cannot read it.
+    };
+    const NOTES: CollectionDefinition = {
+      slug: 'notes',
+      name: 'Notes',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'about', type: 'relation', config: { collection: 'secrets' } },
+      ],
+      access: { publicRead: true }, // readable by anyone once published
+    };
+    await collectionsService.createCollection(db, admin, SECRETS, NOW);
+    await collectionsService.createCollection(db, admin, NOTES, NOW);
+    const secret = await docs.createDocument(db, admin, 'secrets', { name: 'Classified' }, NOW);
+    const note = await docs.createDocument(db, admin, 'notes', { title: 'N', about: secret.id }, NOW);
+
+    // Admin sees the resolved title…
+    const asAdmin = await docs.getDocument(db, admin, 'notes', note.id, NOW);
+    expect(asAdmin.relations?.about).toEqual({ id: secret.id, title: 'Classified', collection: 'secrets' });
+
+    // …the roleless reader sees the reference but NOT the gated title.
+    const asNobody = await docs.getDocument(db, nobody, 'notes', note.id, NOW);
+    expect(asNobody.relations?.about).toEqual({ id: secret.id, title: null, collection: 'secrets' });
+  });
+
+  it('multi-valued relation: sort is rejected (non-deterministic across N rows)', async () => {
+    const TEAMS: CollectionDefinition = {
+      slug: 'teams',
+      name: 'Teams',
+      shape: 'collection',
+      fields: [
+        { key: 'name', type: 'text', required: true, index: true },
+        { key: 'members', type: 'relation', config: { collection: 'people', multiple: true }, index: true },
+      ],
+    };
+    await collectionsService.createCollection(db, admin, TEAMS, NOW);
+    await expect(
+      docs.listDocuments(db, admin, 'teams', { sort: { field: 'members', dir: 'asc' } }, NOW),
+    ).rejects.toBeInstanceOf(BadRequestError);
+    // …while filtering by the same field stays allowed.
+    await expect(
+      docs.listDocuments(db, admin, 'teams', { filters: { members: 'doc_x' } }, NOW),
+    ).resolves.toBeTruthy();
   });
 
   it('WHITELIST: rejects any undeclared field (anti-mass-assignment)', async () => {

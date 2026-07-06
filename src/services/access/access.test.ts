@@ -3,10 +3,13 @@ import { createTestD1 } from '@/test/d1';
 import { getDb, type Database } from '@/db/client';
 import { seedRoles, makePrincipal } from '@/test/access';
 import * as access from '@/services/access';
+import { setPasswordWithInvite } from '@/services/invites';
+import { authenticateUser } from '@/services/auth';
 import { findTokenByHash } from '@/db/queries/principals';
 import { hashToken } from '@/lib/token';
 import type { Principal } from '@/access';
-import { ForbiddenError, InputValidationError, ConflictError } from '@/lib/errors';
+import { personaOf } from '@/lib/persona';
+import { ForbiddenError, InputValidationError, ConflictError, UnauthorizedError } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
 
@@ -29,6 +32,78 @@ describe('access service — principals, roles, tokens', () => {
     const agent = principals.find((p) => p.id === agentId);
     expect(agent?.kind).toBe('agent');
     expect(agent?.roles.map((r) => r.role)).toContain('author');
+  });
+
+  it('records the machine persona (service vs agent) as a display subtype', async () => {
+    const serviceId = await access.createAgent(db, admin, 'data-puller', NOW, 'service');
+    const agentId = await access.createAgent(db, admin, 'ai-bot', NOW, 'agent');
+    const principals = await access.listPrincipals(db, admin, NOW);
+    const svc = principals.find((p) => p.id === serviceId)!;
+    const agent = principals.find((p) => p.id === agentId)!;
+
+    // Both are the same SECURITY kind (machine)…
+    expect(svc.kind).toBe('agent');
+    expect(agent.kind).toBe('agent');
+    // …but carry distinct personas for display/grouping.
+    expect(svc.subtype).toBe('service');
+    expect(personaOf(svc.kind, svc.subtype)).toBe('service');
+    expect(personaOf(agent.kind, agent.subtype)).toBe('agent');
+
+    // An unknown machine type is rejected.
+    await expect(access.createAgent(db, admin, 'weird', NOW, 'robot' as never)).rejects.toBeInstanceOf(
+      InputValidationError,
+    );
+  });
+
+  it('creates a human with a direct password (normalized email); they can sign in', async () => {
+    const { principalId, inviteToken } = await access.createUser(
+      db,
+      admin,
+      { name: 'Jane', email: 'Jane@Example.com', password: 'hunter2!!', role: 'editor' },
+      NOW,
+    );
+    expect(inviteToken).toBeUndefined();
+
+    const listed = await access.listPrincipals(db, admin, NOW);
+    const jane = listed.find((p) => p.id === principalId)!;
+    expect(jane.kind).toBe('user');
+    expect(jane.subtype).toBe('person');
+    expect(jane.email).toBe('jane@example.com'); // normalized
+    expect(jane.roles.map((r) => r.role)).toContain('editor');
+
+    const user = await authenticateUser(db, 'jane@example.com', 'hunter2!!');
+    expect(user?.id).toBe(principalId);
+  });
+
+  it('invites a human without a password: login blocked until set via the single-use token', async () => {
+    const { principalId, inviteToken } = await access.createUser(db, admin, { name: 'Bob', email: 'bob@example.com' }, NOW);
+    expect(inviteToken).toMatch(/^rmk_/);
+
+    // No usable password yet — login fails.
+    expect(await authenticateUser(db, 'bob@example.com', 'anything!')).toBeNull();
+
+    // Consume the invite → password set → login works.
+    await setPasswordWithInvite(db, inviteToken!, 'newpass12', NOW);
+    const user = await authenticateUser(db, 'bob@example.com', 'newpass12');
+    expect(user?.id).toBe(principalId);
+
+    // The token is single-use — a replay is refused.
+    await expect(setPasswordWithInvite(db, inviteToken!, 'again1234', NOW)).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  it('rejects duplicate email + weak password; an agent cannot create users (SEC-8)', async () => {
+    await access.createUser(db, admin, { name: 'A', email: 'dupe@example.com', password: 'password1' }, NOW);
+    await expect(
+      access.createUser(db, admin, { name: 'B', email: 'Dupe@Example.com', password: 'password1' }, NOW),
+    ).rejects.toBeInstanceOf(ConflictError);
+    await expect(
+      access.createUser(db, admin, { name: 'C', email: 'c@example.com', password: 'short' }, NOW),
+    ).rejects.toBeInstanceOf(InputValidationError);
+
+    const agentAdmin = await makePrincipal(db, NOW, { id: 'prn_agent_admin2', kind: 'agent', role: 'admin' });
+    await expect(
+      access.createUser(db, agentAdmin, { name: 'D', email: 'd@example.com', password: 'password1' }, NOW),
+    ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it('denies management to a principal without manage_access', async () => {

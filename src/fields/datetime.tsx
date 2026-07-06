@@ -64,4 +64,7 @@ export const datetimeField: FieldType<DatetimeConfig, string> = {
     </FieldShell>
   ),
   CellComponent: ({ value }) => <span>{value ?? ''}</span>,
+  // A semantic <time> with the readable date-time portion of the stored ISO.
+  ViewComponent: ({ value }) =>
+    value ? <time datetime={value}>{value.slice(0, 16).replace('T', ' ')}</time> : null,
 };

@@ -1,8 +1,10 @@
 # Security Standards
 
-> **STATUS: TARGET.** remill has no code yet. These standards bind every line written from Phase 1 on.
-> The Blogmill holes named below are the reason each rule exists — remill's mandate is to make them
-> *structurally impossible*, not merely avoided (success criterion §5 of the plan).
+> **STATUS: IMPLEMENTED (in force).** The built system enforces these standards — sessions + scrypt,
+> hashed scope-masked tokens, the one whitelist-validated pipeline, and the invite flow (single-use
+> expiring set-password tokens + the console `EmailTransport` stub) are live code. The Blogmill holes
+> named below are the reason each rule exists — remill's mandate is to make them *structurally
+> impossible*, not merely avoided (success criterion §5 of the brief).
 
 remill descends from Blogmill, whose implementation shipped real security holes: **mass assignment of
 the whole request body**, unescaped SQL identifiers, and a shared weak signing secret. Every rule here
@@ -22,6 +24,18 @@ closes one of those, or a class like it. New code must comply; fix violations as
 - **Parameterized queries only.** Drizzle builds prepared statements; values are never
   string-interpolated into SQL. No raw `sql` template with unsanitised user input, and **never
   interpolate an identifier** (table/column) from user input — that was a Blogmill hole.
+- **Rendered markdown is sanitized by construction (C1, D23).** All markdown→HTML goes through
+  `src/lib/markdown` (micromark defaults): raw HTML in the source is ESCAPED (never emitted as
+  markup) and `javascript:`/`data:` link destinations are stripped. NEVER pass
+  `allowDangerousHtml`, and never render user/agent content with `dangerouslySetInnerHTML` except
+  through this renderer or another escaping path. The `FieldView` fallback is escaped text — a
+  field type must explicitly opt in to render markup.
+- **Share-link tokens follow API-token discipline (C3).** `rms_`-prefixed (never confusable with an
+  `rmk_` bearer key), 32 bytes of Web-Crypto entropy, SHA-256-hashed at rest (the hash is the
+  grant's `subjectId`), plaintext rendered exactly once at mint. Resolution returns the same null
+  for unknown/expired/revoked (no enumeration oracle), and consumption still runs through
+  `authorize()` — the token is a credential, not a bypass. Minting is human-only
+  (`refuseAgentEscalation`) and `manage_access`-gated per document.
 
 ## 1. Whitelist validation on EVERY write path (the anti-mass-assignment rule)
 
@@ -66,6 +80,17 @@ onto the record — any field an attacker named got written. remill's fix, from 
   presented token by hashing it and matching. A leaked database must never yield usable tokens.
 - Tokens belong to a **principal** and carry an optional narrowing scope mask (∩ only, never widens) —
   ACCESS_CONTROL.md.
+- **Invite / set-password tokens follow the same rules** (`invite_tokens`, `src/db/queries/invites.ts`):
+  hashed at rest, shown once, **single-use** (`consumed_at`) and **expiring** (`expires_at`, 7 days).
+  Consuming one is *un-gated* — the token IS the credential (identity-scoped, like `/admin/account`) — so
+  it only ever lets the invitee set **their own** password. An invited human with no password gets an
+  **unusable random hash** stored, so login is impossible until they set one. A missing/expired/consumed
+  token must be indistinguishable to the client (no enumeration oracle). Creating an invite requires
+  `manage_access` and refuses agents (SEC-8).
+- **Email delivery is stubbed** (`src/lib/email/`): the `ConsoleEmailTransport` does not send and logs
+  only redacted metadata (recipient *domain*, subject) — never the address, body, or link/token (PII
+  discipline). The actionable link is surfaced once on-screen to the authenticated admin. A real
+  provider is selected in `getEmailTransport` later; callers depend only on the `EmailTransport` interface.
 - **Changing a password verifies the CURRENT password first** (`verifyPassword`, constant-time), and
   rejects a mismatch with a **generic** message — never reveal whether the account or the password was
   wrong. Enforce a minimum length, then re-hash. A change email/password path is scoped to the session

@@ -47,7 +47,8 @@ validation or authorization step that lives only in one surface.
 ## REST API (Phase 6)
 
 Routes (plan §5b): collections list/create/update; documents list/get/create/update/delete/publish;
-revisions; media upload; `/media/:id[/:variant]` serving.
+revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing** at
+`/api/c/:collection/:id/grants` (GET list / POST grant / DELETE revoke, all `manage_access`-gated).
 
 - **Listing** supports `?filter[field]=`, `?sort=`, `?page=`, `?status=`. Filtering and sorting are
   only allowed on **indexed** fields (those with `index: true`, present in `document_index`).
@@ -57,6 +58,19 @@ revisions; media upload; `/media/:id[/:variant]` serving.
   set exactly.
 - **publicRead**: a collection with `access.publicRead` allows the `anonymous` principal to GET
   **published** documents only. Drafts are never visible to anonymous, ever.
+- **Relation read-expansion (B2)**: document reads (get + list, REST and MCP alike) attach a
+  `relations` object BESIDE `data` — `{ [fieldKey]: { id, title, collection } | [...] }` — resolving
+  each referencing field's id(s) to the target's display title (`titleField` config, else the
+  target's first text/slug field). `data` keeps the raw ids so write round-trips are unaffected.
+  Titles are permission-gated: a dangling id or a target the reader cannot see expands with
+  `title: null` — never an error, and never a leak (the batch load applies the reader's compiled
+  filter in-query).
+- **Backlinks (B3)**: `GET /api/c/:collection/:id/backlinks` (and the MCP `backlinks_<slug>` tool)
+  lists documents that reference the given one through **indexed** relation fields —
+  `[{ id, collection, title, status, updatedAt }]`. Read-gated twice: asking requires `read` on the
+  target, and each SOURCE collection is queried under the caller's own compiled filter, so a
+  referrer the reader cannot see is simply absent. Capped per source collection (display, not
+  pagination).
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
 - **Rate-limit headers** are stubbed in v1 (`X-RateLimit-*` present, not enforced). Wire real limits
@@ -64,11 +78,14 @@ revisions; media upload; `/media/:id[/:variant]` serving.
 
 ## MCP server (Phase 7)
 
-`McpAgent` (Cloudflare `agents` SDK) on a Durable Object, streamable HTTP at `/mcp`, authenticated
-with the **same bearer tokens** as REST.
+A direct streamable-HTTP JSON-RPC endpoint at `/mcp` (`src/mcp/handler.ts` + `tools.ts` — decision
+**D18**; not an `agents`-SDK `McpAgent` on a Durable Object), authenticated with the **same bearer
+tokens** as REST.
 
 - **Tools are generated per collection** from field descriptors (surface 6), not hand-listed:
-  - Per collection: `list_<slug>`, `get_<slug>`, `create_<slug>`, `update_<slug>`, `publish_<slug>`
+  - Per collection: `list_<slug>`, `get_<slug>`, `backlinks_<slug>` (reverse links, read-gated),
+    `create_<slug>`, `update_<slug>`, `publish_<slug>`,
+    `share_<slug>` (item grant; visible only with `manage_access`)
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
   - Schema management: `list_collections`, `create_collection`, `update_collection`
     (require `manage_schema`).

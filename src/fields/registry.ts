@@ -16,6 +16,7 @@ import { selectField } from '@/fields/select';
 import { tagsField } from '@/fields/tags';
 import { jsonField } from '@/fields/json';
 import { mediaField } from '@/fields/media';
+import { relationField } from '@/fields/relation';
 
 const REGISTRY: ReadonlyMap<string, AnyFieldType> = new Map(
   [
@@ -29,6 +30,7 @@ const REGISTRY: ReadonlyMap<string, AnyFieldType> = new Map(
     tagsField,
     jsonField,
     mediaField,
+    relationField,
   ].map((ft) => [ft.key, ft as unknown as AnyFieldType]),
 );
 
@@ -49,6 +51,27 @@ export function listFieldTypeKeys(): string[] {
 /** Whether a field type can be promoted into document_index (has toIndex). */
 export function isIndexable(key: string): boolean {
   return typeof REGISTRY.get(key)?.toIndex === 'function';
+}
+
+/** Whether a DESCRIPTOR indexes as multi-valued (toIndex may return an array ⇒
+ *  one index row per element) under its validated config. Multi-valued fields
+ *  cannot be `unique` or sorted on — callers enforce both (SCHEMA_ENGINE.md). */
+export function isMultiValued(field: FieldDescriptor): boolean {
+  const ft = REGISTRY.get(field.type);
+  if (!ft?.multiValued) return false;
+  const config = ft.configSchema.parse(field.config ?? {});
+  return ft.multiValued(config as never);
+}
+
+/** What collection a DESCRIPTOR's value references (for read-expansion, B2),
+ *  or null for non-referencing fields. */
+export function referencesOf(
+  field: FieldDescriptor,
+): { collection: string; titleField?: string } | null {
+  const ft = REGISTRY.get(field.type);
+  if (!ft?.references) return null;
+  const config = ft.configSchema.parse(field.config ?? {});
+  return ft.references(config as never);
 }
 
 /**

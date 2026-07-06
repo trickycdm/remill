@@ -16,6 +16,14 @@ export const THEME_STORAGE_KEY = 'remill-theme';
 /** Reserved collection slugs — seeded, protected, cannot be user-deleted. */
 export const PROTECTED_COLLECTIONS = ['settings', 'media'] as const;
 
+/** URL-reserved collection slugs (C2): the router's static top-level path
+ *  segments — a collection named one of these would be shadowed by them on the
+ *  public `/:collection/:slug` surface. (`media`/`settings` need no entry: the
+ *  seeded collections already hold those slugs, so the uniqueness check covers
+ *  them.) `s` is the share-link namespace (C3); `assets`/`src`/`vendor` are
+ *  build/static paths. */
+export const RESERVED_COLLECTION_SLUGS = ['admin', 'api', 'assets', 'auth', 'mcp', 's', 'src', 'vendor'] as const;
+
 /** Reserved document-field keys the engine owns; a collection field may not use them. */
 export const RESERVED_FIELD_KEYS = [
   'id',

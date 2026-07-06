@@ -1,12 +1,14 @@
 # Access Control
 
-> **STATUS: IMPLEMENTED (Phase 3).** The choke point + `Grant` witness + audit landed in Phase 2
-> ("born authorized"); the full model — roles-as-data, scoped assignments, item grants with expiry,
-> token scope masks, conditions `own`/`published`, publicRead sugar, and SQL-compiled list filters —
-> landed in Phase 3. Code: `src/access/` (decision), `src/db/queries/roles.ts` + `grants.ts`,
-> `src/services/access/` (management). Seeded roles: `src/access/policy.ts` (mirrored in `seed.sql`).
-> Default-deny, additive-only, one decision point, everything audited. Expressiveness is deliberately
-> traded for auditability (decision D16).
+> **STATUS: IMPLEMENTED (Phase 3 engine + Track A management surfaces).** The choke point + `Grant`
+> witness + audit landed in Phase 2 ("born authorized"); the full model — roles-as-data, scoped
+> assignments, item grants with expiry, token scope masks, conditions `own`/`published`, publicRead
+> sugar, and SQL-compiled list filters — landed in Phase 3. Track A added the management UI: personas,
+> invite-a-person, custom-role CRUD, per-collection token scoping, the Share panel, and the access
+> matrix. Code: `src/access/` (decision), `src/db/queries/roles.ts` + `grants.ts`,
+> `src/services/access/` (management), `src/routes/admin/access/**` (UI). Seeded roles:
+> `src/access/policy.ts` (mirrored in `seed.sql`). Default-deny, additive-only, one decision point,
+> everything audited. Expressiveness is deliberately traded for auditability (decision D16).
 
 ## Principals: humans and agents are the same kind of actor
 
@@ -15,6 +17,14 @@
 - Agents are identities, not shared keys: each autonomous agent gets its own principal, tokens,
   role assignments, and audit trail. Never issue a "team" or "shared" token.
 - A built-in `anonymous` principal represents unauthenticated requests.
+- **Persona vs. kind (`principals.subtype`).** `kind` is the only *security* axis: `user` (human,
+  session, may hold `manage_access`) vs `agent` (machine, token, refused access-management by
+  `refuseAgentEscalation`). But a person manages **three personas** — Person, Service, Agent — because
+  a data-pulling system and an autonomous AI client are both `kind: 'agent'` yet operationally
+  distinct. `subtype` (`'person' | 'service' | 'agent' | null`) records which, for display / grouping /
+  filtering **only**. `authorize()` never reads it; the value set is enforced at the service layer
+  (`createUser` → `person`, `createAgent(…, subtype)` → `service | agent`), not a DB CHECK. Derive it
+  with `personaOf(kind, subtype)` in `src/lib/persona.ts` (legacy null machines read as `agent`).
 - Tokens carry an optional **narrowing scope mask**: effective permission = principal's permissions
   ∩ token mask. A token can shrink an agent's blast radius, **never widen it**.
 
@@ -29,14 +39,36 @@
      Never arbitrary code. Extending it requires a decision-log entry.
    - Role *assignments* are collection-scopable: `(principal, role, collection | *)` —
      "editor, but only of posts."
-2. **Item grants** — per-document tuples `(principal | role, document_id, actions, granted_by,
-   expires_at?)`. Precision layer: "agent `researcher` may `update` document X until Friday."
+2. **Item grants** — per-document tuples `(principal | role | link, document_id, actions,
+   granted_by, expires_at?)`. Precision layer: "agent `researcher` may `update` document X until
+   Friday." Surfaced (Share) on all three doors: the document edit view's **Share panel** (managers
+   only — install-wide `manage_access`), the REST `/api/c/:collection/:id/grants` endpoint
+   (GET/POST/DELETE), and the generated MCP `share_<slug>` tool (visible only with `manage_access`).
+   All route through `grantItem`/`revokeItem`/`listItemGrants`, each
+   `authorize('manage_access', {collection, documentId})`-gated.
+   - **`link` subjects are SHARE LINKS (C3):** `subjectId` is the SHA-256 hash of an `rms_…` token
+     (plaintext shown once at mint; `createShareLink`, human-only via `refuseAgentEscalation`). The
+     public `/s/:token` route resolves the hash to the grant and reads through the SAME
+     `authorize()` path, with the link identity carried as `Principal.linkId` — an EXPLICIT match
+     branch in the grant queries, never disguised as a principal id, so the matrix and audit stay
+     honest. Expiry and revocation are the ordinary item-grant mechanics; unknown/expired/revoked
+     all resolve identically (no enumeration oracle). A link grants its one document and nothing
+     else — additive, like every grant.
 
 There are **no negative rules**. If you can't express a policy additively, the policy is wrong for
 this system — do not add deny rules.
 
+**Legibility is part of the model.** The consolidated access overview at `/admin/access/matrix`
+renders the effective-permission matrix (principal × collection, from `getPrincipalPermissions` +
+role assignments) plus every active item grant and token scope — the read-only answer to "who/what
+can touch what." When you add a new grant kind or scope mechanism, it must show up there too.
+
 Media rides collection permissions (upload = `create` on the `media` collection). A collection's
-`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`.
+`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`. **`publicRead`
+is the only collection-level access field** — collection-scoped permissions are expressed with
+`role_permissions` + collection-scoped `principal_roles`, the single mechanism the authorizer consumes.
+An inline `access: { <role>: [actions] }` map is rejected on write (it was once stored and silently
+ignored — a removed security smell).
 
 ## Tables (fixed, Drizzle-migrated)
 

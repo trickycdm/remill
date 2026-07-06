@@ -12,16 +12,25 @@ import { authorize, ACTIONS, type Principal } from '@/access';
 import * as roleQ from '@/db/queries/roles';
 import * as grantQ from '@/db/queries/grants';
 import * as principalQ from '@/db/queries/principals';
+import * as inviteQ from '@/db/queries/invites';
+import { getUserByEmail } from '@/db/queries/users';
 import { recentAudit } from '@/db/queries/audit';
-import { generateToken, hashToken } from '@/lib/token';
+import { generateToken, generateShareToken, hashToken } from '@/lib/token';
+import { hashPassword } from '@/lib/password';
 import type { PermissionSpec, RoleSpec } from '@/access/policy';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
 import type { Action, Condition } from '@/access/types';
+import type { MachinePersona } from '@/lib/persona';
 import { InputValidationError, NotFoundError, ForbiddenError, ConflictError } from '@/lib/errors';
 import type { ErrorDetails } from '@/lib/errors';
 
 const ROLE_SLUG_RE = /^[a-z][a-z0-9-]*$/;
 const CONDITIONS: readonly Condition[] = ['own', 'published'];
+
+// Human-credential policy (mirrors src/services/account/index.ts).
+const MIN_PASSWORD_LENGTH = 8;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // set-password links expire in 7 days
 
 // manage_access decisions concern the whole install, not one collection.
 const ROOT = { collection: '*' };
@@ -170,6 +179,83 @@ export async function revokeItem(db: Database, principal: Principal, grantId: st
   await grantQ.revokeItemGrant(db, grantId);
 }
 
+/**
+ * Create a SHARE LINK (C3): an item grant whose subject is the hashed link token
+ * (`subjectKind: 'link'`) — the same additive grant machinery as principals and
+ * roles, so expiry, revocation (the Share panel's revoke works unchanged), the
+ * access matrix, and audit all come free. Returns the plaintext token exactly
+ * once (API-token discipline); only its hash is stored.
+ */
+export async function createShareLink(
+  db: Database,
+  principal: Principal,
+  input: {
+    collection: string;
+    documentId: string;
+    actions: Action[];
+    expiresAt?: string;
+  },
+  now: string,
+): Promise<{ grantId: string; token: string }> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', { collection: input.collection, documentId: input.documentId }, now);
+  const bad = input.actions.filter((a) => !ACTIONS.includes(a));
+  if (bad.length) throw new InputValidationError(bad.map((a) => ({ path: 'actions', message: `Unknown action '${a}'.` })));
+  if (!input.actions.length) throw new InputValidationError([{ path: 'actions', message: 'Grant at least one action.' }]);
+  const token = generateShareToken();
+  const grantId = await grantQ.createItemGrant(
+    db,
+    {
+      subjectKind: 'link',
+      subjectId: await hashToken(token),
+      documentId: input.documentId,
+      actions: input.actions,
+      grantedBy: principal.id,
+      expiresAt: input.expiresAt ?? null,
+    },
+    now,
+  );
+  return { grantId, token };
+}
+
+/**
+ * Resolve a presented share-link token to its unexpired grant, or null for
+ * unknown/expired/revoked alike. Deliberately UN-GATED — the token IS the
+ * credential (invite-token precedent); the actual content read still runs
+ * through `authorize()` with the link identity on the principal.
+ */
+export async function resolveShareLink(
+  db: Database,
+  token: string,
+  now: string,
+): Promise<grantQ.ItemGrantRecord | null> {
+  return grantQ.findLinkGrantByHash(db, await hashToken(token), now);
+}
+
+/** Every item grant in the install (for the access overview). Requires install-wide
+ *  `manage_access`. */
+export async function listAllItemGrants(
+  db: Database,
+  principal: Principal,
+  now: string,
+): Promise<grantQ.ItemGrantRecord[]> {
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  return grantQ.listAllGrants(db);
+}
+
+/** List the item grants on a document (for the Share surface). Requires `manage_access`
+ *  on that document — the same gate that grants/revokes them. */
+export async function listItemGrants(
+  db: Database,
+  principal: Principal,
+  collection: string,
+  documentId: string,
+  now: string,
+): Promise<grantQ.ItemGrantRecord[]> {
+  await authorize(db, principal, 'manage_access', { collection, documentId }, now);
+  return grantQ.listGrantsForDocument(db, documentId);
+}
+
 export async function listAudit(db: Database, principal: Principal, now: string, limit = 100) {
   await authorize(db, principal, 'manage_access', ROOT, now);
   return recentAudit(db, limit);
@@ -184,10 +270,73 @@ export async function listPrincipals(db: Database, principal: Principal, now: st
   return principalQ.listPrincipals(db);
 }
 
-export async function createAgent(db: Database, principal: Principal, name: string, now: string): Promise<string> {
+/**
+ * Create a machine principal — a Service (a system pulling data) or an Agent (an
+ * autonomous AI client). Both are `kind: 'agent'` for security; `subtype` is the
+ * persona label only. Requires `manage_access` (human-held; agents are refused).
+ */
+export async function createAgent(
+  db: Database,
+  principal: Principal,
+  name: string,
+  now: string,
+  subtype: MachinePersona = 'agent',
+): Promise<string> {
+  refuseAgentEscalation(principal);
   await authorize(db, principal, 'manage_access', ROOT, now);
   if (!name.trim()) throw new InputValidationError([{ path: 'name', message: 'Name is required.' }]);
-  return principalQ.createAgentPrincipal(db, name.trim(), now);
+  if (subtype !== 'service' && subtype !== 'agent') {
+    throw new InputValidationError([{ path: 'subtype', message: `Unknown machine type '${subtype}'.` }]);
+  }
+  return principalQ.createAgentPrincipal(db, name.trim(), now, subtype);
+}
+
+/**
+ * Create a human principal (a Person). Two paths, chosen by whether a password is
+ * supplied:
+ *  - direct: an initial password is set now — the person can sign in immediately.
+ *  - invite: no password — an unusable random hash is stored and a single-use,
+ *    expiring invite token is returned; the person sets their own password via the
+ *    set-password link. (Email delivery of that link is the route's concern and is
+ *    stubbed for now — the link is also surfaced once to the admin.)
+ *
+ * Gated by `manage_access` (human-held; agents refused). The initial role defaults
+ * to `reader` (least privilege); `assignRole` validates it exists.
+ */
+export async function createUser(
+  db: Database,
+  principal: Principal,
+  input: { name: string; email: string; password?: string; role?: string },
+  now: string,
+): Promise<{ principalId: string; inviteToken?: string }> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  const role = input.role?.trim() || 'reader';
+  const issues: ErrorDetails[] = [];
+  if (!name) issues.push({ path: 'name', message: 'Name is required.' });
+  if (!EMAIL_RE.test(email)) issues.push({ path: 'email', message: 'A valid email is required.' });
+  if (input.password !== undefined && input.password.length < MIN_PASSWORD_LENGTH) {
+    issues.push({ path: 'password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+  }
+  if (issues.length) throw new InputValidationError(issues, 'Invalid user');
+
+  if (await getUserByEmail(db, email)) throw new ConflictError(`A user with email '${email}' already exists.`);
+
+  // With no password, store an unguessable, unusable hash so login is impossible
+  // until the invitee sets one via the token (verifyPassword can never match it).
+  const passwordHash = hashPassword(input.password ?? generateToken());
+  const principalId = await principalQ.createUserPrincipal(db, { name, email, passwordHash }, now);
+  await assignRole(db, principal, principalId, role, '*', now);
+
+  if (input.password !== undefined) return { principalId };
+
+  const token = generateToken();
+  const expiresAt = new Date(new Date(now).getTime() + INVITE_TTL_MS).toISOString();
+  await inviteQ.createInviteToken(db, { principalId, tokenHash: await hashToken(token), expiresAt, now });
+  return { principalId, inviteToken: token };
 }
 
 export async function listTokens(db: Database, principal: Principal, now: string, targetPrincipalId?: string) {

@@ -4,7 +4,7 @@ import { requireAuth, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
-import { getCollectionOrThrow, updateCollection } from '@/services/collections';
+import { getCollectionOrThrow, listCollections, updateCollection } from '@/services/collections';
 import { nowIso } from '@/lib/now';
 import { dsRedirect, jsLiteral } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
@@ -18,7 +18,9 @@ const factory = createFactory<{ Bindings: Env }>();
 export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
   const slug = pathParam(c, 'slug');
-  const def = await getCollectionOrThrow(getDb(c.env.DB), slug);
+  const db = getDb(c.env.DB);
+  const def = await getCollectionOrThrow(db, slug);
+  const collectionSlugs = (await listCollections(db)).map((d) => d.slug);
 
   return c.render(
     <AdminShell user={user} current="collections">
@@ -29,7 +31,12 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       />
 
       <div class="max-w-3xl">
-        <CollectionBuilder def={def} action={`/admin/collections/${slug}`} submitLabel="Save changes" />
+        <CollectionBuilder
+          def={def}
+          action={`/admin/collections/${slug}`}
+          submitLabel="Save changes"
+          collectionSlugs={collectionSlugs}
+        />
 
         {!def.protected && (
           <form

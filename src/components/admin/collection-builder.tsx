@@ -53,6 +53,30 @@ function selectOptionsOf(field: FieldDescriptor | undefined): SelectOption[] {
   return Array.isArray(cfg?.options) ? cfg.options : [];
 }
 
+interface RelationConfigDraft {
+  collection?: string;
+  multiple?: boolean;
+  titleField?: string;
+}
+
+/** The configured relation settings of a `relation` field descriptor. */
+function relationConfigOf(field: FieldDescriptor | undefined): RelationConfigDraft | undefined {
+  if (!field || field.type !== 'relation') return undefined;
+  return (field.config as RelationConfigDraft | undefined) ?? undefined;
+}
+
+/** Read one field row's posted relation settings. A blank target posts an empty
+ *  `collection` and the collection service rejects it — honest feedback, like the
+ *  empty select-options case. */
+function parseRelationConfig(body: RawBody, i: number): RelationConfigDraft {
+  const titleField = firstString(body[`field_${i}_rel_title`]).trim();
+  return {
+    collection: firstString(body[`field_${i}_rel_collection`]).trim(),
+    multiple: `field_${i}_rel_multiple` in body || undefined,
+    titleField: titleField || undefined,
+  };
+}
+
 /** Read one field row's posted option rows into a value+label list, dropping
  *  blank slots and defaulting a missing label to the value. */
 function parseOptions(body: RawBody, i: number): SelectOption[] {
@@ -90,18 +114,37 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
       required: `field_${i}_required` in body || undefined,
       index: `field_${i}_index` in body || undefined,
       unique: `field_${i}_unique` in body || undefined,
-      config: type === 'select' ? { options: parseOptions(body, i) } : undefined,
+      config:
+        type === 'select'
+          ? { options: parseOptions(body, i) }
+          : type === 'relation'
+            ? parseRelationConfig(body, i)
+            : undefined,
     });
   }
 
+  // Lifecycle select (B4): 'draft' → draft/publish workflow; 'none' → no publish
+  // lifecycle (record-like data); 'publish' (default) → born published.
+  const lifecycle = firstString(body.workflow_lifecycle);
   return {
     slug: firstString(body.slug).trim(),
     name: firstString(body.name).trim(),
     shape: firstString(body.shape) === 'singleton' ? 'singleton' : 'collection',
     fields,
-    workflow: 'workflow_draft_publish' in body ? { draftPublish: true } : undefined,
+    workflow:
+      lifecycle === 'draft'
+        ? { draftPublish: true }
+        : lifecycle === 'none'
+          ? { lifecycle: 'none' }
+          : undefined,
     access: 'access_public_read' in body ? { publicRead: true } : undefined,
   };
+}
+
+/** The builder's 3-way lifecycle value for an existing definition. */
+function lifecycleValueOf(def: CollectionDefinition | undefined): 'draft' | 'publish' | 'none' {
+  if (def?.workflow?.lifecycle === 'none') return 'none';
+  return def?.workflow?.draftPublish ? 'draft' : 'publish';
 }
 
 /** The per-row `select` options editor. A fixed pool of `maxOptions` value+label
@@ -185,6 +228,72 @@ function FieldOptionsEditor({
   );
 }
 
+/** The per-row `relation` settings editor: target collection, optional title
+ *  field, and the multiple toggle. Same show/disable idiom as the options editor
+ *  (TD-10) — inputs only post while the row is a live relation. */
+function FieldRelationEditor({
+  i,
+  n,
+  config,
+  collectionSlugs,
+  initialShown,
+}: {
+  i: number;
+  n: number;
+  config: RelationConfigDraft | undefined;
+  collectionSlugs: string[];
+  initialShown: boolean;
+}) {
+  const disabled = `$ftype_${i} !== 'relation' || ${i} >= $count`;
+  // Keep a stored target visible even if its collection was since deleted.
+  const slugs =
+    config?.collection && !collectionSlugs.includes(config.collection)
+      ? [...collectionSlugs, config.collection]
+      : collectionSlugs;
+  return (
+    <div
+      data-show={`$ftype_${i} === 'relation' && ${i} < $count`}
+      style={initialShown ? undefined : 'display:none'}
+      role="group"
+      aria-label={`Relation settings for field ${n}`}
+      class="flex flex-col gap-2 rounded-md border border-border/60 bg-canvas/40 p-3"
+    >
+      <span class="font-mono text-eyebrow font-medium tracking-[0.1em] text-ink-subtle uppercase">
+        Relation
+      </span>
+      <div class="grid grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <Select
+          name={`field_${i}_rel_collection`}
+          aria-label={`Target collection for field ${n}`}
+          data-attr:disabled={disabled}
+        >
+          {slugs.map((s) => (
+            <option value={s} selected={s === config?.collection}>
+              {s}
+            </option>
+          ))}
+        </Select>
+        <Input
+          name={`field_${i}_rel_title`}
+          value={config?.titleField}
+          placeholder="Title field (optional)"
+          aria-label={`Title field for field ${n}`}
+          data-attr:disabled={disabled}
+        />
+        <label class="flex items-center gap-1.5 text-xs text-ink-muted">
+          <Checkbox
+            name={`field_${i}_rel_multiple`}
+            checked={config?.multiple}
+            aria-label={`Allow multiple references for field ${n}`}
+            data-attr:disabled={disabled}
+          />
+          <span aria-hidden="true">Multiple</span>
+        </label>
+      </div>
+    </div>
+  );
+}
+
 /** One field-row slot in the pool. Hidden slots disable their inputs so they
  *  never post; every control carries an aria-label for the row it belongs to. */
 function FieldRow({
@@ -193,12 +302,14 @@ function FieldRow({
   typeKeys,
   initialCount,
   maxOptions,
+  collectionSlugs,
 }: {
   i: number;
   field: FieldDescriptor | undefined;
   typeKeys: string[];
   initialCount: number;
   maxOptions: number;
+  collectionSlugs: string[];
 }) {
   const shown = i < initialCount;
   const n = i + 1;
@@ -266,6 +377,13 @@ function FieldRow({
         initialShown={shown && selectedType === 'select'}
         initialOptCount={Math.max(options.length, 1)}
       />
+      <FieldRelationEditor
+        i={i}
+        n={n}
+        config={relationConfigOf(field)}
+        collectionSlugs={collectionSlugs}
+        initialShown={shown && selectedType === 'relation'}
+      />
     </div>
   );
 }
@@ -280,10 +398,13 @@ export function CollectionBuilder({
   def,
   action,
   submitLabel,
+  collectionSlugs = [],
 }: {
   def?: CollectionDefinition;
   action: string;
   submitLabel: string;
+  /** Existing collection slugs — the relation editor's target picker. */
+  collectionSlugs?: string[];
 }) {
   const isEdit = !!def;
   const isProtected = def?.protected ?? false;
@@ -314,7 +435,7 @@ export function CollectionBuilder({
       {/* ── Identity ──────────────────────────────────────────────────────────── */}
       <div class="grid gap-5 sm:grid-cols-2">
         <FormField fieldId="col-name" label="Name" required>
-          <Input id="col-name" name="name" value={def?.name} placeholder="Blog posts" required />
+          <Input id="col-name" name="name" value={def?.name} placeholder="Projects" required />
         </FormField>
         <FormField
           fieldId="col-slug"
@@ -326,7 +447,7 @@ export function CollectionBuilder({
             id="col-slug"
             name="slug"
             value={def?.slug}
-            placeholder="posts"
+            placeholder="projects"
             required={!isEdit}
             disabled={isEdit}
             readonly={isEdit}
@@ -354,10 +475,23 @@ export function CollectionBuilder({
 
         <fieldset class="flex flex-col gap-3">
           <legend class="text-sm font-medium text-ink">Options</legend>
-          <label class="flex items-center gap-2.5 text-sm text-ink-muted">
-            <Toggle name="workflow_draft_publish" checked={def?.workflow?.draftPublish} />
-            Draft / publish workflow
-          </label>
+          <FormField
+            fieldId="col-lifecycle"
+            label="Lifecycle"
+            description="Draft & publish for authored content; none for record-like data (no status, no publish step)."
+          >
+            <Select id="col-lifecycle" name="workflow_lifecycle">
+              <option value="publish" selected={lifecycleValueOf(def) === 'publish'}>
+                Publish immediately
+              </option>
+              <option value="draft" selected={lifecycleValueOf(def) === 'draft'}>
+                Draft &amp; publish workflow
+              </option>
+              <option value="none" selected={lifecycleValueOf(def) === 'none'}>
+                None (records)
+              </option>
+            </Select>
+          </FormField>
           <label class="flex items-center gap-2.5 text-sm text-ink-muted">
             <Toggle name="access_public_read" checked={def?.access?.publicRead} />
             Public read access
@@ -371,7 +505,9 @@ export function CollectionBuilder({
         <p class="text-sm text-ink-muted">
           Each field defines one column of the document. A field must have a key and a type.
           Indexed fields are queryable and sortable; a unique field must also be indexed.
-          A <code class="font-mono">select</code> field lists its choices in the options editor.
+          A <code class="font-mono">select</code> field lists its choices in the options editor;
+          a <code class="font-mono">relation</code> field picks its target collection in the
+          relation editor (index it to make the link filterable and backlinkable).
         </p>
 
         {/* Column headings (sighted, wide screens); each control keeps its own aria-label. */}
@@ -384,7 +520,14 @@ export function CollectionBuilder({
 
         <div class="flex flex-col gap-3">
           {Array.from({ length: MAX_ROWS }, (_, i) => (
-            <FieldRow i={i} field={existing[i]} typeKeys={typeKeys} initialCount={initialCount} maxOptions={MAX_OPTIONS} />
+            <FieldRow
+              i={i}
+              field={existing[i]}
+              typeKeys={typeKeys}
+              initialCount={initialCount}
+              maxOptions={MAX_OPTIONS}
+              collectionSlugs={collectionSlugs}
+            />
           ))}
         </div>
 

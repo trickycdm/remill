@@ -1,6 +1,6 @@
 # Schema Engine
 
-> **STATUS: IMPLEMENTED (Phase 2).** The registry + 9 field types live in `src/fields/`; the collections
+> **STATUS: IMPLEMENTED (Phase 2 + Track B).** The registry + 11 field types live in `src/fields/`; the collections
 > and documents services in `src/services/`; the witnessed queries in `src/db/queries/`. Surfaces 3–4
 > (admin UI) are composed by the generated admin (Phase 4); surfaces 5–6 (REST/MCP) by Phases 6–7 —
 > the field types already expose the `EditComponent`/`CellComponent`/`jsonSchema` those phases consume.
@@ -30,20 +30,37 @@ FieldType contract against all six surfaces before merging.
 - Per-collection **arbitrary-code hooks are banned** in v1. Common behaviors are declarative flags:
   `workflow.draftPublish`, slug config (`{ from: "title" }`), timestamps. If a behavior needs code,
   it belongs in a field type or the engine — never in collection data.
+- **Declarative flags live behind CLOSED Zod shapes.** `workflow` and `access` are validated by
+  `strictObject`s in the collections service (SEC-6) — a NEW flag is **rejected on write** until
+  `WORKFLOW_SCHEMA`/`ACCESS_SCHEMA` (and the `CollectionDefinition` type) are extended first. That
+  extension is step one of adding any flag, not an afterthought (B4 precedent).
+- **Lifecycle modes (B4).** `workflow` has three states: `{draftPublish: true}` (authored content —
+  born draft, explicit publish step), absent/default (born published, publish/unpublish available),
+  and `{lifecycle: 'none'}` (record-like data — born published, and the status column, status
+  filter, publish button, `publish_<slug>` tool, and OpenAPI publish path are ALL suppressed;
+  `setPublished` 400s). This is a **visibility opt-out, not a status removal**: `documents.status`
+  stays load-bearing in the access layer (the `published` condition, publicRead sugar), which is
+  exactly why lifecycle-none docs must be born published. Gate on `hasLifecycle(def)`
+  (`src/lib/lifecycle.ts`) — never re-derive the rule. `none` + `draftPublish` is rejected on write.
 
 ## The FieldType contract
 
 ```ts
 interface FieldType<Config, Value> {
   key: string                    // 'text' | 'markdown' | 'number' | 'boolean' | 'datetime'
-                                 // | 'select' | 'media' | 'tags' | 'slug' | 'json'
+                                 // | 'select' | 'media' | 'tags' | 'slug' | 'json' | 'relation'
   configSchema: ZodType<Config>  // validates per-field options stored in fields_json
   valueSchema: (cfg: Config) => ZodType<Value>   // (2) one validator for ALL surfaces
-  toIndex?: (v: Value) => string | number | null // (1) promoted to document_index for query/sort
+  toIndex?: (v: Value) =>                        // (1) promoted to document_index for query/sort;
+    string | number |                            //     an ARRAY return emits one row PER ELEMENT
+    ReadonlyArray<string | number> | null        //     (multi-valued fields, e.g. multi-relation)
+  multiValued?: (cfg: Config) => boolean         // declares the array-return case for this config
   beforeSave?: (v: Value, ctx: SaveCtx) => Value | Promise<Value>
   beforeRender?: (v: Value, ctx: RenderCtx) => unknown | Promise<unknown>
   EditComponent: FC<FieldEditProps<Config, Value>>   // (4) Datastar-wired form widget
   CellComponent?: FC<FieldCellProps<Value>>          // (3) list-view cell (fallback: text render)
+  ViewComponent?: FC<FieldViewProps<Config, Value>>  // read-only detail/public render (C1, D23);
+                                                     // fallback: SAFE ESCAPED TEXT
   jsonSchema: (cfg: Config) => JSONSchema            // (5) OpenAPI + (6) MCP input schemas
 }
 ```
@@ -52,8 +69,24 @@ Rules:
 - A field type **must** implement every non-optional member. No partial types.
 - `valueSchema` is the single source of validation truth. Admin, REST, and MCP all run the same
   Zod validator. Never add surface-specific validation.
-- `toIndex` returns a scalar or null. Omit it for types that can't be meaningfully sorted/filtered
-  (e.g. `json`); such fields cannot set `"index": true`.
+- `toIndex` returns a scalar, an array, or null. Omit it for types that can't be meaningfully
+  sorted/filtered (e.g. `json`); such fields cannot set `"index": true`.
+- **Multi-valued indexing:** a type whose `toIndex` may return an array MUST declare it via
+  `multiValued(cfg)`. The engine writes one `document_index` row per element (each independently
+  filterable — filter matches ANY element — and reverse-lookupable for backlinks), and enforces
+  two guards: a multi-valued field **cannot be `unique`** (its rows share one `unique_key`, so two
+  docs sharing any element would falsely collide — rejected at definition time) and **cannot be
+  sorted on** (the sort subquery would pick an arbitrary row — rejected with a 400 at query time).
+- **`relation`** (`src/fields/relation.tsx`) is the graph-edge type: config
+  `{ collection, multiple?, titleField? }`, value = `doc_…` id (or id array when `multiple`).
+  Validation is FORMAT-ONLY (media precedent) — target existence resolves on read, so a dangling
+  reference degrades gracefully rather than blocking saves.
+- **The render seam (C1, D23):** `ViewComponent` drives the read-only detail and public surfaces,
+  dispatched by `FieldView` (`src/components/field-view.tsx`). Unsafe-by-default is impossible:
+  the fallback is escaped text, so only a type that explicitly opts in renders markup. `markdown`
+  renders through the sanitizing renderer (`src/lib/markdown` — raw HTML escaped, dangerous
+  protocols stripped; NEVER enable `allowDangerousHtml`); `relation` renders title links (public
+  vs admin URLs by `surface`); `media` an `<img>`. Storage always keeps the raw source (D3).
 - Transforms (`beforeSave`/`beforeRender`) must be pure with respect to the context given — no
   reaching into globals, no direct DB access. They receive what they need via ctx.
 - Field-level access control is **deferred post-v1**, but the hook point is reserved: a field

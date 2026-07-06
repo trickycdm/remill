@@ -34,6 +34,7 @@ const FIELD_BY_TYPE: Record<string, FieldDescriptor> = {
   tags: { key: 'tags', type: 'tags' },
   json: { key: 'json', type: 'json' },
   media: { key: 'media', type: 'media' },
+  relation: { key: 'relation', type: 'relation', config: { collection: 'people' } },
 };
 
 describe('FieldShell refactor — every EditComponent keeps its contract wiring', () => {
@@ -89,7 +90,7 @@ describe('media & slug honor field.admin (drift fix, TD-1)', () => {
 
   it('slug: falls back to its defaults with no admin hints', () => {
     const html = renderEdit({ key: 'slug', type: 'slug' }, undefined);
-    expect(html).toContain('placeholder="my-post-slug"');
+    expect(html).toContain('placeholder="my-item-slug"');
     expect(html).toContain('Auto-generated if left blank');
   });
 });

@@ -47,6 +47,12 @@ export const auditLog = sqliteTable(
 export const principals = sqliteTable('principals', {
   id: text('id').primaryKey(), // prn_…
   kind: text('kind').notNull(), // 'user' | 'agent'  (CHECK added in migration)
+  // Display/grouping only — the PERSONA a human manages (person | service | agent).
+  // NOT security-relevant: authorize() and refuseAgentEscalation key off `kind`.
+  // Nullable (legacy rows read as person/agent via personaOf); the value set is
+  // enforced at the service layer, not a DB CHECK (SQLite can't add a column CHECK
+  // without a table rebuild, and this attribute is inert to the security model).
+  subtype: text('subtype'), // 'person' | 'service' | 'agent' | null
   name: text('name').notNull(),
   disabled: integer('disabled').notNull().default(0), // 0/1
   createdAt: text('created_at').notNull(),
@@ -251,6 +257,31 @@ export const itemGrants = sqliteTable(
     createdAt: text('created_at').notNull(),
   },
   (t) => [index('item_grants_document_idx').on(t.documentId)],
+);
+
+// ---------------------------------------------------------------------------
+// Invite tokens — single-use, expiring set-password links for invited humans.
+// Only the SHA-256 hash is stored (never the plaintext), mirroring api_tokens.
+// The token IS the credential: consuming one sets the invitee's password.
+// ---------------------------------------------------------------------------
+
+export const inviteTokens = sqliteTable(
+  'invite_tokens',
+  {
+    id: text('id').primaryKey(), // inv_…
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => principals.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(), // SHA-256 hex — never plaintext
+    purpose: text('purpose').notNull().default('set_password'), // extensible
+    expiresAt: text('expires_at').notNull(),
+    consumedAt: text('consumed_at'), // null until used (single-use)
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('invite_tokens_hash_unique').on(t.tokenHash),
+    index('invite_tokens_principal_idx').on(t.principalId),
+  ],
 );
 
 // ---------------------------------------------------------------------------

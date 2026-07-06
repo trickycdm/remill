@@ -1,8 +1,8 @@
 # Error Handling
 
-> **STATUS: TARGET — the `AppError` hierarchy and global `onError` land in Phase 1.** The rules are in
-> force from the first service written; the concrete wiring (`src/lib/errors.ts`, `src/main.tsx`
-> `onError`) is built in Phase 1. `authorize()`-driven 403s arrive with access control (Phase 3).
+> **STATUS: IMPLEMENTED.** The `AppError` hierarchy (`src/lib/errors.ts`) and the global `onError`
+> (`src/main.tsx`) are live, including `authorize()`-driven 403s. The rules bind every service and
+> route.
 
 ## Principles
 

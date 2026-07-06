@@ -49,12 +49,15 @@ export interface CollectionDefinition {
   readonly name: string;
   readonly shape: CollectionShape;
   readonly fields: readonly FieldDescriptor[];
-  readonly workflow?: { readonly draftPublish?: boolean };
-  readonly access?: {
-    readonly publicRead?: boolean;
-    // A full role→action map is also allowed (§4); parsed by the access module.
-    readonly [role: string]: unknown;
-  };
+  /** Declarative behaviors. `draftPublish` starts docs as drafts with an explicit
+   *  publish step; `lifecycle: 'none'` opts OUT of the publish lifecycle entirely
+   *  (docs born published, status affordances suppressed — record-like data).
+   *  The two are contradictory together and rejected on write. */
+  readonly workflow?: { readonly draftPublish?: boolean; readonly lifecycle?: 'publish' | 'none' };
+  // `publicRead` is the ONLY collection-level access knob. Collection-scoped
+  // permissions live in `role_permissions` (the authorizer's single source);
+  // an inline role→action map is rejected on write (see collections service).
+  readonly access?: { readonly publicRead?: boolean };
   readonly protected?: boolean;
 }
 
@@ -86,11 +89,34 @@ export interface FieldEditProps<Config = unknown, Value = unknown> {
   readonly signal: string;
 }
 
+/** What a referencing field's id(s) resolved to on the read path (B2): the
+ *  target's display title (null when dangling, unreadable, or untitled) plus
+ *  where it lives. Attached BESIDE data, never inside it — data keeps raw ids. */
+export interface ExpandedReference {
+  readonly id: string;
+  readonly title: string | null;
+  readonly collection: string;
+}
+
 export interface FieldCellProps<Config = unknown, Value = unknown> {
   readonly value: Value | undefined;
   /** The field's validated config — lets a cell render human labels (e.g. a
    *  `select`'s option label) rather than the raw stored value. */
   readonly config: Config;
+  /** The read path's expansion of a referencing field's value, when available
+   *  (list rows carry it; contexts without it fall back to the raw value). */
+  readonly expanded?: ExpandedReference | readonly ExpandedReference[];
+}
+
+/** Props for the read-only render seam (C1): the admin detail view and the
+ *  public pages. `surface` lets a type route links appropriately (admin URLs
+ *  vs public URLs); `expanded` carries the read path's relation expansion. */
+export interface FieldViewProps<Config = unknown, Value = unknown> {
+  readonly field: FieldDescriptor;
+  readonly config: Config;
+  readonly value: Value | undefined;
+  readonly expanded?: ExpandedReference | readonly ExpandedReference[];
+  readonly surface: 'admin' | 'public';
 }
 
 /**
@@ -111,8 +137,24 @@ export interface FieldType<Config = unknown, Value = unknown> {
   readonly valueSchema: (cfg: Config, field: FieldDescriptor) => ZodType<unknown>;
 
   /** (1) value promoted into document_index for query/sort. Omit for
-   *  non-indexable types (e.g. json) — such fields may not set index:true. */
-  readonly toIndex?: (v: Value) => string | number | null;
+   *  non-indexable types (e.g. json) — such fields may not set index:true.
+   *  Returning an ARRAY emits one index row per element (multi-valued fields,
+   *  e.g. a multi-`relation` — each element independently filterable and
+   *  reverse-lookupable); scalar returns emit a single row as before. */
+  readonly toIndex?: (v: Value) => string | number | ReadonlyArray<string | number> | null;
+
+  /** Whether this field indexes as multi-valued under `cfg` (its `toIndex` may
+   *  return an array). Multi-valued fields cannot be `unique` (all rows would
+   *  share one unique_key → false collisions) and cannot be sorted on (the sort
+   *  subquery would pick an arbitrary row) — both enforced by the engine.
+   *  Omit for always-scalar types. */
+  readonly multiValued?: (cfg: Config) => boolean;
+
+  /** Declares that this field's value REFERENCES documents in another collection
+   *  (a `doc_…` id or id array). The documents read path batch-expands references
+   *  into `ExpandedReference`s attached beside data (B2). Return null when a
+   *  given config doesn't reference anything. Omit for non-referencing types. */
+  readonly references?: (cfg: Config) => { collection: string; titleField?: string } | null;
 
   /** transforms — Blogmill's fieldPreSave / preFieldRender, reborn. */
   readonly beforeSave?: (v: Value, ctx: SaveCtx) => Value | Promise<Value>;
@@ -122,6 +164,12 @@ export interface FieldType<Config = unknown, Value = unknown> {
    *  to a text render). Composed by the generated admin (Phase 4). */
   readonly EditComponent: FC<FieldEditProps<Config, Value>>;
   readonly CellComponent?: FC<FieldCellProps<Config, Value>>;
+
+  /** Read-only render for detail/public surfaces (C1, D23). OPTIONAL — the
+   *  engine's default is safe escaped text, so a type renders rich output only
+   *  by explicitly opting in (markdown → sanitized HTML, relation → title link,
+   *  media → <img>). Composed by FieldView (src/components/field-view.tsx). */
+  readonly ViewComponent?: FC<FieldViewProps<Config, Value>>;
 
   /** (5) OpenAPI + (6) MCP input schema. Defaults to deriving from valueSchema
    *  via Zod's toJSONSchema when omitted (see registry.deriveJsonSchema). */

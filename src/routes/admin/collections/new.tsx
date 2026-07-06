@@ -3,7 +3,7 @@ import type { Env } from '@/types';
 import { requireAuth, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
-import { createCollection } from '@/services/collections';
+import { createCollection, listCollections } from '@/services/collections';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
@@ -14,8 +14,9 @@ import { renderSaveError } from '@/lib/save-error';
 const factory = createFactory<{ Bindings: Env }>();
 
 /** GET /admin/collections/new — the empty schema builder. */
-export const onRequestGet = factory.createHandlers(requireAuth(), (c) => {
+export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
+  const collectionSlugs = (await listCollections(getDb(c.env.DB))).map((d) => d.slug);
   return c.render(
     <AdminShell user={user} current="collections">
       <PageHeader
@@ -23,7 +24,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), (c) => {
         breadcrumb={[{ label: 'Collections', href: '/admin/collections' }, { label: 'New collection' }]}
       />
       <div class="max-w-3xl">
-        <CollectionBuilder action="/admin/collections/new" submitLabel="Create collection" />
+        <CollectionBuilder
+          action="/admin/collections/new"
+          submitLabel="Create collection"
+          collectionSlugs={collectionSlugs}
+        />
       </div>
     </AdminShell>,
   );

@@ -19,6 +19,7 @@ import type { CollectionDefinition } from '@/fields/types';
 import type { DocumentRecord } from '@/services/documents';
 import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
+import { hasLifecycle } from '@/lib/lifecycle';
 import { Button, Badge, Card, CardHeader, CardTitle, CardContent, Dialog } from '@/components/ui';
 
 type Revision = { readonly revision: number; readonly savedAt: string };
@@ -89,7 +90,9 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
 
       {props.mode === 'create' ? (
         <p class="px-1 text-sm text-ink-muted">
-          Save to create this {props.def.name.toLowerCase()}; you can publish it afterward.
+          {hasLifecycle(props.def)
+            ? `Save to create this ${props.def.name.toLowerCase()}; you can publish it afterward.`
+            : `Save to create this ${props.def.name.toLowerCase()}.`}
         </p>
       ) : (
         <>
@@ -100,12 +103,17 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
             </CardHeader>
             <CardContent>
               <dl class="flex flex-col gap-2.5 text-sm">
-                <MetaRow label="Status">
-                  <Badge tone={props.doc.status === 'published' ? 'success' : 'neutral'}>{props.doc.status}</Badge>
-                </MetaRow>
+                {/* lifecycle:'none' suppresses the status affordances (B4). */}
+                {hasLifecycle(props.def) ? (
+                  <MetaRow label="Status">
+                    <Badge tone={props.doc.status === 'published' ? 'success' : 'neutral'}>{props.doc.status}</Badge>
+                  </MetaRow>
+                ) : null}
                 <MetaRow label="Updated">{formatDate(props.doc.updatedAt, props.settings)}</MetaRow>
                 <MetaRow label="Created">{formatDate(props.doc.createdAt, props.settings)}</MetaRow>
-                {props.doc.publishedAt ? <MetaRow label="Published">{formatDate(props.doc.publishedAt, props.settings)}</MetaRow> : null}
+                {hasLifecycle(props.def) && props.doc.publishedAt ? (
+                  <MetaRow label="Published">{formatDate(props.doc.publishedAt, props.settings)}</MetaRow>
+                ) : null}
                 <MetaRow label="Author">{props.doc.createdBy ?? '—'}</MetaRow>
                 <MetaRow label="ID">
                   <code class="font-mono text-xs">{props.doc.id}</code>
