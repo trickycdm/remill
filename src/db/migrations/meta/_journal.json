@@ -71,6 +71,13 @@
       "when": 1783463765587,
       "tag": "0009_overrated_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1783493206500,
+      "tag": "0010_purple_kinsey_walden",
+      "breakpoints": true
     }
   ]
 }

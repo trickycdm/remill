@@ -20,7 +20,7 @@ import type { DocumentRecord } from '@/services/documents';
 import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
 import { hasLifecycle } from '@/lib/lifecycle';
-import { Button, Badge, Card, CardHeader, CardTitle, CardContent, Dialog } from '@/components/ui';
+import { Button, Badge, Card, CardHeader, CardTitle, CardContent, Dialog, Input } from '@/components/ui';
 
 type Revision = { readonly revision: number; readonly savedAt: string };
 
@@ -74,6 +74,40 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
                 {props.doc.status === 'published' ? 'Unpublish' : 'Publish'}
               </Button>
             </form>
+          ) : null}
+
+          {/* Scheduled publishing (D32) — drafts only; a published doc can't
+              hold a schedule (manual publish clears any pending one). */}
+          {props.mode === 'edit' && props.def.workflow?.draftPublish && props.doc.status === 'draft' ? (
+            props.doc.publishAt ? (
+              <form
+                method="post"
+                action={`/admin/c/${props.slug}/${props.id}/schedule`}
+                class="flex flex-col gap-2 border-t border-border pt-3"
+              >
+                <input type="hidden" name="op" value="cancel" />
+                <p class="text-sm text-ink-muted">
+                  Scheduled for <strong class="font-medium text-ink">{formatDate(props.doc.publishAt, props.settings)}</strong>
+                </p>
+                <Button type="submit" variant="secondary" size="sm" class="w-full">
+                  Cancel schedule
+                </Button>
+              </form>
+            ) : (
+              <form
+                method="post"
+                action={`/admin/c/${props.slug}/${props.id}/schedule`}
+                class="flex flex-col gap-2 border-t border-border pt-3"
+              >
+                <label for="rm-publish-at" class="text-sm font-medium text-ink-muted">
+                  Publish at
+                </label>
+                <Input id="rm-publish-at" name="publish_at" type="datetime-local" size="sm" required />
+                <Button type="submit" variant="secondary" size="sm" class="w-full">
+                  Schedule
+                </Button>
+              </form>
+            )
           ) : null}
 
           <a
@@ -161,7 +195,7 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
               id="rm-delete-doc"
               size="sm"
               title={`Delete this ${props.def.name.toLowerCase()}?`}
-              description="This permanently removes the document and its revisions. This cannot be undone."
+              description="This moves the document and its revisions to Trash — an admin can restore it for 30 days, then it is purged."
               footer={
                 <>
                   <Button variant="ghost" data-on:click="document.getElementById('rm-delete-doc').close()">

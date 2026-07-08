@@ -89,6 +89,12 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   (conditions applied in-query); `POST /api/trash/:id/restore` restores under the original id
   (409 when the collection is gone or the id/unique value was re-taken);
   `DELETE /api/trash/:id` destroys permanently.
+- **Scheduled publishing (D32)**: `POST /api/c/:collection/:id/schedule` with body
+  `{publishAt: "<ISO-8601>" | null}` (null cancels). Publish-gated, lifecycle collections only,
+  drafts only (scheduling a published doc is a 400; a past time publishes on the next per-minute
+  drain). Scheduling appends NO revision (it is not an edit); document payloads carry `publishAt`
+  beside `publishedAt`. The drain publishes as the system actor (surface `system` in the audit
+  trail — ACCESS_CONTROL.md D30).
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
   Static (non-generated) endpoints like `/api/trash` must be hand-added in `staticPaths()`
@@ -108,7 +114,9 @@ tokens** as REST.
     `backlinks_<slug>` (reverse links, read-gated), `revisions_<slug>` (read-gated, D34),
     `restore_<slug>` (update-gated — restoring a revision IS an update, D34),
     `create_<slug>`, `update_<slug>`, `delete_<slug>` (delete-gated; moves to trash,
-    recoverable ~30 days — D29), `publish_<slug>`,
+    recoverable ~30 days — D29), `publish_<slug>`, `schedule_<slug>` (publish-gated, lifecycle
+    collections only; `{id, publish_at? | cancel?}` — exactly one of the two, validated in the
+    handler — D32),
     `share_<slug>` (item grant; `subjectKind: 'principal' | 'role' | 'team'`; visible only with
     `manage_access`), and `share_link_<slug>` (anonymous share link, D26 — see below)
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.

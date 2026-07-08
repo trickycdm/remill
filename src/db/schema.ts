@@ -28,7 +28,7 @@ export const auditLog = sqliteTable(
     id: text('id').primaryKey(), // aud_…
     principalId: text('principal_id').notNull(),
     tokenId: text('token_id'), // null for session (admin) surface
-    surface: text('surface').notNull(), // 'admin' | 'rest' | 'mcp'
+    surface: text('surface').notNull(), // 'admin' | 'rest' | 'mcp' | 'system' (cron, D30)
     action: text('action').notNull(),
     resource: text('resource').notNull(), // e.g. 'collection:posts' or 'document:doc_x'
     // The resource's collection, denormalized for filtering (the `resource`
@@ -137,6 +137,11 @@ export const documents = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
     publishedAt: text('published_at'),
+    // Scheduled publishing (D32): pending ⇔ status='draft' AND publish_at set.
+    // The per-minute drain publishes due drafts and clears it; manual publish
+    // clears it too. Partial index hand-added in migration 0010 (drizzle-kit
+    // can't express WHERE-indexes).
+    publishAt: text('publish_at'),
   },
   (t) => [
     index('documents_collection_idx').on(t.collection),

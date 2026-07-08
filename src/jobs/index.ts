@@ -15,11 +15,13 @@ import type { Env } from '@/types';
 import { getDb } from '@/db/client';
 import { nowIso } from '@/lib/now';
 import { purgeExpiredTrash } from '@/services/trash';
+import { drainScheduledPublishes } from '@/services/documents';
 
 type Job = { readonly name: string; readonly run: (env: Env, now: string) => Promise<unknown> };
 
 const PER_MINUTE: Job[] = [
-  // Scheduled publishing lands here (drainScheduledPublishes) in a later phase.
+  // Publishes due drafts as the system actor (D30/D32) — full pipeline + audit.
+  { name: 'drainScheduledPublishes', run: (env, now) => drainScheduledPublishes(getDb(env.DB), now) },
 ];
 
 const DAILY_MAINTENANCE: Job[] = [

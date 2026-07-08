@@ -34,7 +34,7 @@ import {
 
 const factory = createFactory<{ Bindings: Env }>();
 
-const SURFACES = ['admin', 'rest', 'mcp'] as const;
+const SURFACES = ['admin', 'rest', 'mcp', 'system'] as const;
 
 function parseFilters(q: Record<string, string>): AuditFilters {
   return {

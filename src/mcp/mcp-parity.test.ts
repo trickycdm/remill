@@ -143,4 +143,35 @@ describe('MCP parity — delete/revisions/restore/upload (D29/D34)', () => {
     expect(garbage.payload.code).toBe('VALIDATION');
     expect(r2Puts).toHaveLength(0);
   });
+
+  it('schedule_<slug> (D32): publish-gated visibility; set + cancel round-trip; exactly-one-arg rule', async () => {
+    const editorTools = (await mcp(editorToken, 'tools/list')).result!.tools!.map((t) => t.name);
+    expect(editorTools).toContain('schedule_posts');
+    const readerTools = (await mcp(readerToken, 'tools/list')).result!.tools!.map((t) => t.name);
+    expect(readerTools).not.toContain('schedule_posts');
+
+    const created = await call(editorToken, 'create_posts', { title: 'Later' });
+    const scheduled = await call(editorToken, 'schedule_posts', {
+      id: created.payload.id,
+      publish_at: '2030-01-01T12:00:00Z',
+    });
+    expect(scheduled.isError).toBe(false);
+    expect(scheduled.payload.publishAt).toBe('2030-01-01T12:00:00Z');
+
+    const cancelled = await call(editorToken, 'schedule_posts', { id: created.payload.id, cancel: true });
+    expect(cancelled.isError).toBe(false);
+    expect(cancelled.payload.publishAt).toBeNull();
+
+    // Exactly one of publish_at / cancel — both and neither are validation errors.
+    const neither = await call(editorToken, 'schedule_posts', { id: created.payload.id });
+    expect(neither.isError).toBe(true);
+    expect(neither.payload.code).toBe('VALIDATION');
+    const both = await call(editorToken, 'schedule_posts', {
+      id: created.payload.id,
+      publish_at: '2030-01-01T12:00:00Z',
+      cancel: true,
+    });
+    expect(both.isError).toBe(true);
+    expect(both.payload.code).toBe('VALIDATION');
+  });
 });

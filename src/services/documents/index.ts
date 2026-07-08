@@ -21,7 +21,7 @@ import { getCollection, listCollections as listCollectionDefs } from '@/db/queri
 import { getGrantedDocumentIds } from '@/db/queries/grants';
 import { getPrincipalRoleSlugs } from '@/db/queries/roles';
 import { getPrincipalTeamIds } from '@/db/queries/teams';
-import { authorize, compileReadFilter, resolveAccess, anonymousPrincipal, type Principal } from '@/access';
+import { authorize, compileReadFilter, resolveAccess, anonymousPrincipal, systemPrincipal, type Principal } from '@/access';
 import { newId } from '@/lib/id';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
@@ -219,6 +219,13 @@ async function checkUnique(
       }
     }
   }
+}
+
+/** Revision author for a write: the system actor (D30) has NO principals row
+ *  for `document_revisions.saved_by` to reference, so its revisions carry NULL —
+ *  the audit row (surface 'system') is the attribution. */
+function revisionAuthor(principal: Principal): string | null {
+  return principal.kind === 'system' ? null : principal.id;
 }
 
 function initialStatus(def: CollectionDefinition): 'draft' | 'published' {
@@ -739,6 +746,7 @@ export async function createDocument(
     createdAt: now,
     updatedAt: now,
     publishedAt,
+    publishAt: null,
   };
 }
 
@@ -781,9 +789,10 @@ export async function updateDocument(
         collection: collectionSlug,
         data,
         status: existing.status,
-        savedBy: principal.id,
+        savedBy: revisionAuthor(principal),
         now,
         publishedAt: existing.publishedAt,
+        publishAt: existing.publishAt, // an ordinary edit never touches the schedule
         revision: await dq.nextRevisionNumber(db, id),
         index: buildIndex(def, data),
         search: buildSearchText(def, data),
@@ -865,9 +874,12 @@ export async function setPublished(
       collection: collectionSlug,
       data: existing.data,
       status,
-      savedBy: principal.id,
+      savedBy: revisionAuthor(principal),
       now,
       publishedAt,
+      // Publishing consumes any pending schedule (D32); unpublishing can't
+      // leave one behind (a published doc never holds a schedule).
+      publishAt: null,
       revision: await dq.nextRevisionNumber(db, id),
       index: buildIndex(def, existing.data),
       search: buildSearchText(def, existing.data),
@@ -875,7 +887,75 @@ export async function setPublished(
     grant,
   );
   // Construct the written record from known values — no re-fetch round-trip (TD-9).
-  return { ...existing, status, updatedAt: now, publishedAt };
+  return { ...existing, status, updatedAt: now, publishedAt, publishAt: null };
+}
+
+/**
+ * Set (or cancel, with null) a draft's scheduled-publish time (D32). Requires
+ * the `publish` action — scheduling IS a deferred publish decision. The write
+ * is narrow (no data change ⇒ no revision, no index churn): the per-minute
+ * drain later runs the due draft through the full `setPublished` pipeline as
+ * the system actor.
+ */
+export async function scheduleDocument(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  publishAt: string | null,
+  now: string,
+): Promise<DocumentRecord> {
+  const readGrant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
+  if (!existing) throw new NotFoundError('Document');
+
+  const def = await loadCollection(db, collectionSlug);
+  if (!hasLifecycle(def)) {
+    throw new BadRequestError(`'${collectionSlug}' has no publish lifecycle.`);
+  }
+  if (publishAt !== null) {
+    if (Number.isNaN(Date.parse(publishAt))) {
+      throw new InputValidationError([{ path: 'publishAt', message: 'A valid ISO-8601 datetime is required.' }]);
+    }
+    if (existing.status === 'published') {
+      throw new BadRequestError('Already published — unpublish first to schedule.');
+    }
+  }
+  // A publish_at in the past is allowed: the next drain publishes it (documented).
+  const grant = await authorize(
+    db,
+    principal,
+    'publish',
+    { collection: collectionSlug, documentId: id, status: existing.status, createdBy: existing.createdBy ?? undefined },
+    now,
+  );
+  await dq.setPublishAt(db, { id, publishAt, now }, grant);
+  return { ...existing, publishAt, updatedAt: now };
+}
+
+/**
+ * The per-minute scheduled-publish drain (D32), called from cron
+ * (src/jobs/index.ts — the purgeExpiredTrash pattern). Selects due drafts with
+ * a witness-free metadata query, then publishes EACH through the full
+ * `setPublished` pipeline as the SYSTEM actor (D30) — full validation, a
+ * revision append, and one attributed audit row (surface 'system') per
+ * publish; `publish_at` clears in the same atomic update. One failing document
+ * never blocks the rest: failures log, the schedule stays set, and the next
+ * drain retries. Returns the number published (for tests/observability).
+ */
+export async function drainScheduledPublishes(db: Database, now: string): Promise<number> {
+  const DRAIN_LIMIT = 50; // a minute's backlog beyond this drains next minute
+  const due = await dq.listDueScheduled(db, now, DRAIN_LIMIT);
+  let published = 0;
+  for (const doc of due) {
+    try {
+      await setPublished(db, systemPrincipal(), doc.collection, doc.id, true, now);
+      published += 1;
+    } catch (e) {
+      console.error(`[cron] scheduled publish failed for ${doc.collection}/${doc.id}`, e);
+    }
+  }
+  return published;
 }
 
 /** Delete = snapshot-then-delete (D29): the document + its newest revisions are

@@ -72,6 +72,27 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
             parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
             post: { tags: [tag], summary: `Publish/unpublish a ${def.name}`, responses: { '200': { description: 'Updated' } } },
           },
+          [`/api/c/${def.slug}/{id}/schedule`]: {
+            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+            post: {
+              tags: [tag],
+              summary: `Schedule a draft ${def.name} to publish later (D32)`,
+              description: 'Body {publishAt: ISO-8601 | null}. null cancels. Drafts only; requires the publish action. The per-minute cron publishes due drafts as the system actor.',
+              requestBody: {
+                required: true,
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: { publishAt: { type: ['string', 'null'] } },
+                      required: ['publishAt'],
+                    },
+                  },
+                },
+              },
+              responses: { '200': { description: 'Updated (returns the document with publishAt)' } },
+            },
+          },
         }
       : {}),
     [`/api/c/${def.slug}/{id}/revisions`]: {
@@ -118,7 +139,7 @@ function staticPaths(): Record<string, unknown> {
           { name: 'action', in: 'query', schema: { type: 'string' } },
           { name: 'collection', in: 'query', schema: { type: 'string' } },
           { name: 'result', in: 'query', schema: { type: 'string', enum: ['allow', 'deny'] } },
-          { name: 'surface', in: 'query', schema: { type: 'string', enum: ['admin', 'rest', 'mcp'] } },
+          { name: 'surface', in: 'query', schema: { type: 'string', enum: ['admin', 'rest', 'mcp', 'system'] } },
           { name: 'cursor', in: 'query', schema: { type: 'string' } },
           { name: 'limit', in: 'query', schema: { type: 'integer' } },
         ],

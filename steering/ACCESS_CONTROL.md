@@ -162,8 +162,18 @@ code. The audit log is itself readable only with `manage_access`.
 - **Witness-free maintenance (D31)**: retention purges (trash; later events) run from cron with no
   principal — they are maintenance, not authorization decisions, so they are witness-free query
   functions and write NO audit rows. Keep this category to deletions of derived/expired state; a
-  cron job that touches live content must go through a service with a real decision
-  (see the system-actor pattern when scheduled publishing lands).
+  cron job that touches live content must act as the SYSTEM actor (below).
+- **The system actor (D30)** is how cron touches live content: `systemPrincipal()` =
+  `{id:'system', kind:'system', surface:'system'}` — NO principals row, NO seeded permissions, and
+  never constructed in a request handler. `authorize()` allows it BY KIND (permission resolution is
+  skipped; there is nothing to resolve) but **still writes the audit row** — "authorize is the only
+  audit writer" survives, and every scheduled action is attributed (surface `system`) in
+  /admin/activity. Two consequences of "no DB row": revisions it writes carry `saved_by` NULL (the
+  audit row is the attribution), and it can never be assigned roles, issued tokens, or narrowed by
+  scope — which is the point: the drain must not be breakable by an access-management edit. The
+  scheduled-publish drain (`drainScheduledPublishes`) selects due drafts witness-free (metadata
+  only) and then runs each through the FULL `setPublished` pipeline as the system actor — the
+  witness-free part is only ever the SELECTION, never the mutation.
 - **Capability pre-checks don't replace authorize()**: `collectionsWithAction` (services/access)
   scopes cross-collection surfaces (trash; later events) WITHOUT spraying deny rows into the audit
   log, but every included collection is still `authorize()`d for its Grant and every action taken

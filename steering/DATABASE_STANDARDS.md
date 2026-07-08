@@ -149,6 +149,9 @@ table handle (see `src/db/fts-table.ts`) rather than reaching for raw SQL.
 - **`NOT NULL` by default**; be explicit with `.notNull()`. **CHECK constraints** for fixed enums
   (`status IN ('draft','published')`) — Drizzle doesn't generate these; add them in the raw migration.
   **UNIQUE constraints** for business rules (unique slug per collection) — app-level checks race.
+- **Partial indexes** for sparse flag/schedule columns — Drizzle Kit can't express `WHERE` indexes,
+  so hand-add them in the raw migration (precedent: `documents_publish_at_idx … WHERE publish_at IS
+  NOT NULL`, migration 0010 — the drain scans only pending schedules; almost every row is NULL).
 - **Cascades deliberately**: deleting a document cascades to its `document_revisions` and
   `document_index` rows; enable FK enforcement (`PRAGMA foreign_keys = ON` — Wrangler does this for D1).
 

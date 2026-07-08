@@ -26,6 +26,9 @@ export interface DocumentRecord {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly publishedAt: string | null;
+  /** Pending scheduled-publish time (D32) — set only while status is 'draft';
+   *  cleared by the drain, by manual publish, and by cancel. */
+  readonly publishAt: string | null;
 }
 
 /** Which document_index column a field's values live in: number/boolean field
@@ -56,6 +59,7 @@ function toDomain(row: Row): DocumentRecord {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     publishedAt: row.publishedAt,
+    publishAt: row.publishAt,
   };
 }
 
@@ -464,9 +468,16 @@ export interface UpdateInput {
   readonly collection: string;
   readonly data: Record<string, unknown>;
   readonly status: 'draft' | 'published';
-  readonly savedBy: string;
+  /** Revision author. NULL for the system actor (D30) — it has no principals
+   *  row for the FK to reference; the audit row (surface 'system') carries the
+   *  attribution instead. */
+  readonly savedBy: string | null;
   readonly now: string;
   readonly publishedAt: string | null;
+  /** Pending schedule after this write (D32) — callers preserve the existing
+   *  value on ordinary saves; publish/unpublish pass null (publishing clears
+   *  the schedule, and a published document can't hold one). */
+  readonly publishAt: string | null;
   readonly revision: number;
   readonly index: IndexValue[];
   /** Full-text search row content (D28); null ⇒ nothing searchable. */
@@ -488,6 +499,7 @@ export async function updateDocument(
         status: input.status,
         updatedAt: input.now,
         publishedAt: input.publishedAt,
+        publishAt: input.publishAt,
       })
       .where(eq(documents.id, input.id)),
     db.delete(documentIndex).where(eq(documentIndex.documentId, input.id)),
@@ -503,6 +515,39 @@ export async function updateDocument(
     ...ftsSync(db, input.id, input.collection, input.search),
   ];
   await db.batch(stmts as Batch);
+}
+
+/** Set or clear a document's pending scheduled-publish time (D32). Deliberately
+ *  NARROW: data is untouched, so no index/FTS re-sync and NO revision append —
+ *  scheduling is not an edit. Witness required (the service authorized
+ *  `publish`). */
+export async function setPublishAt(
+  db: Database,
+  input: { readonly id: string; readonly publishAt: string | null; readonly now: string },
+  _grant: Grant,
+): Promise<void> {
+  await db
+    .update(documents)
+    .set({ publishAt: input.publishAt, updatedAt: input.now })
+    .where(eq(documents.id, input.id));
+}
+
+/** Drafts whose schedule is due (D32) — the per-minute drain's selection. NO
+ *  witness: this is metadata-only (id + collection, never data_json), read by
+ *  the cron job to decide WHAT to attempt; each publish then runs the full
+ *  authorize()-gated `setPublished` pipeline (getDocumentMetaForAuth
+ *  precedent). Oldest schedules first so a backlog drains in order. */
+export async function listDueScheduled(
+  db: Database,
+  now: string,
+  limit: number,
+): Promise<{ id: string; collection: string }[]> {
+  return db
+    .select({ id: documents.id, collection: documents.collection })
+    .from(documents)
+    .where(and(eq(documents.status, 'draft'), sql`${documents.publishAt} IS NOT NULL`, sql`${documents.publishAt} <= ${now}`))
+    .orderBy(documents.publishAt, documents.id)
+    .limit(limit);
 }
 
 // NOTE: there is deliberately NO hard `deleteDocument` query — deletion is the

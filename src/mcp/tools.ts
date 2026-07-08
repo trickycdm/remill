@@ -323,6 +323,29 @@ export async function buildToolsForPrincipal(
         inputSchema: { type: 'object', properties: { id: { type: 'string' }, publish: { type: 'boolean' } }, required: ['id'] },
         handler: async (args) => docs.setPublished(db, principal, slug, String(args.id), args.publish !== false, now()),
       });
+      tools.push({
+        name: `schedule_${slug}`,
+        description: `Schedule a draft ${def.name} document to publish at a future time (D32), or cancel a pending schedule. Provide exactly one of publish_at / cancel.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            publish_at: { type: 'string', description: 'ISO-8601 datetime to publish at (drafts only)' },
+            cancel: { type: 'boolean', description: 'true to clear a pending schedule' },
+          },
+          required: ['id'],
+        },
+        handler: async (args) => {
+          const hasAt = typeof args.publish_at === 'string' && args.publish_at !== '';
+          const cancel = args.cancel === true;
+          if (hasAt === cancel) {
+            throw new InputValidationError([
+              { path: 'publish_at', message: 'Provide exactly one of publish_at or cancel:true.' },
+            ]);
+          }
+          return docs.scheduleDocument(db, principal, slug, String(args.id), cancel ? null : String(args.publish_at), now());
+        },
+      });
     }
     if (couldDo(perms, principal, 'manage_access', slug, false)) {
       tools.push({
