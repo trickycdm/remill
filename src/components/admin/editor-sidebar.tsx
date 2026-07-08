@@ -159,7 +159,17 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
           {/* ── Revisions ─────────────────────────────────────────────────────── */}
           <Card>
             <CardHeader>
-              <CardTitle as="h2">Revisions</CardTitle>
+              <div class="flex items-center justify-between gap-2">
+                <CardTitle as="h2">Revisions</CardTitle>
+                {props.revisions.length >= 2 ? (
+                  <a
+                    href={`/admin/c/${props.slug}/${props.id}/revisions`}
+                    class="rounded-sm text-xs text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    Compare
+                  </a>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent>
               <ol class="flex flex-col gap-2 text-sm">

@@ -4,6 +4,7 @@ import { Hono, Env } from 'hono';
 import * as admin_c_collection_id_delete from './routes/admin/c/[collection]/[id]/delete';
 import * as admin_c_collection_id_publish from './routes/admin/c/[collection]/[id]/publish';
 import * as admin_c_collection_id_restore from './routes/admin/c/[collection]/[id]/restore';
+import * as admin_c_collection_id_revisions from './routes/admin/c/[collection]/[id]/revisions';
 import * as admin_c_collection_id_schedule from './routes/admin/c/[collection]/[id]/schedule';
 import * as admin_c_collection_id_share from './routes/admin/c/[collection]/[id]/share';
 import * as admin_c_collection_id_view from './routes/admin/c/[collection]/[id]/view';
@@ -73,6 +74,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/c/:collection/:id/delete', ...admin_c_collection_id_delete.onRequestPost);
 	app.post('/admin/c/:collection/:id/publish', ...admin_c_collection_id_publish.onRequestPost);
 	app.post('/admin/c/:collection/:id/restore', ...admin_c_collection_id_restore.onRequestPost);
+	app.get('/admin/c/:collection/:id/revisions', ...admin_c_collection_id_revisions.onRequestGet);
 	app.post('/admin/c/:collection/:id/schedule', ...admin_c_collection_id_schedule.onRequestPost);
 	app.post('/admin/c/:collection/:id/share', ...admin_c_collection_id_share.onRequestPost);
 	app.get('/admin/c/:collection/:id/view', ...admin_c_collection_id_view.onRequestGet);
