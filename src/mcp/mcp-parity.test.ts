@@ -174,4 +174,24 @@ describe('MCP parity — delete/revisions/restore/upload (D29/D34)', () => {
     expect(both.isError).toBe(true);
     expect(both.payload.code).toBe('VALIDATION');
   });
+
+  it('poll_events (D33): offered to every principal; returns pointer events with nextSince', async () => {
+    for (const token of [editorToken, readerToken]) {
+      expect((await mcp(token, 'tools/list')).result!.tools!.map((t) => t.name)).toContain('poll_events');
+    }
+    const created = await call(editorToken, 'create_posts', { title: 'Watched' });
+    const poll = await call(editorToken, 'poll_events', { since: 0 });
+    expect(poll.isError).toBe(false);
+    const match = poll.payload.data.find(
+      (e: { type: string; resource: string }) => e.type === 'document.created' && e.resource === created.payload.id,
+    );
+    expect(match).toBeTruthy();
+    expect(match.collection).toBe('posts');
+    expect(poll.payload.nextSince).toBeGreaterThan(0);
+
+    // Incremental poll from nextSince is empty until something changes.
+    const idle = await call(editorToken, 'poll_events', { since: poll.payload.nextSince });
+    expect(idle.payload.data).toEqual([]);
+    expect(idle.payload.nextSince).toBe(poll.payload.nextSince);
+  });
 });

@@ -54,6 +54,7 @@ import * as admin_shared_index from './routes/admin/shared';
 import * as admin_trash_index from './routes/admin/trash';
 import * as api_audit_index from './routes/api/audit';
 import * as api_collections_index from './routes/api/collections';
+import * as api_events_index from './routes/api/events';
 import * as api_media from './routes/api/media';
 import * as api_trash_index from './routes/api/trash';
 import * as media_id_index from './routes/media/[id]';
@@ -133,6 +134,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.get('/api/audit', ...api_audit_index.onRequestGet);
 	app.get('/api/collections', ...api_collections_index.onRequestGet);
 	app.post('/api/collections', ...api_collections_index.onRequestPost);
+	app.get('/api/events', ...api_events_index.onRequestGet);
 	app.post('/api/media', ...api_media.onRequestPost);
 	app.get('/api/trash', ...api_trash_index.onRequestGet);
 	app.get('/media/:id', ...media_id_index.onRequestGet);

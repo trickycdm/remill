@@ -12,5 +12,9 @@ export const TRASH_RETENTION_DAYS = 30;
  *  well under D1 row-size limits; older history is forfeited on delete). */
 export const TRASH_MAX_REVISIONS = 20;
 
+/** Days an outbox event stays pollable before the daily prune (D33). Cursor
+ *  gaps after pruning are legal — `since` is a horizon, not a contiguous log. */
+export const EVENTS_RETENTION_DAYS = 30;
+
 /** Milliseconds in a day — for computing retention cutoffs from `now`. */
 export const DAY_MS = 24 * 60 * 60 * 1000;

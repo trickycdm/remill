@@ -138,6 +138,13 @@ export async function restoreDocument(
         publishedAt: record.publishedAt,
         index: buildIndex(def, record.data),
         search: buildSearchText(def, record.data),
+        event: {
+          type: 'document.restored',
+          collection: record.collection,
+          resource: record.documentId,
+          principalId: principal.id,
+          at: now,
+        },
       },
       grant,
     );

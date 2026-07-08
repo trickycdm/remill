@@ -95,6 +95,14 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   drain). Scheduling appends NO revision (it is not an edit); document payloads carry `publishAt`
   beside `publishedAt`. The drain publishes as the system actor (surface `system` in the audit
   trail — ACCESS_CONTROL.md D30).
+- **Events feed (D33)**: `GET /api/events?since=<seq>&collection=&limit=` (and the MCP
+  `poll_events` tool, offered to every principal) → `{data, nextSince}`, oldest first, limit
+  default 100 / cap 500. Rows are POINTERS (type, collection, resource id, actor, time — no
+  payload): consumers re-fetch content via the ordinary read endpoints. Filtering is
+  per-collection read capability (roles ∩ token scope, plus publicRead); narrowing to an
+  unreadable collection returns an EMPTY page, never a 403 (no enumeration). Semantics callers
+  must honor: pass `nextSince` back as `since`; events prune after 30 days, so **seq gaps are
+  legal** and a stale `since` silently skips the pruned horizon.
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
   Static (non-generated) endpoints like `/api/trash` must be hand-added in `staticPaths()`

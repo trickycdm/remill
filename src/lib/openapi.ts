@@ -157,6 +157,20 @@ function staticPaths(): Record<string, unknown> {
         },
       },
     },
+    '/api/events': {
+      get: {
+        tags: ['Events'],
+        summary: 'Poll the change feed (D33)',
+        description:
+          'Pointer events (type, collection, resource id, actor, time — no payload) after `since`, oldest first, filtered to collections you can read. Response {data, nextSince}: pass nextSince back as since. Events prune after 30 days — seq gaps are normal; re-fetch content via the read endpoints.',
+        parameters: [
+          { name: 'since', in: 'query', schema: { type: 'integer', minimum: 0 } },
+          { name: 'collection', in: 'query', schema: { type: 'string' } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 500 } },
+        ],
+        responses: { '200': { description: 'Events after `since`, oldest first, with nextSince' } },
+      },
+    },
   };
 }
 

@@ -411,3 +411,33 @@ export const media = sqliteTable(
   },
   (t) => [uniqueIndex('media_r2_key_unique').on(t.r2Key)],
 );
+
+// ---------------------------------------------------------------------------
+// Events outbox (D33) — the poll-based change feed. POINTERS ONLY, no payload:
+// consumers re-fetch via the gated read surfaces, so a poller can never read
+// through an event what it couldn't read directly. Rows are written INSIDE the
+// same atomic batch as the mutation they describe (never a second write).
+// `seq` is INTEGER PRIMARY KEY AUTOINCREMENT — the documented exception to the
+// nanoid-PK convention: the poll cursor must be monotonic and never reused,
+// even after pruning (plain rowid PKs recycle the max on delete). No FKs by
+// design: an event must survive its subject's deletion (that IS the event).
+// Pruned after EVENTS_RETENTION_DAYS by the daily maintenance cron — cursor
+// gaps are legal and documented.
+// ---------------------------------------------------------------------------
+
+export const events = sqliteTable(
+  'events',
+  {
+    seq: integer('seq').primaryKey({ autoIncrement: true }),
+    // 'document.created|updated|deleted|restored|published|unpublished',
+    // 'media.created|deleted', 'collection.created|updated|deleted'
+    type: text('type').notNull(),
+    // Affected collection slug ('media' for media events) — the read filter's axis.
+    collection: text('collection').notNull(),
+    // The document/media id or collection slug the event points at.
+    resource: text('resource').notNull(),
+    principalId: text('principal_id').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('events_created_idx').on(t.createdAt)],
+);

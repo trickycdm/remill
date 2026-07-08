@@ -20,6 +20,7 @@ import { listCollections, getCollection, listCollectionsForDiscovery } from '@/s
 import * as docs from '@/services/documents';
 import * as collectionsService from '@/services/collections';
 import { listMedia, getMediaById, uploadMedia } from '@/services/media';
+import { pollEvents } from '@/services/events';
 import { searchSite } from '@/services/search';
 import { snippetToText } from '@/lib/fts';
 import { decodeBase64 } from '@/lib/base64';
@@ -481,6 +482,29 @@ export async function buildToolsForPrincipal(
       },
     });
   }
+
+  // Events feed (D33): offered to every principal — the SERVICE filters rows
+  // to collections the caller can read, so an over-scoped poll simply returns
+  // less, never errors.
+  tools.push({
+    name: 'poll_events',
+    description:
+      'Poll the change feed: events (pointers — type, collection, resource id, actor, time; no payload) after `since`, for collections you can read. Re-fetch changed content with the read tools. Pass the returned nextSince back as since. Events prune after 30 days — gaps in seq are normal.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        since: { type: 'integer', description: 'last seen event seq (default 0)' },
+        collection: { type: 'string', description: 'narrow to one collection slug' },
+        limit: { type: 'integer', description: 'max events (default 100, cap 500)' },
+      },
+    },
+    handler: async (args) =>
+      pollEvents(db, principal, {
+        since: args.since === undefined ? undefined : Number(args.since),
+        collection: typeof args.collection === 'string' && args.collection ? args.collection : undefined,
+        limit: args.limit === undefined ? undefined : Number(args.limit),
+      }),
+  });
 
   return tools;
 }

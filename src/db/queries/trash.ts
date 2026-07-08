@@ -18,6 +18,7 @@ import type { BatchItem } from 'drizzle-orm/batch';
 import type { Database } from '@/db/client';
 import { documents, documentTrash, documentRevisions, documentIndex } from '@/db/schema';
 import { documentFts } from '@/db/fts-table';
+import { eventInsert, type EventInput } from '@/db/queries/events';
 import { newId } from '@/lib/id';
 import type { Grant } from '@/access/grant';
 import type { IndexValue, SearchText } from '@/db/queries/documents';
@@ -78,6 +79,8 @@ export interface TrashInput {
   readonly publishedAt: string | null;
   readonly deletedBy: string;
   readonly deletedAt: string;
+  /** Outbox event (D33) committed atomically with the trashing. */
+  readonly event?: EventInput;
 }
 
 /** Snapshot a document into trash + hard-delete the original, atomically.
@@ -103,6 +106,7 @@ export async function trashDocument(db: Database, input: TrashInput, _grant: Gra
     db.delete(documents).where(eq(documents.id, input.documentId)),
     db.delete(documentFts).where(eq(documentFts.documentId, input.documentId)),
   ];
+  if (input.event) stmts.push(eventInsert(db, input.event));
   await db.batch(stmts);
   return trashId;
 }
@@ -188,6 +192,8 @@ export interface RestoreInput {
   readonly publishedAt: string | null;
   readonly index: IndexValue[];
   readonly search: SearchText | null;
+  /** Outbox event (D33) committed atomically with the restore. */
+  readonly event?: EventInput;
 }
 
 /** Re-insert a trashed document under its ORIGINAL id (+ index, FTS, snapshotted
@@ -243,6 +249,7 @@ export async function restoreTrashedDocument(
       }),
     );
   }
+  if (input.event) stmts.push(eventInsert(db, input.event));
   await db.batch(stmts as Batch);
 }
 

@@ -16,6 +16,7 @@ import { getDb } from '@/db/client';
 import { nowIso } from '@/lib/now';
 import { purgeExpiredTrash } from '@/services/trash';
 import { drainScheduledPublishes } from '@/services/documents';
+import { pruneEvents } from '@/services/events';
 
 type Job = { readonly name: string; readonly run: (env: Env, now: string) => Promise<unknown> };
 
@@ -26,7 +27,7 @@ const PER_MINUTE: Job[] = [
 
 const DAILY_MAINTENANCE: Job[] = [
   { name: 'purgeExpiredTrash', run: (env, now) => purgeExpiredTrash(getDb(env.DB), now) },
-  // Events-outbox pruning joins this list when the outbox ships.
+  { name: 'pruneEvents', run: (env, now) => pruneEvents(getDb(env.DB), now) },
   // Hook point: cron-scheduled R2 snapshots could also slot in here (plan Phase 8).
 ];
 

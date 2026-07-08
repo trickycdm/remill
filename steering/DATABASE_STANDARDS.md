@@ -123,6 +123,22 @@ select`). A raw `db.run(sql\`…\`)` inside `db.batch()` TYPE-CHECKS but fails a
 queries. For tables Drizzle can't know from schema.ts (virtual tables), define an out-of-schema
 table handle (see `src/db/fts-table.ts`) rather than reaching for raw SQL.
 
+## Events outbox (D33): in-batch, pointer-only, AUTOINCREMENT
+
+- **An event row is written INSIDE the mutation batch it describes — never a second write.**
+  Services attach an optional `EventInput` to the query input; query functions append
+  `eventInsert(db, event)` (src/db/queries/events.ts) to their existing batch. A mutation without
+  its event, or an event without its mutation, is impossible by construction. When you add a NEW
+  mutation path to documents/media/collections, thread an event through it.
+- `events.seq` is **INTEGER PRIMARY KEY AUTOINCREMENT — the documented exception to the nanoid-PK
+  convention**: the poll cursor must be monotonic and never reused, and a plain rowid PK recycles
+  the max after deletes. Do not add AUTOINCREMENT anywhere else without the same argument.
+- **No FKs on events** — an event must survive its subject's deletion (that IS the event).
+  Pointer columns only (type/collection/resource/principal/time); payload would leak content the
+  poller can't read at poll time.
+- Retention: daily `pruneEvents` (witness-free, `EVENTS_RETENTION_DAYS`); seq GAPS after pruning
+  (and after permission filtering) are legal — `since` is a horizon, not a contiguous log.
+
 ## JSON-as-text columns
 
 - D1/SQLite has no native array/JSONB type — arrays and objects are stored as **`TEXT`**. Columns

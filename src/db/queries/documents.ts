@@ -14,6 +14,7 @@ import type { BatchItem } from 'drizzle-orm/batch';
 import type { Database } from '@/db/client';
 import { documents, documentIndex, documentRevisions } from '@/db/schema';
 import { documentFts } from '@/db/fts-table';
+import { eventInsert, type EventInput } from '@/db/queries/events';
 import { newId } from '@/lib/id';
 import type { Grant } from '@/access/grant';
 
@@ -430,6 +431,8 @@ export interface InsertInput {
   readonly index: IndexValue[];
   /** Full-text search row content (D28); null ⇒ nothing searchable. */
   readonly search: SearchText | null;
+  /** Outbox event (D33) committed atomically with the write. */
+  readonly event?: EventInput;
 }
 
 /** Create a document + its index rows + revision 1, atomically. Witness required. */
@@ -459,6 +462,7 @@ export async function insertDocument(
       savedAt: input.now,
     }),
     ...ftsSync(db, input.id, input.collection, input.search),
+    ...(input.event ? [eventInsert(db, input.event)] : []),
   ];
   await db.batch(stmts as Batch);
 }
@@ -482,6 +486,8 @@ export interface UpdateInput {
   readonly index: IndexValue[];
   /** Full-text search row content (D28); null ⇒ nothing searchable. */
   readonly search: SearchText | null;
+  /** Outbox event (D33) committed atomically with the write. */
+  readonly event?: EventInput;
 }
 
 /** Update a document: replace data, re-sync index (delete-then-insert), append a
@@ -513,6 +519,7 @@ export async function updateDocument(
       savedAt: input.now,
     }),
     ...ftsSync(db, input.id, input.collection, input.search),
+    ...(input.event ? [eventInsert(db, input.event)] : []),
   ];
   await db.batch(stmts as Batch);
 }

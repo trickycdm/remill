@@ -164,7 +164,13 @@ export async function createCollection(
   if (await q.getCollection(db, def.slug)) {
     throw new ConflictError(`A collection '${def.slug}' already exists.`);
   }
-  await q.insertCollection(db, def, now, grant);
+  await q.insertCollection(db, def, now, grant, {
+    type: 'collection.created',
+    collection: def.slug,
+    resource: def.slug,
+    principalId: principal.id,
+    at: now,
+  });
   return def;
 }
 
@@ -183,7 +189,13 @@ export async function updateCollection(
     throw new ForbiddenError(`Cannot change the slug or shape of protected collection '${slug}'.`);
   }
   const def = validateDefinition({ ...input, slug, protected: existing.protected });
-  await q.updateCollectionRow(db, slug, def, now, grant);
+  await q.updateCollectionRow(db, slug, def, now, grant, {
+    type: 'collection.updated',
+    collection: slug,
+    resource: slug,
+    principalId: principal.id,
+    at: now,
+  });
   return def;
 }
 
@@ -197,7 +209,13 @@ export async function deleteCollection(
   const existing = await q.getCollection(db, slug);
   if (!existing) throw new NotFoundError('Collection');
   if (existing.protected) throw new ForbiddenError(`Collection '${slug}' is protected and cannot be deleted.`);
-  await q.deleteCollectionRow(db, slug, grant);
+  await q.deleteCollectionRow(db, slug, grant, {
+    type: 'collection.deleted',
+    collection: slug,
+    resource: slug,
+    principalId: principal.id,
+    at: now,
+  });
 }
 
 // ---------------------------------------------------------------------------

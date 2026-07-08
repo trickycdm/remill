@@ -728,6 +728,7 @@ export async function createDocument(
         publishedAt,
         index: buildIndex(def, data),
         search: buildSearchText(def, data),
+        event: { type: 'document.created', collection: collectionSlug, resource: id, principalId: principal.id, at: now },
       },
       grant,
     );
@@ -795,6 +796,7 @@ export async function updateDocument(
         revision: await dq.nextRevisionNumber(db, id),
         index: buildIndex(def, data),
         search: buildSearchText(def, data),
+        event: { type: 'document.updated', collection: collectionSlug, resource: id, principalId: principal.id, at: now },
       },
       grant,
     );
@@ -882,6 +884,13 @@ export async function setPublished(
       revision: await dq.nextRevisionNumber(db, id),
       index: buildIndex(def, existing.data),
       search: buildSearchText(def, existing.data),
+      event: {
+        type: publish ? 'document.published' : 'document.unpublished',
+        collection: collectionSlug,
+        resource: id,
+        principalId: principal.id,
+        at: now,
+      },
     },
     grant,
   );
@@ -989,6 +998,7 @@ export async function deleteDocument(
       publishedAt: existing.publishedAt,
       deletedBy: principal.id,
       deletedAt: now,
+      event: { type: 'document.deleted', collection: collectionSlug, resource: id, principalId: principal.id, at: now },
     },
     grant,
   );
