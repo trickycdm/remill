@@ -212,6 +212,15 @@ must contain **no `<form>`** (the island builds `FormData` from bare inputs for
 `<button>` would submit the editor form). Selection writes the id into the field input +
 dispatches bubbling `input` — the same handoff as example 1.
 
+**Worked example 3 — bulk selection is a NATIVE form, not signals (D39).** The selectable list
+wraps table + bulk bar in one `<form method="post">`; row checkboxes are `name="ids"
+value={doc.id}` (the FORM is the state — nanoid ids make invalid signal names, and the flow must
+work without JS); the action buttons are the `op` dispatch (`name="op" value="publish|…"`).
+Datastar's only job is the select-all convenience one-liner:
+`data-on:change="el.closest('form').querySelectorAll('input[name=ids]').forEach((cb) => { cb.checked = el.checked })"`.
+Results come back as a `?bulk=ok:<n>,failed:<m>` query-param flash (`role="status"`), the same
+pattern as trash's `?restored=`.
+
 ---
 
 ## Script loading

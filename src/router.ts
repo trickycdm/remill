@@ -14,6 +14,7 @@ import * as api_c_collection_id_publish from './routes/api/c/[collection]/[id]/p
 import * as api_c_collection_id_revisions from './routes/api/c/[collection]/[id]/revisions';
 import * as api_c_collection_id_schedule from './routes/api/c/[collection]/[id]/schedule';
 import * as admin_c_collection_id_index from './routes/admin/c/[collection]/[id]';
+import * as admin_c_collection_bulk from './routes/admin/c/[collection]/bulk';
 import * as admin_c_collection_export from './routes/admin/c/[collection]/export';
 import * as admin_c_collection_import from './routes/admin/c/[collection]/import';
 import * as admin_c_collection_new from './routes/admin/c/[collection]/new';
@@ -85,6 +86,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/api/c/:collection/:id/publish', ...api_c_collection_id_publish.onRequestPost);
 	app.get('/api/c/:collection/:id/revisions', ...api_c_collection_id_revisions.onRequestGet);
 	app.post('/api/c/:collection/:id/schedule', ...api_c_collection_id_schedule.onRequestPost);
+	app.post('/admin/c/:collection/bulk', ...admin_c_collection_bulk.onRequestPost);
 	app.get('/admin/c/:collection/export', ...admin_c_collection_export.onRequestGet);
 	app.get('/admin/c/:collection/import', ...admin_c_collection_import.onRequestGet);
 	app.post('/admin/c/:collection/import', ...admin_c_collection_import.onRequestPost);

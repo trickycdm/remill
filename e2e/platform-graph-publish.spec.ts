@@ -48,7 +48,8 @@ test.describe.serial('Roadmap — relations, graph, lifecycle, publish & share',
     await expect(page.getByRole('button', { name: /^Publish$/ })).toHaveCount(0);
     await expect(page.getByText('Status', { exact: true })).toHaveCount(0);
     await page.goto('/admin/c/companies');
-    await expect(page.getByRole('cell', { name: 'ACME Corp' })).toBeVisible();
+    // exact: the bulk-select checkbox cell (D39) is also named "Select ACME Corp".
+    await expect(page.getByRole('cell', { name: 'ACME Corp', exact: true })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Status' })).toHaveCount(0);
   });
 

@@ -1021,6 +1021,58 @@ export async function deleteDocument(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Bulk actions (D39)
+// ---------------------------------------------------------------------------
+
+export const BULK_OPS = ['publish', 'unpublish', 'trash'] as const;
+export type BulkOp = (typeof BULK_OPS)[number];
+
+/** Cap on ids per bulk request (D39) — bounds the per-item loop. */
+export const MAX_BULK_IDS = 100;
+
+export interface BulkResult {
+  readonly ok: number;
+  readonly failed: number;
+  readonly errors: { id: string; error: string }[];
+}
+
+/**
+ * Bulk publish/unpublish/trash (D39): loops the EXISTING single-item services
+ * per id — per-item authorize, audit, revision, and outbox event all
+ * preserved; one failing item never blocks the rest, and completed items are
+ * never rolled back (documented partial-failure semantics). No bulk REST/MCP
+ * surface — agents compose the per-item tools.
+ */
+export async function bulkDocuments(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  op: BulkOp,
+  ids: readonly string[],
+  now: string,
+): Promise<BulkResult> {
+  if (!BULK_OPS.includes(op)) {
+    throw new BadRequestError(`Unknown bulk op '${String(op)}' (expected ${BULK_OPS.join('/')}).`);
+  }
+  if (ids.length === 0) throw new BadRequestError('Select at least one item.');
+  if (ids.length > MAX_BULK_IDS) {
+    throw new BadRequestError(`Bulk actions take at most ${MAX_BULK_IDS} items at once.`);
+  }
+  let ok = 0;
+  const errors: { id: string; error: string }[] = [];
+  for (const id of ids) {
+    try {
+      if (op === 'trash') await deleteDocument(db, principal, collectionSlug, id, now);
+      else await setPublished(db, principal, collectionSlug, id, op === 'publish', now);
+      ok += 1;
+    } catch (e) {
+      errors.push({ id, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return { ok, failed: errors.length, errors };
+}
+
 /** Restore a prior revision as a new save (append-only history is preserved). */
 export async function restoreRevision(
   db: Database,
