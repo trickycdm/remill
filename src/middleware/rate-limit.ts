@@ -32,6 +32,7 @@ export const GLOBAL_RATE_LIMIT: RateLimitTier = { limit: 1000, windowSeconds: 60
 export const LOGIN_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
 export const TOKEN_RATE_LIMIT: RateLimitTier = { limit: 20, windowSeconds: 60 };
 export const UPLOAD_RATE_LIMIT: RateLimitTier = { limit: 30, windowSeconds: 60 };
+export const IMPORT_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 }; // D37: each import is a bulk write
 
 /** What the limiter records on the context for `apiJson` to surface as headers. */
 export interface RateLimitInfo {

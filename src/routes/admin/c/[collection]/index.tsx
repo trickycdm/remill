@@ -40,7 +40,17 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         breadcrumb={[{ label: 'Content', href: '/admin/c' }, { label: def.name }]}
         title={def.name}
         description={`${total} ${total === 1 ? 'item' : 'items'}`}
-        actions={<Button href={`/admin/c/${slug}/new`}>New {def.name}</Button>}
+        actions={
+          <div class="flex items-center gap-2">
+            <Button href={`/admin/c/${slug}/export`} variant="ghost" size="sm">
+              Export
+            </Button>
+            <Button href={`/admin/c/${slug}/import`} variant="ghost" size="sm">
+              Import
+            </Button>
+            <Button href={`/admin/c/${slug}/new`}>New {def.name}</Button>
+          </div>
+        }
       />
       <GeneratedTable def={def} rows={rows} settings={settings} />
       {pages > 1 && (

@@ -48,6 +48,7 @@ export const onRequestGet = factory.createHandlers(requireRole('admin'), async (
     );
   }
   const rebuilt = c.req.query('rebuilt');
+  const snapshot = c.req.query('snapshot');
   return c.render(
     <AdminShell user={user} current="settings">
       <PageHeader title="Settings" description={description} />
@@ -71,6 +72,28 @@ export const onRequestGet = factory.createHandlers(requireRole('admin'), async (
             <form method="post" action="/admin/settings/rebuild-search" class="mt-3">
               <Button type="submit" variant="secondary" size="sm">
                 Rebuild search index
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Snapshot (D37) — full-site export to R2, media metadata only. */}
+        <Card class="mt-6">
+          <CardContent class="pt-4">
+            <h2 class="text-sm font-medium text-ink">Site snapshot</h2>
+            <p class="mt-1 text-sm text-ink-muted">
+              Write every collection definition, all documents, and media metadata to R2 under a
+              timestamped <code class="font-mono text-xs">snapshots/</code> prefix. Media binaries
+              stay at their own keys and are not copied.
+            </p>
+            {snapshot ? (
+              <p class="mt-2 text-sm font-medium text-success" role="status">
+                Snapshot written to <code class="font-mono text-xs">{snapshot}</code>.
+              </p>
+            ) : null}
+            <form method="post" action="/admin/settings/snapshot" class="mt-3">
+              <Button type="submit" variant="secondary" size="sm">
+                Snapshot site
               </Button>
             </form>
           </CardContent>

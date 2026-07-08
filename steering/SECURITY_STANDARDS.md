@@ -167,6 +167,13 @@ onto the record — any field an attacker named got written. remill's fix, from 
   feed/sitemap can never leak a draft because the compiled read filter runs in-query), and all
   correctly receive the public CSP. robots.txt disallows every protected prefix plus `/s/`
   (share links are capability URLs — never crawlable).
+- **Import (D37) is a bulk WRITE surface and is treated like one**: 10 MiB body cap
+  (`MAX_IMPORT_BODY_BYTES`), its own `'import'` rate bucket (10/60s), every line through the
+  whitelist-validated pipeline with per-item `authorize()`, and a publish gate — a line arriving
+  with `status:'published'` requires the `publish` action, so bulk ingestion cannot smuggle
+  drafts live past "agent proposes, human publishes". Foreign `createdBy` values are discarded
+  (the importer is the creator); preserved ids are shape-validated (`doc_…`) before touching the
+  DB. Export leaks nothing by construction: it reuses the compiled read filter in-query.
 - **SEC-5 — public collection discovery is a deliberate, bounded exception** to the no-enumeration
   posture: discovery stays public (remill is agent-native), but an unauthenticated or unprivileged
   caller receives a **public-safe projection** that omits the internal `access`/`workflow` config —

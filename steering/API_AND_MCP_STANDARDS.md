@@ -103,6 +103,21 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   unreadable collection returns an EMPTY page, never a 403 (no enumeration). Semantics callers
   must honor: pass `nextSince` back as `since`; events prune after 30 days, so **seq gaps are
   legal** and a stale `since` silently skips the pruned horizon.
+- **Import/export (D37) — the NDJSON format, verbatim:** one collection per file; line 1 is
+  `{"kind":"remill-export","version":1,"exportedAt":"<ISO>","collection":<full definition>}`;
+  every following line is `{"kind":"document","id","status","data","createdAt","updatedAt",
+  "publishedAt","createdBy"}`. `GET /api/c/:slug/export` (`application/x-ndjson`; admin download
+  at `/admin/c/:slug/export`) is bounded by the caller's compiled read filter. `POST
+  /api/c/:slug/import` (body cap `MAX_IMPORT_BODY_BYTES` 10 MiB — split larger imports; rate
+  bucket `'import'` 10/60s; admin page `/admin/c/:slug/import`): upsert by preserved `doc_…` id
+  through the FULL validated pipeline, per-item authorize; on create it preserves
+  id/status/createdAt/publishedAt (updatedAt = import time, createdBy = the importer — foreign
+  principal ids never survive). Lines with `status:'published'` also require the `publish`
+  action (import must not bypass "agent drafts, human publishes"). The header's def slug must
+  match the target; import NEVER mutates the definition. `?dryRun=1` validates without writing.
+  Response `{created, updated, failed, errors:[{line, id?, error}]}` — per-line errors, the run
+  never aborts. Body-cap table: REST JSON 1 MiB · /mcp 8 MiB · import 10 MiB · media multipart
+  25 MiB (service cap).
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
   Static (non-generated) endpoints like `/api/trash` must be hand-added in `staticPaths()`

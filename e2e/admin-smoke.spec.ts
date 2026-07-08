@@ -80,6 +80,7 @@ test.describe('Phase 1 — admin shell smoke + a11y', () => {
       '/admin/search?q=hello',
       '/admin/trash',
       '/admin/activity',
+      '/admin/c/posts/import',
     ]) {
       await page.goto(path);
       await page.waitForLoadState('networkidle');

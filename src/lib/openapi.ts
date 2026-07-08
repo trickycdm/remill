@@ -99,6 +99,26 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       get: { tags: [tag], summary: `Revision history`, responses: { '200': { description: 'Revisions' } } },
     },
+    [`/api/c/${def.slug}/export`]: {
+      get: {
+        tags: [tag],
+        summary: `Export ${def.name} as NDJSON (D37)`,
+        description:
+          'Line 1: {kind:"remill-export", version:1, exportedAt, collection: <definition>}; then one {kind:"document", id, status, data, createdAt, updatedAt, publishedAt, createdBy} per line. Bounded by YOUR read filter — you export what you can read.',
+        responses: { '200': { description: 'application/x-ndjson' } },
+      },
+    },
+    [`/api/c/${def.slug}/import`]: {
+      post: {
+        tags: [tag],
+        summary: `Import an NDJSON export into ${def.name} (D37)`,
+        description:
+          'Upsert by preserved id through the full validated pipeline (per-item authorize; status "published" lines additionally require the publish action). Header def slug must match this collection. Body cap 10 MiB — split larger imports. ?dryRun=1 validates without writing. Response {created, updated, failed, errors:[{line, id?, error}]} — per-line errors, the run never aborts.',
+        parameters: [{ name: 'dryRun', in: 'query', schema: { type: 'string', enum: ['1'] } }],
+        requestBody: { required: true, content: { 'application/x-ndjson': { schema: { type: 'string' } } } },
+        responses: { '200': { description: 'Import summary' } },
+      },
+    },
   };
 }
 

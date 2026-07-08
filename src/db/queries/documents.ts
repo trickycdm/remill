@@ -427,6 +427,8 @@ export interface InsertInput {
   readonly status: 'draft' | 'published';
   readonly createdBy: string;
   readonly now: string;
+  /** Preserved original creation time (import, D37); defaults to `now`. */
+  readonly createdAt?: string;
   readonly publishedAt: string | null;
   readonly index: IndexValue[];
   /** Full-text search row content (D28); null ⇒ nothing searchable. */
@@ -448,7 +450,7 @@ export async function insertDocument(
       dataJson: JSON.stringify(input.data),
       status: input.status,
       createdBy: input.createdBy,
-      createdAt: input.now,
+      createdAt: input.createdAt ?? input.now,
       updatedAt: input.now,
       publishedAt: input.publishedAt,
     }),

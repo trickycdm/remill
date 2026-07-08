@@ -28,6 +28,10 @@ export const MAX_JSON_BODY_BYTES = 1024 * 1024;
  *  use REST multipart POST /api/media (25 MiB service cap). */
 export const MAX_MCP_BODY_BYTES = 8 * 1024 * 1024;
 
+/** The NDJSON import body cap (D37) — larger imports split into multiple files
+ *  (documented in API_AND_MCP_STANDARDS; per-line format makes splitting trivial). */
+export const MAX_IMPORT_BODY_BYTES = 10 * 1024 * 1024;
+
 export async function apiPrincipal(c: Context<{ Bindings: Env }>, now: string): Promise<Principal> {
   return resolvePrincipal(getDb(c.env.DB), c, 'rest', now);
 }

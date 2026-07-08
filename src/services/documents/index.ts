@@ -698,12 +698,25 @@ export async function listRevisions(
 // Write
 // ---------------------------------------------------------------------------
 
+/** Preserved fields an IMPORT (D37) may carry into a create. Internal to the
+ *  transfer service — which validates the shape and enforces the publish gate
+ *  for `status: 'published'` lines; ordinary creates never pass this. */
+export interface CreateOverrides {
+  readonly id?: string;
+  readonly status?: 'draft' | 'published';
+  readonly createdAt?: string;
+  readonly publishedAt?: string | null;
+}
+
+const DOC_ID_RE = /^doc_[A-Za-z0-9_-]+$/;
+
 export async function createDocument(
   db: Database,
   principal: Principal,
   collectionSlug: string,
   input: Record<string, unknown>,
   now: string,
+  overrides?: CreateOverrides,
 ): Promise<DocumentRecord> {
   const def = await loadCollection(db, collectionSlug);
   const grant = await authorize(db, principal, 'create', { collection: collectionSlug }, now);
@@ -712,9 +725,12 @@ export async function createDocument(
   const data = await runTransforms(def, validated, principal.id, now, true);
   await checkUnique(db, def, data);
 
-  const id = newId('document');
-  const status = initialStatus(def);
-  const publishedAt = status === 'published' ? now : null;
+  if (overrides?.id !== undefined && !DOC_ID_RE.test(overrides.id)) {
+    throw new InputValidationError([{ path: 'id', message: "Preserved ids must match 'doc_' + [A-Za-z0-9_-]." }]);
+  }
+  const id = overrides?.id ?? newId('document');
+  const status = overrides?.status ?? initialStatus(def);
+  const publishedAt = status === 'published' ? (overrides?.publishedAt ?? now) : null;
   try {
     await dq.insertDocument(
       db,
@@ -725,6 +741,7 @@ export async function createDocument(
         status,
         createdBy: principal.id,
         now,
+        createdAt: overrides?.createdAt,
         publishedAt,
         index: buildIndex(def, data),
         search: buildSearchText(def, data),
@@ -743,7 +760,7 @@ export async function createDocument(
     data,
     status,
     createdBy: principal.id,
-    createdAt: now,
+    createdAt: overrides?.createdAt ?? now,
     updatedAt: now,
     publishedAt,
     publishAt: null,

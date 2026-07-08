@@ -13,11 +13,15 @@ import * as api_c_collection_id_publish from './routes/api/c/[collection]/[id]/p
 import * as api_c_collection_id_revisions from './routes/api/c/[collection]/[id]/revisions';
 import * as api_c_collection_id_schedule from './routes/api/c/[collection]/[id]/schedule';
 import * as admin_c_collection_id_index from './routes/admin/c/[collection]/[id]';
+import * as admin_c_collection_export from './routes/admin/c/[collection]/export';
+import * as admin_c_collection_import from './routes/admin/c/[collection]/import';
 import * as admin_c_collection_new from './routes/admin/c/[collection]/new';
 import * as admin_collections_slug_delete from './routes/admin/collections/[slug]/delete';
 import * as admin_media_id_alt from './routes/admin/media/[id]/alt';
 import * as admin_media_id_delete from './routes/admin/media/[id]/delete';
 import * as api_c_collection_id_index from './routes/api/c/[collection]/[id]';
+import * as api_c_collection_export from './routes/api/c/[collection]/export';
+import * as api_c_collection_import from './routes/api/c/[collection]/import';
 import * as api_trash_id_restore from './routes/api/trash/[id]/restore';
 import * as admin_access_agents from './routes/admin/access/agents';
 import * as admin_access_assign from './routes/admin/access/assign';
@@ -33,6 +37,7 @@ import * as admin_collections_slug_index from './routes/admin/collections/[slug]
 import * as admin_collections_new from './routes/admin/collections/new';
 import * as admin_media_upload from './routes/admin/media/upload';
 import * as admin_settings_rebuild_search from './routes/admin/settings/rebuild-search';
+import * as admin_settings_snapshot from './routes/admin/settings/snapshot';
 import * as api_c_collection_index from './routes/api/c/[collection]';
 import * as api_collections_slug from './routes/api/collections/[slug]';
 import * as api_trash_id_index from './routes/api/trash/[id]';
@@ -77,6 +82,9 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/api/c/:collection/:id/publish', ...api_c_collection_id_publish.onRequestPost);
 	app.get('/api/c/:collection/:id/revisions', ...api_c_collection_id_revisions.onRequestGet);
 	app.post('/api/c/:collection/:id/schedule', ...api_c_collection_id_schedule.onRequestPost);
+	app.get('/admin/c/:collection/export', ...admin_c_collection_export.onRequestGet);
+	app.get('/admin/c/:collection/import', ...admin_c_collection_import.onRequestGet);
+	app.post('/admin/c/:collection/import', ...admin_c_collection_import.onRequestPost);
 	app.get('/admin/c/:collection/new', ...admin_c_collection_new.onRequestGet);
 	app.post('/admin/c/:collection/new', ...admin_c_collection_new.onRequestPost);
 	app.get('/admin/c/:collection/:id', ...admin_c_collection_id_index.onRequestGet);
@@ -84,6 +92,8 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/collections/:slug/delete', ...admin_collections_slug_delete.onRequestPost);
 	app.post('/admin/media/:id/alt', ...admin_media_id_alt.onRequestPost);
 	app.post('/admin/media/:id/delete', ...admin_media_id_delete.onRequestPost);
+	app.get('/api/c/:collection/export', ...api_c_collection_export.onRequestGet);
+	app.post('/api/c/:collection/import', ...api_c_collection_import.onRequestPost);
 	app.get('/api/c/:collection/:id', ...api_c_collection_id_index.onRequestGet);
 	app.delete('/api/c/:collection/:id', ...api_c_collection_id_index.onRequestDelete);
 	app.patch('/api/c/:collection/:id', ...api_c_collection_id_index.onRequestPatch);
@@ -106,6 +116,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/collections/:slug', ...admin_collections_slug_index.onRequestPost);
 	app.post('/admin/media/upload', ...admin_media_upload.onRequestPost);
 	app.post('/admin/settings/rebuild-search', ...admin_settings_rebuild_search.onRequestPost);
+	app.post('/admin/settings/snapshot', ...admin_settings_snapshot.onRequestPost);
 	app.get('/api/c/:collection', ...api_c_collection_index.onRequestGet);
 	app.post('/api/c/:collection', ...api_c_collection_index.onRequestPost);
 	app.get('/api/collections/:slug', ...api_collections_slug.onRequestGet);
