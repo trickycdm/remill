@@ -1,17 +1,15 @@
 # Platform Completion Roadmap — Tiers 1–3
 
-**Status: PARTIAL — 2026-07-08 (Tiers 1–2 / Phases 1–8 of 11 DONE, verified; Tier 3 not started)**
+**Status: COMPLETE — 2026-07-08 (all 11 phases of Tiers 1–3 DONE, verified)**
 
-> **STATUS: TIERS 1–2 COMPLETE (Phases 1–8, 2026-07-08) — Tier 3 (Phases 9–11) not started.**
-> All eight phases live on `feature/platform-completion-tier1` (per-phase commits from ac35d4b
-> on; Tier 1 = 7f8815d), verified at Tier-2 close: 323 unit / 53 e2e / lint / build / migrations
-> 0007–0011 applied locally. See worklog.md for the step record incl. the RE-PLANs (Tier 1: FTS
-> prepared-statement batching, audit_log `collection` column; Tier 2: drain-in-service, system
-> revisions saved_by NULL, discovery service module, import publish-gate). 11 phases, each
-> independently shippable. This plan is written to be executed by a fresh session with no
-> conversation context — every design decision is already made and recorded here. Do not
-> re-litigate decisions; if an assumption proves wrong, follow the Re-planning Rules (log
-> `RE-PLAN` in worklog.md, edit this file in place, add a Revision Log entry).
+> **STATUS: ROADMAP COMPLETE (Phases 1–11, 2026-07-08).** All eleven phases live on
+> `feature/platform-completion-tier1` as per-phase commits (Tier 1 = 7f8815d; Tiers 2–3 from
+> ac35d4b on), verified at close: 334 unit / 59 e2e / lint / build / migrations 0007–0011.
+> See worklog.md for the step record incl. every RE-PLAN (Tier 1: FTS prepared-statement
+> batching, audit_log `collection` column; Tier 2: drain-in-service, system revisions saved_by
+> NULL, discovery service module, import publish-gate; Tier 3: fetch-not-@get picker fragment,
+> post-trim diff cell cap, e2e fillMarkdown/exact:true fallout). The Deferred/Tier-4 list at the
+> bottom remains the record of what was consciously NOT built.
 
 ## Context
 
@@ -46,9 +44,9 @@ considered and deliberately excluded are listed at the bottom — do not impleme
 | 2 | Public discovery: feeds/sitemap/OG/`/` index | 6 — DONE |
 | 2 | Events outbox (poll-based change feed) | 7 — DONE |
 | 2 | Import/export + R2 snapshot | 8 — DONE |
-| 3 | Editor islands: CodeMirror + media picker | 9 |
-| 3 | Revision diff viewer | 10 |
-| 3 | Bulk actions on admin lists | 11 |
+| 3 | Editor islands: CodeMirror + media picker | 9 — DONE |
+| 3 | Revision diff viewer | 10 — DONE |
+| 3 | Bulk actions on admin lists | 11 — DONE |
 
 **Phase dependencies:** 2 → 3 (delete tool needs trash), 2 → 5 (cron infra), 2 → 11 (bulk-trash),
 7 → 8 (import auto-emits events). Phase 1 goes first so every later write path maintains the FTS
@@ -631,7 +629,7 @@ listed); axe: import page. Manual: Snapshot button then `wrangler r2 object list
 
 **Steering:** API_AND_MCP_STANDARDS (NDJSON format spec verbatim; size limits). Decision **D37**.
 
-## Phase 9 — Editor islands: CodeMirror + media picker
+## Phase 9 — Editor islands: CodeMirror + media picker — **DONE 2026-07-08**
 
 **Goal:** the two plain-input embarrassments become real widgets. Implements D13; supersedes D12.
 
@@ -668,7 +666,7 @@ Manual: dark-mode CodeMirror theme.
 **Steering:** DATASTAR_PATTERNS (add the two worked island examples), DESIGN_SYSTEM (editor
 tokens). Decision **D38** (D13 implemented; **D12 superseded**).
 
-## Phase 10 — Revision diff viewer
+## Phase 10 — Revision diff viewer — **DONE 2026-07-08**
 
 **Goal:** choosing what to restore stops being guesswork.
 
@@ -690,7 +688,7 @@ Modified: `src/components/admin/editor-sidebar.tsx`.
 rendering (field present in only one revision). E2E: edit a doc twice → compare shows the changed
 line; axe: revisions page.
 
-## Phase 11 — Bulk actions on admin lists
+## Phase 11 — Bulk actions on admin lists — **DONE 2026-07-08**
 
 **Goal:** select-many → publish/unpublish/trash. Safe because Phase 2 made delete recoverable.
 
@@ -824,3 +822,13 @@ deliberate poll-based alternative), realtime collaboration, video transcoding.
   id/status/createdAt/publishedAt but not updatedAt; snapshot also writes media.ndjson metadata;
   drive-by: getSettings treats defaultPageSize<1 as unset (empty Datastar number signal stored 0,
   clamping lists to one-row pages).
+- 2026-07-08 (Tier 3): Phases 9–11 implemented and verified — ROADMAP COMPLETE. Deviations from
+  spec: the media-picker dialog loads its fragment via plain fetch+innerHTML, NOT Datastar `@get`
+  (the repo's own steering bans @get load-fragments — plan.md predated that lesson's reach here);
+  the in-dialog upload is `POST /admin/media/picker` (co-located with the GET, returns JSON so
+  the island can select-on-upload); the diff caps the POST-TRIM DP core at 4M cells after common
+  prefix/suffix trimming rather than a raw 5,000 lines/side (a 5000² table is ~100MB vs the
+  Workers 128MB ceiling); bulk results surface as the repo's query-param `role="status"` flash,
+  not the Toast host. E2E fallout absorbed: markdown fields need the shared `fillMarkdown`
+  helper (getByLabel strict-violates on the textarea+CodeMirror pair) and title-cell locators
+  near checkbox columns need `exact: true`.

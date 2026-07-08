@@ -22,13 +22,14 @@ rendered public pages + share links.)
 > [`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md)
 > have also shipped** (B5 composites deferred), followed by **sharing fabric v2**: teams (D24),
 > agent-mintable share links (D26), Resend email (D20 realized), and raw HTML pages (D25/D27).
-> **Tiers 1–2 of
+> **The full completion roadmap
 > [`plans/2026-07-07-platform_completion_tiered_roadmap/plan.md`](plans/2026-07-07-platform_completion_tiered_roadmap/plan.md)
-> (Phases 1–8) have shipped**: full-text search + filter operators (D28), cron + recoverable delete
+> (all 11 phases) has shipped**: full-text search + filter operators (D28), cron + recoverable delete
 > (D29/D31), MCP parity (D34), audit surfacing, scheduled publishing + the system actor (D30/D32),
 > the public discovery pack — rss/sitemap/robots/OG head props + the `/` homepage (D35/D36), the
-> events outbox (D33), and import/export + R2 snapshot (D37). Tier 3 (Phases 9–11: editor islands,
-> revision diff viewer, bulk actions) is planned.
+> events outbox (D33), import/export + R2 snapshot (D37), the editor islands — CodeMirror markdown
+> + dialog media picker (D38, implements D13/supersedes D12), the revision diff viewer, and bulk
+> list actions (D39). The plan's Deferred/Tier-4 list records what was consciously not built.
 > Each steering doc carries its own STATUS header; the worklogs have the step-by-step record.
 
 ## The one idea
@@ -53,9 +54,10 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **MCP** — a direct streamable-HTTP JSON-RPC endpoint at `/mcp` (decision **D18**; not the
   `agents`-SDK `McpAgent`-on-a-Durable-Object once planned — that dep was removed).
 - **Zod 4** validation (generated from field descriptors); **Vitest 3** + **Playwright** (+ axe);
-  **nanoid** IDs; **Tailwind v4** CSS-first `@theme` tokens. _Deferred / not yet wired:_ the
-  **CodeMirror 6** markdown island and **Uppy** uploads — `src/client/init.ts` is an empty stub and
-  the markdown/tags/media widgets are plain inputs in v1.
+  **nanoid** IDs; **Tailwind v4** CSS-first `@theme` tokens. **CodeMirror 6** powers the markdown
+  editor island and a native Dialog island powers the media picker (`src/client/`, D38 — Uppy/D12
+  superseded); islands progressively enhance `data-bind` carriers and load only on the editor
+  routes (DATASTAR_PATTERNS §g worked examples).
 
 ## Architecture
 
