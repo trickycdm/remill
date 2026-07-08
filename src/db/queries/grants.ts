@@ -11,7 +11,7 @@ import { itemGrants } from '@/db/schema';
 import { newId } from '@/lib/id';
 import type { Action } from '@/access/types';
 
-export type GrantSubjectKind = 'principal' | 'role' | 'link';
+export type GrantSubjectKind = 'principal' | 'role' | 'link' | 'team';
 
 export interface ItemGrantRecord {
   readonly id: string;
@@ -35,22 +35,26 @@ function toDomain(r: typeof itemGrants.$inferSelect): ItemGrantRecord {
   };
 }
 
-/** The subject-match predicate: the principal itself, any of its roles, and —
- *  when the request arrived through a share link — that link's hashed identity.
- *  `link` is an EXPLICIT branch (never disguised as a principal id) so the
- *  access matrix and audit stay honest about who was granted what. */
-function subjectMatchFor(principalId: string, roleSlugs: string[], linkId?: string) {
+/** The subject-match predicate: the principal itself, any of its roles, any of
+ *  its teams (D24), and — when the request arrived through a share link — that
+ *  link's hashed identity. `link` and `team` are EXPLICIT branches (never
+ *  disguised as principal ids) so the access matrix and audit stay honest
+ *  about who was granted what. */
+function subjectMatchFor(principalId: string, roleSlugs: string[], linkId?: string, teamIds?: string[]) {
   return or(
     and(eq(itemGrants.subjectKind, 'principal'), eq(itemGrants.subjectId, principalId)),
     roleSlugs.length
       ? and(eq(itemGrants.subjectKind, 'role'), inArray(itemGrants.subjectId, roleSlugs))
       : undefined,
     linkId ? and(eq(itemGrants.subjectKind, 'link'), eq(itemGrants.subjectId, linkId)) : undefined,
+    teamIds?.length
+      ? and(eq(itemGrants.subjectKind, 'team'), inArray(itemGrants.subjectId, teamIds))
+      : undefined,
   );
 }
 
-/** All non-expired grants on a document that apply to a principal, its roles, or
- *  its carried link identity. */
+/** All non-expired grants on a document that apply to a principal, its roles,
+ *  its teams, or its carried link identity. */
 export async function getApplicableGrants(
   db: Database,
   documentId: string,
@@ -58,6 +62,7 @@ export async function getApplicableGrants(
   roleSlugs: string[],
   now: string,
   linkId?: string,
+  teamIds?: string[],
 ): Promise<ItemGrantRecord[]> {
   const rows = await db
     .select()
@@ -65,7 +70,7 @@ export async function getApplicableGrants(
     .where(
       and(
         eq(itemGrants.documentId, documentId),
-        subjectMatchFor(principalId, roleSlugs, linkId),
+        subjectMatchFor(principalId, roleSlugs, linkId, teamIds),
         or(isNull(itemGrants.expiresAt), gt(itemGrants.expiresAt, now)),
       ),
     );
@@ -80,12 +85,19 @@ export async function getGrantedDocumentIds(
   roleSlugs: string[],
   now: string,
   linkId?: string,
-): Promise<{ documentId: string; actions: Action[] }[]> {
+  teamIds?: string[],
+): Promise<{ documentId: string; actions: Action[]; expiresAt: string | null }[]> {
   const rows = await db
-    .select({ documentId: itemGrants.documentId, actionsJson: itemGrants.actionsJson })
+    .select({ documentId: itemGrants.documentId, actionsJson: itemGrants.actionsJson, expiresAt: itemGrants.expiresAt })
     .from(itemGrants)
-    .where(and(subjectMatchFor(principalId, roleSlugs, linkId), or(isNull(itemGrants.expiresAt), gt(itemGrants.expiresAt, now))));
-  return rows.map((r) => ({ documentId: r.documentId, actions: JSON.parse(r.actionsJson || '[]') as Action[] }));
+    .where(
+      and(subjectMatchFor(principalId, roleSlugs, linkId, teamIds), or(isNull(itemGrants.expiresAt), gt(itemGrants.expiresAt, now))),
+    );
+  return rows.map((r) => ({
+    documentId: r.documentId,
+    actions: JSON.parse(r.actionsJson || '[]') as Action[],
+    expiresAt: r.expiresAt,
+  }));
 }
 
 /** Resolve an unexpired link grant by the hashed share token. Returns null for
@@ -147,4 +159,10 @@ export async function createItemGrant(
 
 export async function revokeItemGrant(db: Database, id: string): Promise<void> {
   await db.delete(itemGrants).where(eq(itemGrants.id, id));
+}
+
+/** Revoke every grant held by one subject — e.g. all of a deleted team's grants
+ *  (kind-polymorphic subject_id has no FK, so nothing cascades these). */
+export async function revokeGrantsForSubject(db: Database, subjectKind: GrantSubjectKind, subjectId: string): Promise<void> {
+  await db.delete(itemGrants).where(and(eq(itemGrants.subjectKind, subjectKind), eq(itemGrants.subjectId, subjectId)));
 }

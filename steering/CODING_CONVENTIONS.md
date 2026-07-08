@@ -38,7 +38,7 @@ Routes / DOs  →  Services (src/services/)  →  Queries (src/db/queries/)  →
 | `src/access/` | `authorize()` + the `Grant` witness type. The only place allow/deny is computed. |
 | `src/lib/` | Cross-cutting utilities: `errors.ts`, `logger.ts`, `validation.ts`, `datastar-response.ts`, `json-for-script.ts`, `auth.ts`. |
 | `src/components/` | Owned admin component library (Hono JSX). |
-| `src/client/` | JS islands compiled by Vite (CodeMirror, Uppy) — only where Datastar can't reach. |
+| `src/client/` | JS islands compiled by Vite (CodeMirror markdown editor, media picker — D38) — only where Datastar can't reach. |
 | `src/mcp/` | Thin wrapper over the `agents` SDK registration surface. |
 | `src/config/` | `constants.ts` (shared thresholds), env access. |
 | `src/test/` | Fixtures, setup, the single sanctioned `grantForTest()` helper. |
@@ -75,7 +75,7 @@ Routes / DOs  →  Services (src/services/)  →  Queries (src/db/queries/)  →
 - **No hooks, no client React** — Hono JSX components are plain functions returning JSX, rendered
   server-side on every request. There is no `useState`/`useEffect`/`useRef`.
 - **Client interactivity** via Datastar attributes and `@post`/`@get`/`@delete` actions with SSE
-  patches from the server. Browser APIs Datastar can't express (CodeMirror, Uppy) become TypeScript
+  patches from the server. Browser APIs Datastar can't express (CodeMirror, the media picker) become TypeScript
   islands in `src/client/`. See DATASTAR_PATTERNS.md.
 
 ## Database access
@@ -101,6 +101,11 @@ Routes / DOs  →  Services (src/services/)  →  Queries (src/db/queries/)  →
 - **`||` not `??` for user-facing fallbacks.** `user.displayName || user.email` — `||` lets empty
   strings (`''`) fall through to the fallback; `??` only catches `null`/`undefined`, and an empty
   string can trip a downstream `z.string().min(1)`.
+- **Size algorithms to the Worker's 128 MB ceiling, not to Big-O alone.** An O(n·m)-MEMORY
+  structure over user-sized input is a production OOM, not a perf nit — a 5000²-line LCS DP table
+  is ~100 MB. Shrink the problem first (trim shared prefix/suffix), use compact typed arrays
+  (`Uint16Array`), and hard-cap the core with a graceful "too large" fallback
+  (`src/lib/diff.ts` is the worked precedent).
 
 ## When in doubt
 

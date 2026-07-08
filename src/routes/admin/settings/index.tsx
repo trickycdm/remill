@@ -11,7 +11,7 @@ import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, EmptyState } from '@/components/ui';
+import { PageHeader, EmptyState, Card, CardContent, Button } from '@/components/ui';
 import { GeneratedForm } from '@/components/admin/generated';
 import { renderSaveError } from '@/lib/save-error';
 
@@ -47,11 +47,57 @@ export const onRequestGet = factory.createHandlers(requireRole('admin'), async (
       </AdminShell>,
     );
   }
+  const rebuilt = c.req.query('rebuilt');
+  const snapshot = c.req.query('snapshot');
   return c.render(
     <AdminShell user={user} current="settings">
       <PageHeader title="Settings" description={description} />
       <div class="max-w-2xl">
         <GeneratedForm def={def} doc={doc} action="/admin/settings" submitLabel="Save settings" />
+
+        {/* Maintenance — index rebuilds live OUTSIDE the settings document form. */}
+        <Card class="mt-8">
+          <CardContent class="pt-4">
+            <h2 class="text-sm font-medium text-ink">Search index</h2>
+            <p class="mt-1 text-sm text-ink-muted">
+              Documents are indexed for full-text search on every save. Rebuild once after
+              deploying the search feature (pre-existing documents), or if results ever look
+              stale.
+            </p>
+            {rebuilt ? (
+              <p class="mt-2 text-sm font-medium text-success" role="status">
+                Search index rebuilt — {rebuilt} document{rebuilt === '1' ? '' : 's'} indexed.
+              </p>
+            ) : null}
+            <form method="post" action="/admin/settings/rebuild-search" class="mt-3">
+              <Button type="submit" variant="secondary" size="sm">
+                Rebuild search index
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Snapshot (D37) — full-site export to R2, media metadata only. */}
+        <Card class="mt-6">
+          <CardContent class="pt-4">
+            <h2 class="text-sm font-medium text-ink">Site snapshot</h2>
+            <p class="mt-1 text-sm text-ink-muted">
+              Write every collection definition, all documents, and media metadata to R2 under a
+              timestamped <code class="font-mono text-xs">snapshots/</code> prefix. Media binaries
+              stay at their own keys and are not copied.
+            </p>
+            {snapshot ? (
+              <p class="mt-2 text-sm font-medium text-success" role="status">
+                Snapshot written to <code class="font-mono text-xs">{snapshot}</code>.
+              </p>
+            ) : null}
+            <form method="post" action="/admin/settings/snapshot" class="mt-3">
+              <Button type="submit" variant="secondary" size="sm">
+                Snapshot site
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </AdminShell>,
   );

@@ -21,6 +21,10 @@ export const ID_PREFIX = {
   grant: 'grn',
   audit: 'aud',
   invite: 'inv', // invite_tokens rows (single-use set-password links)
+  team: 'tem',
+  teamMember: 'tmm', // team_members join rows
+  teamInvite: 'tin', // team_invites rows (multi-use join links)
+  trash: 'trh', // document_trash snapshots (D29)
 } as const;
 
 type Entity = keyof typeof ID_PREFIX;

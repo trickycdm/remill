@@ -28,14 +28,20 @@ D1 is SQLite, so unit/integration tests run against a **real in-memory SQLite da
 `better-sqlite3`** — not a mock. This exercises the actual Drizzle queries, CHECK constraints, UNIQUE
 constraints, FK cascades, and `db.batch()` atomicity.
 
-- A `makeTestDb()` helper in `src/test/` opens an in-memory SQLite instance, applies the Drizzle
-  migrations, and returns a binding the query layer accepts. Each test (or `describe`) gets a fresh DB
-  — **no shared mutable state between tests.**
+- The `createTestD1()` helper in `src/test/d1.ts` opens an in-memory SQLite instance, applies the
+  Drizzle migrations, and returns a binding the query layer accepts. Each test (or `describe`) gets a
+  fresh DB — **no shared mutable state between tests.**
 - Assert real side effects: after a save, query `document_index` and `document_revisions` directly and
   assert the rows exist. Don't assert on internal function calls — assert on the database.
 - Where a service needs a `Grant` witness, use the **single sanctioned `grantForTest()` helper** in
   `src/test/` — never replicate the `Grant` constructor (that would defeat the compile-time guarantee;
   see ACCESS_CONTROL.md).
+- **The shim's statement methods must stay Promise-shaped** (like real D1): drizzle's raw-query path
+  (`db.all(sql)`) chains `.then()` directly on `stmt.bind().all()` instead of awaiting, so a bare
+  sync return breaks it. The one exception is `batch()`, whose better-sqlite3 transaction callback
+  must remain synchronous — it uses the internal `allSync()` core (see `src/test/d1.ts`).
+- Vitest may print `close timed out after 10000ms … something prevents Vite server from exiting`
+  after a green run — a harmless teardown nag, not a failure. Trust the pass/fail summary.
 
 ## Property test: the whitelist guarantee (the anti-mass-assignment proof)
 

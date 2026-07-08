@@ -73,7 +73,11 @@ export async function uploadMedia(
     createdBy: principal.id,
     createdAt: now,
   };
-  await mq.insertMedia(db, { ...record, now });
+  await mq.insertMedia(db, {
+    ...record,
+    now,
+    event: { type: 'media.created', collection: MEDIA_COLLECTION, resource: id, principalId: principal.id, at: now },
+  });
   return record;
 }
 
@@ -135,6 +139,12 @@ export async function deleteMedia(
   if (!rec) throw new NotFoundError('Media');
   const refs = await mq.countMediaReferences(db, id);
   if (refs > 0) throw new ConflictError(`This media is used by ${refs} document(s). Remove those references first.`);
-  await mq.deleteMedia(db, id); // row first…
+  await mq.deleteMedia(db, id, {
+    type: 'media.deleted',
+    collection: MEDIA_COLLECTION,
+    resource: id,
+    principalId: principal.id,
+    at: now,
+  }); // row (+event) first…
   await bucket.delete(rec.r2Key); // …then the object (tolerates re-run)
 }

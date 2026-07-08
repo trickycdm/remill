@@ -28,9 +28,13 @@ export const auditLog = sqliteTable(
     id: text('id').primaryKey(), // aud_…
     principalId: text('principal_id').notNull(),
     tokenId: text('token_id'), // null for session (admin) surface
-    surface: text('surface').notNull(), // 'admin' | 'rest' | 'mcp'
+    surface: text('surface').notNull(), // 'admin' | 'rest' | 'mcp' | 'system' (cron, D30)
     action: text('action').notNull(),
     resource: text('resource').notNull(), // e.g. 'collection:posts' or 'document:doc_x'
+    // The resource's collection, denormalized for filtering (the `resource`
+    // string for a document doesn't carry it). Nullable: rows predating the
+    // activity surface have NULL here (rendered as —).
+    collection: text('collection'),
     allowed: integer('allowed').notNull(), // 0/1
     createdAt: text('created_at').notNull(),
   },
@@ -111,6 +115,7 @@ export const collections = sqliteTable('collections', {
   workflowJson: text('workflow_json'), // { draftPublish?: boolean, ... }
   accessJson: text('access_json'), // { publicRead?: boolean } | role→action map
   protected: integer('protected').notNull().default(0), // seeded/system collections (0/1)
+  renderMode: text('render_mode'), // null/'shell' = branded PublicShell | 'raw' = html field is the page (D27)
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
@@ -132,6 +137,11 @@ export const documents = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
     publishedAt: text('published_at'),
+    // Scheduled publishing (D32): pending ⇔ status='draft' AND publish_at set.
+    // The per-minute drain publishes due drafts and clears it; manual publish
+    // clears it too. Partial index hand-added in migration 0010 (drizzle-kit
+    // can't express WHERE-indexes).
+    publishAt: text('publish_at'),
   },
   (t) => [
     index('documents_collection_idx').on(t.collection),
@@ -159,6 +169,39 @@ export const documentRevisions = sqliteTable(
   (t) => [
     uniqueIndex('document_revisions_doc_rev_unique').on(t.documentId, t.revision),
     index('document_revisions_doc_idx').on(t.documentId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Document trash — recoverable delete (D29). Deleting a document SNAPSHOTS it
+// (data + its newest revisions) here, then hard-deletes the original so the FK
+// cascades clear index/revisions/grants — zero changes to any read path, and
+// uniqueness checks stay exact. Restore re-inserts under the ORIGINAL id (so
+// relations/backlinks resume) against the CURRENT definition. `collection` has
+// deliberately NO FK: the snapshot must survive collection deletion (restore
+// then 409s). Purged after TRASH_RETENTION_DAYS by the daily maintenance cron.
+// ---------------------------------------------------------------------------
+
+export const documentTrash = sqliteTable(
+  'document_trash',
+  {
+    id: text('id').primaryKey(), // trh_…
+    documentId: text('document_id').notNull(), // the original doc_… id
+    collection: text('collection').notNull(), // slug snapshot, NO FK (see header)
+    dataJson: text('data_json').notNull(),
+    status: text('status').notNull(), // 'draft' | 'published' at deletion time
+    revisionsJson: text('revisions_json').notNull().default('[]'), // newest ≤20
+    createdBy: text('created_by'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    publishedAt: text('published_at'),
+    deletedBy: text('deleted_by'),
+    deletedAt: text('deleted_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('document_trash_document_unique').on(t.documentId),
+    index('document_trash_deleted_at_idx').on(t.deletedAt),
+    index('document_trash_collection_idx').on(t.collection),
   ],
 );
 
@@ -285,6 +328,68 @@ export const inviteTokens = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// Teams — named groups of principals used as item-grant subjects ("share with
+// the tech team"). Membership is subject RESOLUTION, not decision logic: teams
+// never carry role permissions; a team grant only ADDs access to one document
+// (additive-only, ACCESS_CONTROL.md). Decision D24.
+// ---------------------------------------------------------------------------
+
+export const teams = sqliteTable('teams', {
+  id: text('id').primaryKey(), // tem_…
+  name: text('name').notNull(),
+  description: text('description'),
+  createdAt: text('created_at').notNull(),
+});
+
+export const teamMembers = sqliteTable(
+  'team_members',
+  {
+    id: text('id').primaryKey(), // tmm_…
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => principals.id, { onDelete: 'cascade' }),
+    addedBy: text('added_by'), // attribution only, never authorization
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('team_members_unique').on(t.teamId, t.principalId),
+    index('team_members_principal_idx').on(t.principalId),
+  ],
+);
+
+// Team-join invite links — unlike invite_tokens (single-use, bound to an
+// EXISTING principal), a join link is multi-use and creates the principal at
+// acceptance time, carrying the team + role preset instead. Same discipline:
+// hash at rest, plaintext shown once, expiry REQUIRED, no enumeration oracle.
+export const teamInvites = sqliteTable(
+  'team_invites',
+  {
+    id: text('id').primaryKey(), // tin_…
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(), // SHA-256 hex — never plaintext
+    role: text('role')
+      .notNull()
+      .default('reader')
+      .references(() => roles.slug, { onDelete: 'cascade' }),
+    maxUses: integer('max_uses'), // null = unlimited until expiry/revocation
+    useCount: integer('use_count').notNull().default(0),
+    expiresAt: text('expires_at').notNull(), // join links always expire
+    revokedAt: text('revoked_at'), // null = active
+    createdBy: text('created_by').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('team_invites_hash_unique').on(t.tokenHash),
+    index('team_invites_team_idx').on(t.teamId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Media — R2 object metadata; rides the schema engine as a protected collection
 // ---------------------------------------------------------------------------
 
@@ -305,4 +410,34 @@ export const media = sqliteTable(
     createdAt: text('created_at').notNull(),
   },
   (t) => [uniqueIndex('media_r2_key_unique').on(t.r2Key)],
+);
+
+// ---------------------------------------------------------------------------
+// Events outbox (D33) — the poll-based change feed. POINTERS ONLY, no payload:
+// consumers re-fetch via the gated read surfaces, so a poller can never read
+// through an event what it couldn't read directly. Rows are written INSIDE the
+// same atomic batch as the mutation they describe (never a second write).
+// `seq` is INTEGER PRIMARY KEY AUTOINCREMENT — the documented exception to the
+// nanoid-PK convention: the poll cursor must be monotonic and never reused,
+// even after pruning (plain rowid PKs recycle the max on delete). No FKs by
+// design: an event must survive its subject's deletion (that IS the event).
+// Pruned after EVENTS_RETENTION_DAYS by the daily maintenance cron — cursor
+// gaps are legal and documented.
+// ---------------------------------------------------------------------------
+
+export const events = sqliteTable(
+  'events',
+  {
+    seq: integer('seq').primaryKey({ autoIncrement: true }),
+    // 'document.created|updated|deleted|restored|published|unpublished',
+    // 'media.created|deleted', 'collection.created|updated|deleted'
+    type: text('type').notNull(),
+    // Affected collection slug ('media' for media events) — the read filter's axis.
+    collection: text('collection').notNull(),
+    // The document/media id or collection slug the event points at.
+    resource: text('resource').notNull(),
+    principalId: text('principal_id').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('events_created_idx').on(t.createdAt)],
 );

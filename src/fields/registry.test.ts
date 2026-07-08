@@ -32,6 +32,15 @@ const CASES: Array<{
   { type: 'text', field: { key: 'f', type: 'text', required: true }, valid: 'hello', invalid: 123, expectIndex: 'hello', jsonType: 'string' },
   { type: 'slug', field: { key: 'f', type: 'slug' }, valid: 'my-slug', expectIndex: 'my-slug', jsonType: 'string' },
   { type: 'markdown', field: { key: 'f', type: 'markdown' }, valid: '# Title', invalid: 5, jsonType: 'string' },
+  // html (D25): raw trusted markup; toIndex is the tag-stripped plain-text lead-in.
+  {
+    type: 'html',
+    field: { key: 'f', type: 'html' },
+    valid: '<h1>Page</h1><script>init()</script>',
+    invalid: 5,
+    expectIndex: 'Page',
+    jsonType: 'string',
+  },
   { type: 'number', field: { key: 'f', type: 'number', config: { min: 0 } }, valid: 42, invalid: -1, expectIndex: 42, jsonType: 'number' },
   { type: 'boolean', field: { key: 'f', type: 'boolean' }, valid: true, invalid: 'yes', expectIndex: 1, jsonType: 'boolean' },
   { type: 'datetime', field: { key: 'f', type: 'datetime' }, valid: '2026-07-04T00:00:00Z', invalid: 'not-a-date', jsonType: 'string' },

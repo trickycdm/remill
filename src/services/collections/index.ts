@@ -129,6 +129,15 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
       }
     }
   }
+  if (input.renderMode !== undefined) {
+    if (input.renderMode !== 'shell' && input.renderMode !== 'raw') {
+      issues.push({ path: 'renderMode', message: "renderMode must be 'shell' or 'raw'." });
+    } else if (input.renderMode === 'raw' && !(input.fields ?? []).some((f) => f.type === 'html')) {
+      // In raw mode the FIRST html field IS the page (D27) — without one there
+      // is nothing to render.
+      issues.push({ path: 'renderMode', message: "renderMode 'raw' requires at least one 'html' field." });
+    }
+  }
 
   if (issues.length) throw new InputValidationError(issues, 'Invalid collection definition');
 
@@ -139,6 +148,7 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     fields: input.fields,
     workflow: input.workflow,
     access: input.access,
+    renderMode: input.renderMode,
     protected: input.protected ?? false,
   };
 }
@@ -154,7 +164,13 @@ export async function createCollection(
   if (await q.getCollection(db, def.slug)) {
     throw new ConflictError(`A collection '${def.slug}' already exists.`);
   }
-  await q.insertCollection(db, def, now, grant);
+  await q.insertCollection(db, def, now, grant, {
+    type: 'collection.created',
+    collection: def.slug,
+    resource: def.slug,
+    principalId: principal.id,
+    at: now,
+  });
   return def;
 }
 
@@ -173,7 +189,13 @@ export async function updateCollection(
     throw new ForbiddenError(`Cannot change the slug or shape of protected collection '${slug}'.`);
   }
   const def = validateDefinition({ ...input, slug, protected: existing.protected });
-  await q.updateCollectionRow(db, slug, def, now, grant);
+  await q.updateCollectionRow(db, slug, def, now, grant, {
+    type: 'collection.updated',
+    collection: slug,
+    resource: slug,
+    principalId: principal.id,
+    at: now,
+  });
   return def;
 }
 
@@ -187,7 +209,13 @@ export async function deleteCollection(
   const existing = await q.getCollection(db, slug);
   if (!existing) throw new NotFoundError('Collection');
   if (existing.protected) throw new ForbiddenError(`Collection '${slug}' is protected and cannot be deleted.`);
-  await q.deleteCollectionRow(db, slug, grant);
+  await q.deleteCollectionRow(db, slug, grant, {
+    type: 'collection.deleted',
+    collection: slug,
+    resource: slug,
+    principalId: principal.id,
+    at: now,
+  });
 }
 
 // ---------------------------------------------------------------------------

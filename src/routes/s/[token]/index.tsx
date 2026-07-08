@@ -9,7 +9,7 @@ import { getSettings } from '@/services/settings';
 import { NotFoundError, ForbiddenError } from '@/lib/errors';
 import { nowIso } from '@/lib/now';
 import { PublicShell, PublicNotFound } from '@/components/layouts/public-shell';
-import { DocumentView } from '@/components/document-view';
+import { DocumentView, rawPageHtml } from '@/components/document-view';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -43,6 +43,9 @@ export const onRequestGet = factory.createHandlers(async (c) => {
   try {
     const { doc, def } = await getSharedDocument(db, grant, now);
     if (wantsJson) return c.json({ data: doc });
+    // Raw mode (D27): the html field IS the page (JSON arm stays first above).
+    const raw = rawPageHtml(def, doc);
+    if (raw !== null) return c.html(raw);
     // Backlinks stay access-scoped: the link grants ONE document, so referrers
     // only appear when they're independently public.
     const backlinks = await getBacklinks(

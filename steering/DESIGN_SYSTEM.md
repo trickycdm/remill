@@ -67,6 +67,14 @@ white text. Non-obvious ratios are noted inline in `tailwind.css`.
 layout owner to apply a stored theme before first paint (no flash). `color-scheme`
 also themes native scrollbars/controls.
 
+**Third-party widgets (JS islands) consume tokens as CSS custom properties.** A
+library that builds its own DOM (CodeMirror is the precedent — its
+`EditorView.theme` in `src/client/markdown-editor.ts` maps `var(--color-surface)`,
+`var(--color-ink)`, `var(--color-border-strong)`, `var(--color-ring)`,
+`var(--color-accent-soft)`) gets both themes for free because the custom
+properties hold `light-dark()` values — never branch on `data-theme` in island
+code, and never restate hex values.
+
 ## Typography
 
 Three roles, all high-quality **system stacks** — no external fonts (Workers/CSP +

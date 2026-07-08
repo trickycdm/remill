@@ -20,8 +20,17 @@ rendered public pages + share links.)
 > streamable-HTTP JSON-RPC endpoint, not an `agents`-SDK DO (decision D18). **Tracks B
 > (relations/graph/lifecycle) and C (render/public pages/share links) of
 > [`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md)
-> have also shipped** (B5 composites deferred). Each steering doc carries its own STATUS header;
-> the worklogs have the step-by-step record.
+> have also shipped** (B5 composites deferred), followed by **sharing fabric v2**: teams (D24),
+> agent-mintable share links (D26), Resend email (D20 realized), and raw HTML pages (D25/D27).
+> **The full completion roadmap
+> [`plans/2026-07-07-platform_completion_tiered_roadmap/plan.md`](plans/2026-07-07-platform_completion_tiered_roadmap/plan.md)
+> (all 11 phases) has shipped**: full-text search + filter operators (D28), cron + recoverable delete
+> (D29/D31), MCP parity (D34), audit surfacing, scheduled publishing + the system actor (D30/D32),
+> the public discovery pack — rss/sitemap/robots/OG head props + the `/` homepage (D35/D36), the
+> events outbox (D33), import/export + R2 snapshot (D37), the editor islands — CodeMirror markdown
+> + dialog media picker (D38, implements D13/supersedes D12), the revision diff viewer, and bulk
+> list actions (D39). The plan's Deferred/Tier-4 list records what was consciously not built.
+> Each steering doc carries its own STATUS header; the worklogs have the step-by-step record.
 
 ## The one idea
 
@@ -45,9 +54,10 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **MCP** — a direct streamable-HTTP JSON-RPC endpoint at `/mcp` (decision **D18**; not the
   `agents`-SDK `McpAgent`-on-a-Durable-Object once planned — that dep was removed).
 - **Zod 4** validation (generated from field descriptors); **Vitest 3** + **Playwright** (+ axe);
-  **nanoid** IDs; **Tailwind v4** CSS-first `@theme` tokens. _Deferred / not yet wired:_ the
-  **CodeMirror 6** markdown island and **Uppy** uploads — `src/client/init.ts` is an empty stub and
-  the markdown/tags/media widgets are plain inputs in v1.
+  **nanoid** IDs; **Tailwind v4** CSS-first `@theme` tokens. **CodeMirror 6** powers the markdown
+  editor island and a native Dialog island powers the media picker (`src/client/`, D38 — Uppy/D12
+  superseded); islands progressively enhance `data-bind` carriers and load only on the editor
+  routes (DATASTAR_PATTERNS §g worked examples).
 
 ## Architecture
 
@@ -56,7 +66,9 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
-  Public ──────────▶ /:c/:slug   Rendered pages + /s/:token share links (anonymous)
+  Public ──────────▶ /:c/:slug   Rendered pages (shell or raw HTML, D27) + /s/:token share links (anonymous)
+                     / · /rss.xml · /sitemap.xml · /robots.txt   Discovery pack (D35, anonymous gated reads)
+  Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29: purges · D32: publish drain as the system actor)
 
   Routes / DOs → Services (src/services/) → Queries (src/db/queries/) → D1
                         ↑
@@ -69,25 +81,53 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `loadRoutes`, `notFound` — never register routes there by hand.
 - **Services** `src/services/` — all business logic **and all authorization** (`authorize()` before any
   read/write; identity-scoped operations like `/admin/account` skip gating). Call queries, never D1.
+  Includes search (FTS querying), trash (snapshots + recovery), access (audit, grants), discovery
+  (anonymous gated reads for feeds/sitemap/OG, D35), events (outbox + poll feed, D33), transfer
+  (NDJSON import/export + R2 snapshots, D37), and scheduled publishing (drainScheduledPublishes
+  service, runs per-minute as the system actor, D30/D32).
+- **Jobs** `src/jobs/` — cron-triggered maintenance (per `wrangler.jsonc` triggers). Dispatch handler calls
+  services only; no D1 access. Per-minute: drainScheduledPublishes (D30/D32). Daily: retention purge
+  (D29), events pruning (D33).
 - **Queries** `src/db/queries/` — the **only** layer importing Drizzle; row↔domain mapping is private
-  here; no Drizzle types leak upward.
+  here; no Drizzle types leak upward. Includes search (FTS5 querying via `src/db/fts-table.ts`, kept
+  outside schema.ts), trash (snapshots + restore), audit reads, and events (outbox rows inserted
+  inside mutation batches via eventInsert, D33).
 - **Fields** `src/fields/` — the FieldType registry; one module per type, including `relation.tsx`
-  (graph edges and backlinks). The most important interface in the codebase (SCHEMA_ENGINE.md).
+  (graph edges and backlinks) and `html.tsx` (D25 trusted raw HTML; powers `renderMode: 'raw'`
+  pages, D27). The most important interface in the codebase (SCHEMA_ENGINE.md).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
   (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
-  invite a person via `users.tsx`, custom roles, token scoping, the `matrix/` overview); item-grant
-  sharing via `src/components/admin/share-panel.tsx`, the `/api/c/:collection/:id/grants` route, and
-  the MCP `share_<slug>` tools; public invite consumption at `src/routes/auth/set-password/[token].tsx`.
+  invite a person via `users.tsx`, custom roles, token scoping, teams — a grant subject kind, D24 —
+  at `/admin/access/teams`, the `matrix/` overview); item-grant sharing via
+  `src/components/admin/share-panel.tsx`, the `/api/c/:collection/:id/grants` route, and the MCP
+  `share_<slug>` tools; the `share_link` action (D26) lets granted agents mint expiring anonymous
+  links over MCP; public invite consumption at `src/routes/auth/set-password/[token].tsx`, team
+  join links at `/auth/join/:token`, "Shared with me" at `/admin/shared`. Admin also surfaces activity
+  log at `/admin/activity`, search at `/admin/search` (D28), recoverable delete at `/admin/trash` (D29),
+  revision diff viewer at `/admin/c/:collection/:id/revisions` (D39), and bulk actions at
+  `/admin/c/:collection/bulk` (D39).
 - **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
-  module owning the MCP protocol surface (decision D18).
+  module owning the MCP protocol surface (decision D18). Tools include `share_<slug>` (subjectKind
+  principal|role|team), `share_link_<slug>` (D26 agent-mintable links), `list_teams` (D24), `search_<slug>`
+  + `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
+  (D34 parity), `schedule_<slug>` (D32 per-collection scheduled publishing), `poll_events` (D33 outbox
+  change feed), and `list_audit` (audit log access).
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
-  Person/Service/Agent display persona), `email/` (`EmailTransport` + console stub), `lifecycle.ts`
-  (hasLifecycle), `markdown/` (micromark, sanitized); **`src/components/`** Hono JSX with
-  `field-view.tsx` (ViewComponent), `document-view.tsx`, `layouts/public-shell.tsx` (read-only
-  render); **`src/client/`** browser islands.
+  Person/Service/Agent display persona), `email/` (`EmailTransport` — Resend + styled templates,
+  D20 realized; console stub fallback), `base-url.ts` (resolveBaseUrl for minted links),
+  `lifecycle.ts` (hasLifecycle), `fts.ts` (FTS5 MATCH escaping, snippet render), `base64.ts` (strict
+  base64 decode for MCP uploads), `markdown/` (micromark, sanitized), `def-helpers.ts`
+  (titleFieldOf/titleOf/publicUrlOf/excerptFrom — shared title/URL/excerpt heuristics, D35),
+  `feeds.ts` (pure RSS/sitemap/robots builders, D35), `ndjson.ts` (import/export, D37), `diff.ts`
+  (LCS line diff for revision compare view, D39); **`src/components/`** Hono JSX with `field-view.tsx`
+  (ViewComponent), `document-view.tsx`, `layouts/public-shell.tsx` (read-only render); **`src/client/`**
+  browser islands: `init.ts` (global loader), `markdown-editor.ts` (CodeMirror 6, D38),
+  `media-picker.ts` (dialog picker, D38).
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
-operations go through services → queries. All authorization goes through `authorize()` (except permission-free `getSettings()` reads on the render path, mirroring `collectionPublicRead`).
+operations go through services → queries. Cron jobs also call services only. All authorization goes through
+`authorize()` (except permission-free `getSettings()` reads on the render path, and retention purges in
+cron jobs, documented in ACCESS_CONTROL.md). Mirroring `collectionPublicRead`.
 
 ## Security posture (why this project exists)
 
@@ -96,6 +136,8 @@ everything) while structurally eliminating its security holes. Every write path 
 runs through **one whitelist-validated, `authorize()`-gated pipeline**. Undeclared fields are rejected
 (anti-mass-assignment). Humans and agents are both **principals**; agents are identities with their own
 tokens, roles, and audit trail — never shared keys. Default-deny, additive-only, everything audited.
+(One documented trusted exception: the `html` field type renders verbatim markup — D25,
+SECURITY_STANDARDS §7.)
 See [`steering/SECURITY_STANDARDS.md`](steering/SECURITY_STANDARDS.md) and
 [`steering/ACCESS_CONTROL.md`](steering/ACCESS_CONTROL.md).
 
@@ -139,5 +181,6 @@ When a rule here conflicts with existing code, flag it — the doc is usually ri
 
 Background context in `docs/`, read on demand: `docs/PROJECT_BRIEF.md` (the whole-system overview —
 scope, the six surfaces, the Blogmill lineage, current state & direction) and `docs/TECH_DECISIONS.md`
-(the D1–D23 decision log). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
-the **active roadmap** (Tracks A–C) in `plans/2026-07-05-platform_knowledge_publishing_roadmap/`.
+(the D1–D34 decision log). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
+Tracks A–C roadmap in `plans/2026-07-05-platform_knowledge_publishing_roadmap/`; the tiered completion
+roadmap in `plans/2026-07-07-platform_completion_tiered_roadmap/`.

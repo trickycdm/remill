@@ -9,6 +9,7 @@ import type { AnyFieldType, FieldDescriptor, JSONSchema } from '@/fields/types';
 import { textField } from '@/fields/text';
 import { slugField } from '@/fields/slug';
 import { markdownField } from '@/fields/markdown';
+import { htmlField } from '@/fields/html';
 import { numberField } from '@/fields/number';
 import { booleanField } from '@/fields/boolean';
 import { datetimeField } from '@/fields/datetime';
@@ -23,6 +24,7 @@ const REGISTRY: ReadonlyMap<string, AnyFieldType> = new Map(
     textField,
     slugField,
     markdownField,
+    htmlField,
     numberField,
     booleanField,
     datetimeField,

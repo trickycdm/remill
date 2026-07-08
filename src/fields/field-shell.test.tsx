@@ -27,6 +27,7 @@ const FIELD_BY_TYPE: Record<string, FieldDescriptor> = {
   text: { key: 'text', type: 'text' },
   slug: { key: 'slug', type: 'slug' },
   markdown: { key: 'markdown', type: 'markdown' },
+  html: { key: 'html', type: 'html' },
   number: { key: 'number', type: 'number' },
   boolean: { key: 'boolean', type: 'boolean' },
   datetime: { key: 'datetime', type: 'datetime' },
@@ -76,7 +77,7 @@ describe('media & slug honor field.admin (drift fix, TD-1)', () => {
   it('media: falls back to its defaults with no admin hints', () => {
     const html = renderEdit({ key: 'hero', type: 'media' }, undefined);
     expect(html).toContain('med_');
-    expect(html).toContain('Upload in the Media library');
+    expect(html).toContain('Browse the media library');
   });
 
   it('slug: uses admin.placeholder / admin.help when provided', () => {

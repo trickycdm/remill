@@ -58,6 +58,12 @@ export interface CollectionDefinition {
   // permissions live in `role_permissions` (the authorizer's single source);
   // an inline role→action map is rejected on write (see collections service).
   readonly access?: { readonly publicRead?: boolean };
+  /** How the public routes render documents (D27). Default/absent = 'shell'
+   *  (branded PublicShell). 'raw' = the collection's FIRST `html` field IS the
+   *  page — returned as a full standalone document (no shell, no design-system
+   *  CSS); requires at least one html field; an empty value falls back to the
+   *  shell so a published page is never blank. */
+  readonly renderMode?: 'shell' | 'raw';
   readonly protected?: boolean;
 }
 
@@ -142,6 +148,12 @@ export interface FieldType<Config = unknown, Value = unknown> {
    *  e.g. a multi-`relation` — each element independently filterable and
    *  reverse-lookupable); scalar returns emit a single row as before. */
   readonly toIndex?: (v: Value) => string | number | ReadonlyArray<string | number> | null;
+
+  /** (1b) FULL plain text for the FTS5 search index (D28) — unlike `toIndex`,
+   *  which may truncate (markdown/html store a 200-char lead-in), this returns
+   *  the complete searchable text. Omitted ⇒ the engine falls back to the
+   *  field's `toIndex` string output (nothing for non-text values). */
+  readonly toSearchText?: (v: Value) => string | null;
 
   /** Whether this field indexes as multi-valued under `cfg` (its `toIndex` may
    *  return an array). Multi-valued fields cannot be `unique` (all rows would

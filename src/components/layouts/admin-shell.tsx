@@ -23,13 +23,17 @@ import {
   Nav,
   type NavItem,
   Badge,
+  Input,
   ToastHost,
   Dashboard,
   FileText,
   Image,
+  Inbox,
   Boxes,
   ShieldCheck,
   Settings,
+  Trash,
+  Activity,
   Menu,
   Sun,
   Moon,
@@ -53,9 +57,12 @@ export const THEME_INIT_SNIPPET =
 const NAV_ITEMS: readonly NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/admin', icon: Dashboard },
   { key: 'content', label: 'Content', href: '/admin/c', icon: FileText },
+  { key: 'shared', label: 'Shared with me', href: '/admin/shared', icon: Inbox },
   { key: 'media', label: 'Media', href: '/admin/media', icon: Image },
+  { key: 'trash', label: 'Trash', href: '/admin/trash', icon: Trash },
   { key: 'collections', label: 'Collections', href: '/admin/collections', icon: Boxes },
   { key: 'access', label: 'Access', href: '/admin/access', icon: ShieldCheck },
+  { key: 'activity', label: 'Activity', href: '/admin/activity', icon: Activity },
   { key: 'settings', label: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
@@ -67,10 +74,12 @@ const NAV_ITEMS: readonly NavItem[] = [
  * reader set. (Per-user Account settings live off the top-bar menu, not the nav.)
  */
 const NAV_BY_ROLE: Record<string, readonly string[]> = {
-  admin: ['dashboard', 'content', 'media', 'collections', 'access', 'settings'],
-  editor: ['dashboard', 'content', 'media'],
-  author: ['dashboard', 'content', 'media'],
-  reader: ['dashboard', 'content', 'media'],
+  admin: ['dashboard', 'content', 'shared', 'media', 'trash', 'collections', 'access', 'activity', 'settings'],
+  // Trash shows for the roles that hold `delete` (the page itself scopes rows
+  // to what the caller can actually act on; the system author role cannot delete).
+  editor: ['dashboard', 'content', 'shared', 'media', 'trash'],
+  author: ['dashboard', 'content', 'shared', 'media'],
+  reader: ['dashboard', 'content', 'shared', 'media'],
 };
 
 function visibleNav(role: string): readonly NavItem[] {
@@ -166,7 +175,22 @@ export function AdminShell({
             <Wordmark class="text-xl" />
           </a>
 
-          <div class="flex-1" />
+          {/* Site-wide search (D28) — a plain GET form; '/' or Cmd/Ctrl-K focuses
+              it (src/client/init.ts). */}
+          <form role="search" action="/admin/search" method="get" class="mx-2 min-w-0 flex-1 sm:mx-4 sm:max-w-sm">
+            <Input
+              type="search"
+              id="admin-search-input"
+              name="q"
+              size="sm"
+              aria-label="Search documents"
+              placeholder="Search…  ( / )"
+              autocomplete="off"
+              class="w-full"
+            />
+          </form>
+
+          <div class="hidden flex-1 sm:block" />
 
           {/* Theme toggle — flips <html data-theme> + persists; icon tracks $theme. */}
           <button

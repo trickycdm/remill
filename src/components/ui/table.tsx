@@ -35,7 +35,16 @@ export function Table({
   'aria-label'?: string;
 }): JSX.Element {
   return (
-    <div class="w-full overflow-x-auto rounded-lg border border-border">
+    // Focusable labelled region: a wide table overflows this wrapper, and a
+    // scrollable region must be keyboard-reachable (axe scrollable-region-
+    // focusable, WCAG 2.1.1) — tabindex + role + name make the scroll container
+    // itself operable, not just its contents.
+    <div
+      class="w-full overflow-x-auto rounded-lg border border-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      tabindex={0}
+      role="region"
+      aria-label={ariaLabel ?? caption ?? 'Table'}
+    >
       <table class={cx('w-full border-collapse text-left text-sm text-ink', cls)} aria-label={ariaLabel}>
         {caption ? <caption class="sr-only">{caption}</caption> : null}
         {children}

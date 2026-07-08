@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { SYSTEM_ROLES } from '@/access/policy';
 
 /**
  * C1: the committed production seed (run against prod by `db:seed:remote`) must
@@ -25,5 +26,25 @@ describe('seed.sql — no committed admin credentials (C1)', () => {
     expect(seedSql).toMatch(/INSERT[\s\S]*INTO\s+roles/i);
     expect(seedSql).toContain("'settings'");
     expect(seedSql).toContain("'media'");
+  });
+
+  /**
+   * DRIFT GUARD (D26): the system-role policy lives in THREE hand-mirrored
+   * places — ACTIONS (types.ts), SYSTEM_ROLES (policy.ts, seeds tests), and
+   * seed.sql (seeds production). Tests exercise policy.ts while prod runs
+   * seed.sql, so silent divergence would ship untested permissions. Assert
+   * every policy permission has a matching seed row.
+   */
+  it('every SYSTEM_ROLES permission has a matching role_permissions row in seed.sql', () => {
+    for (const role of SYSTEM_ROLES) {
+      for (const p of role.permissions) {
+        const condition = p.condition ? `'${p.condition}'` : 'NULL';
+        // ('rlp_…','<role>', '<collection>', '<action>', <condition>) with flexible spacing
+        const row = new RegExp(
+          `\\('rlp_[a-z_]+',\\s*'${role.slug}',\\s*'\\${p.collection}',\\s*'${p.action}',\\s*${condition}\\)`,
+        );
+        expect(seedSql, `seed.sql is missing: ${role.slug} ${p.collection} ${p.action} ${condition}`).toMatch(row);
+      }
+    }
   });
 });

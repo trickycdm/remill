@@ -7,6 +7,17 @@
 SESSION_SECRET="change-me-to-a-random-string-at-least-32-characters-long"
 
 # ---------------------------------------------------------------------------
+# Email delivery via Resend (D20). OPTIONAL — omit both to keep the console
+# stub (logs instead of sending; what tests use). NEVER commit a real key; if
+# one ever transits an insecure channel (chat, ticket), rotate it at
+# https://resend.com/api-keys after wiring. Production:
+#   wrangler secret put RESEND_API_KEY
+# The From address must be a Resend-verified sender. settings.emailFrom
+# (admin Settings page) overrides EMAIL_FROM.
+# RESEND_API_KEY=""
+# EMAIL_FROM="remill <bot@yourdomain.com>"
+
+# ---------------------------------------------------------------------------
 # First-admin bootstrap (C1). The admin login is NOT seeded — no credentials live
 # in the repo. Provision it explicitly with scripts/bootstrap-admin.ts:
 #

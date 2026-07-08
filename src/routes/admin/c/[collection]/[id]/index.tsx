@@ -1,4 +1,5 @@
 import { createFactory } from 'hono/factory';
+import { Script } from 'vite-ssr-components/hono';
 import type { Env } from '@/types';
 import { requireAuth, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
@@ -7,7 +8,7 @@ import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
 import { getDocument, updateDocument, listRevisions, getBacklinks } from '@/services/documents';
 import { getSettings } from '@/services/settings';
-import { getPrincipalPermissions, listItemGrants, listPrincipals, listRoles } from '@/services/access';
+import { getPrincipalPermissions, listItemGrants, listPrincipals, listRoles, listTeams } from '@/services/access';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
@@ -45,6 +46,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         grants: await listItemGrants(db, principal, slug, id, now),
         principals: await listPrincipals(db, principal, now),
         roles: await listRoles(db),
+        teams: await listTeams(db),
       }
     : null;
 
@@ -56,6 +58,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
   return c.render(
     <AdminShell user={user} current="content">
+      {/* Editor islands (D38) — Scripts live in ROUTE files (vite-ssr-components
+          only discovers them here + layouts.tsx, never in shared components). */}
+      <Script src="/src/client/markdown-editor.ts" />
+      <Script src="/src/client/media-picker.ts" />
       <PageHeader
         breadcrumb={[
           { label: 'Content', href: '/admin/c' },
@@ -99,7 +105,14 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       <BacklinksPanel backlinks={backlinks} />
 
       {share && (
-        <SharePanel slug={slug} id={id} grants={share.grants} principals={share.principals} roles={share.roles} />
+        <SharePanel
+          slug={slug}
+          id={id}
+          grants={share.grants}
+          principals={share.principals}
+          roles={share.roles}
+          teams={share.teams}
+        />
       )}
     </AdminShell>,
   );

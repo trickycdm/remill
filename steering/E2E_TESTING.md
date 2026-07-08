@@ -53,7 +53,11 @@ these):
   own. **The long-standing "late-suite axe flake" was this limiter, not a11y and not timing** —
   when a login-dependent test fails late in a fast suite, check the 429 path FIRST (2026-07-05).
 - **Not idempotent.** Reset before a full run: kill any server on :3100, `rm -rf
-  .wrangler/state/v3/d1`, then `bun run e2e` (which migrates + seeds + runs).
+  .wrangler/state/v3/d1`, then `bun run e2e` (which migrates + seeds + runs). **Corollary: never
+  diagnose failures from a bare `bunx playwright test` run** — it skips migrate/seed and reuses
+  whatever D1 state is lying around, so it manufactures failures (and can mask real ones) that a
+  clean `bun run e2e` doesn't reproduce. Only the clean run is signal (cost a triage detour,
+  2026-07-08).
 
 Prerequisites are wrapped by `bun run e2e`: local D1 migrated + seeded (first admin, `settings` +
 `media` collections, roles, e2e fixtures).
@@ -68,7 +72,7 @@ e2e/
 ├── auth/                   # login, redirect-after-login, invalid creds, route protection
 ├── collections/            # schema builder: create/edit a collection and fields via the UI
 ├── documents/              # generated list + edit view, draft/publish, revision restore
-├── media/                  # upload (Uppy), alt editing, library browse
+├── media/                  # upload (native multipart), alt editing, library browse
 ├── access/                 # principals, roles, tokens, item grants, audit log
 ├── a11y/pages.spec.ts      # axe sweep across every admin page
 └── smoke.spec.ts
@@ -113,13 +117,29 @@ Priority: **1** `getByRole` (buttons, links, headings, nav) → **2** `getByLabe
 XPath, and positional selectors are discouraged — brittle and they don't validate accessibility. New
 `data-testid`s use `<feature>-<element>` (e.g. `document-list`, `field-editor-body`).
 
-Two accessible-name traps in THIS codebase (each cost a failed run, 2026-07-05):
+Accessible-name traps in THIS codebase (each cost a failed run, 2026-07-05/06/08):
 
 - **`FormField` appends "(required)" to the accessible name** — `getByLabel('Name', { exact: true })`
   misses a required field ("Name (required)"). Use an anchored regex: `getByLabel(/^Name/)`.
 - **Fixed-pool rows are numbered** (`Key for field 1` … `Key for field 12`, builder TD-10 idiom) —
   non-exact `getByLabel('Key for field 1')` substring-matches fields 10–12 and trips strict mode.
   Row-scoped aria-labels always take `{ exact: true }` (they carry no suffix, so exact is safe).
+- **Generated-form labels are HUMANIZED from field keys** (`title` → "Title") — a case-sensitive
+  regex like `getByLabel(/^title/)` silently misses it. Anchored label regexes on generated forms
+  take the `i` flag: `getByLabel(/^title/i)`.
+- **Serial-group retries re-run in a FRESH worker against the SAME D1** — anything the first
+  attempt created (collections, teams, accounts) still exists, so re-creates hit "already exists"
+  and once-unique names now match twice (strict mode). Derive per-attempt-unique names at module
+  scope (`const RUN = Date.now().toString(36)`; fresh worker ⇒ fresh value) and give repeated
+  per-card actions team/row-scoped aria-labels (`Mint join link for ${team.name}`).
+- **Markdown fields are CodeMirror islands (D38)** — `getByLabel(/^body/i)` strict-violates on the
+  PAIR (the hidden carrier textarea + the CM `role=textbox` named by the same label). Fill them
+  ONLY via `fillMarkdown` (`e2e/helpers/editor.ts`), which targets the role (the aria-hidden
+  textarea is out of the a11y tree, so role queries are unique).
+- **Selectable list tables (D39) add checkbox cells named `Select {title}`** — a non-exact
+  `getByRole('cell', { name: title })` matches BOTH the title cell and the checkbox cell. Title
+  cell locators on selectable lists take `{ exact: true }` (same family as the row-scoped
+  aria-label trap above).
 
 ## Writing tests
 
@@ -130,6 +150,13 @@ Two accessible-name traps in THIS codebase (each cost a failed run, 2026-07-05):
 - **Never `page.waitForTimeout`** — flaky and slow. Wait on the next state instead: for a Datastar
   patch, wait for the patched content/`aria-label` to be visible before interacting.
 - Prefer `toBeVisible()` over `toHaveCount(1)`; use `toHaveAccessibleName`/`toHaveRole` where apt.
+- **`sr-only` elements COUNT AS VISIBLE to Playwright** (a 1×1 clipped box has a bounding box) —
+  `not.toBeVisible()` on an island's hidden carrier fails. Assert the mechanism instead:
+  `toHaveClass(/sr-only/)` / `toHaveAttribute('aria-hidden', 'true')`.
+- **`page.request` does NOT carry the session cookie in this setup** — an authed admin endpoint
+  fetched through it 302s to login. Hit authed endpoints with an in-page
+  `page.evaluate(() => fetch(...))` (browser cookies apply); reserve `page.request` for
+  anonymous/public surfaces.
 - Scope locators when text repeats (`page.locator('#main-content').getByText(...)`) and use
   `{ exact: true }` when a name is a substring of a sibling's.
 - Isolate: don't assert exact seed counts; `nanoid()` for test-specific names; reset local D1 with

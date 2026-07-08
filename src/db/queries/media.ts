@@ -7,6 +7,7 @@
 import { eq, desc, like, count, and, or, lt } from 'drizzle-orm';
 import type { Database } from '@/db/client';
 import { media, documents } from '@/db/schema';
+import { eventInsert, type EventInput } from '@/db/queries/events';
 
 export interface MediaRecord {
   readonly id: string;
@@ -40,9 +41,9 @@ function toDomain(r: typeof media.$inferSelect): MediaRecord {
 
 export async function insertMedia(
   db: Database,
-  rec: Omit<MediaRecord, 'createdAt'> & { now: string },
+  rec: Omit<MediaRecord, 'createdAt'> & { now: string; event?: EventInput },
 ): Promise<void> {
-  await db.insert(media).values({
+  const insert = db.insert(media).values({
     id: rec.id,
     r2Key: rec.r2Key,
     filename: rec.filename,
@@ -56,6 +57,9 @@ export async function insertMedia(
     createdBy: rec.createdBy,
     createdAt: rec.now,
   });
+  // Outbox event (D33) rides the same atomic batch as the row it describes.
+  if (rec.event) await db.batch([insert, eventInsert(db, rec.event)]);
+  else await insert;
 }
 
 export async function getMedia(db: Database, id: string): Promise<MediaRecord | null> {
@@ -118,8 +122,10 @@ export async function updateMediaAlt(db: Database, id: string, alt: string): Pro
   await db.update(media).set({ alt }).where(eq(media.id, id));
 }
 
-export async function deleteMedia(db: Database, id: string): Promise<void> {
-  await db.delete(media).where(eq(media.id, id));
+export async function deleteMedia(db: Database, id: string, event?: EventInput): Promise<void> {
+  const del = db.delete(media).where(eq(media.id, id));
+  if (event) await db.batch([del, eventInsert(db, event)]);
+  else await del;
 }
 
 /** How many documents reference this media id (crude JSON scan — the block-on-

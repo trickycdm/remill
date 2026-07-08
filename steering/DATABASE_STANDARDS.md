@@ -62,8 +62,46 @@ value** table, one row per (document, indexed field):
   REST/MCP filter, sort, and paginate against — never scan `data_json` with `LIKE`.
 - **Index rows are synced on every document save**, inside the same atomic batch as the document write
   and revision append (below). The index is derived state; `data_json` is the source of truth.
-- Accepted v1 trade: fine at lightweight scale, degrades with huge collections + heavy filtering. The
-  escape hatch is SQLite FTS5, added later without changing the write path — do not optimise early.
+- Accepted v1 trade: fine at lightweight scale, degrades with huge collections + heavy filtering.
+- Filters support operators (D28): `eq` (default), `gte`/`lte` (kind-matched column; ISO datetimes
+  compare correctly as text), `contains` (LIKE on `value_text` with `%_\` escaped — text kinds only),
+  `in` (comma-separated, capped at 20). Filter/sort on an unindexed field is still a structured 400.
+
+## Full-text search: the `document_fts` FTS5 table (D28)
+
+The FTS5 escape hatch is realized. Rules that keep it safe:
+
+- `document_fts` is a **plain** FTS5 virtual table (`document_id`/`collection` UNINDEXED, `title`,
+  `body`) — its DDL lives ONLY in migration `0007_document_fts.sql`. **Never add it to
+  `src/db/schema.ts`**: drizzle-kit diffs that file and would emit spurious DDL for a virtual table.
+- Writes go through the out-of-schema Drizzle handle **`src/db/fts-table.ts`** so they are PREPARED
+  statements — **the D1 driver cannot batch raw `db.run(sql)`** (runtime error, not a type error).
+  Every FTS write rides the document write's atomic batch (delete-then-insert, like the index sync).
+- **FK cascades cannot clear a virtual table** — document/collection deletes must delete FTS rows
+  explicitly in the same batch (see `deleteDocument` / `deleteCollectionRow`).
+- Search text comes from the FieldType hook `toSearchText` (FULL text; `toIndex` truncates markdown/
+  html to a 200-char lead-in), title from the same `pickTitleField` heuristic relation expansion uses.
+- MATCH input is NEVER raw user text — compile through `toFtsQuery` (`src/lib/fts.ts`); snippets are
+  escape-then-mark via char(1)/char(2) sentinels (`snippetToHtml`).
+- Reads (`MATCH`/`bm25()`/`snippet()`) are raw SQL in `src/db/queries/search.ts`, outside batches,
+  with each caller's compiled read predicate OR-composed per collection in-query (D17 still holds).
+- Rebuild path: "Rebuild search index" on `/admin/settings` (`rebuildSearchIndex`) — required once
+  after deploying 0007 (pre-existing documents), and the recovery tool if the index drifts.
+
+## Recoverable delete: the `document_trash` snapshot table (D29)
+
+- Deleting a document is **snapshot-then-delete, one batch**: insert the full snapshot (data +
+  newest `TRASH_MAX_REVISIONS` revisions as `revisions_json` + attribution/timestamps) into
+  `document_trash`, delete the original row (FK cascades clear index/revisions/item_grants),
+  delete the FTS row explicitly. There is deliberately NO hard `deleteDocument` query — don't add
+  one back.
+- `document_trash.collection` has **no FK**: the snapshot must survive collection deletion
+  (restore then 409s with a recreate-the-collection message).
+- **Restore** re-inserts under the ORIGINAL document id (backlinks/relations resume), re-computing
+  index + FTS rows against the CURRENT definition — a direct query path, NOT the create pipeline,
+  so definition drift can never make a document unrecoverable. Unique/PK violations surface as 409.
+- Retention: the daily cron purges rows older than `TRASH_RETENTION_DAYS`
+  (`src/config/retention.ts`) — a witness-free maintenance delete (ACCESS_CONTROL.md).
 
 ## Atomic save: `db.batch()` (the core write)
 
@@ -78,6 +116,28 @@ D1 exposes no `BEGIN/COMMIT` via the Workers binding — **`db.batch()` is the a
 If any statement fails, none apply — the document, its index, and its revision history never drift
 apart. Put this batch in one query function; the documents service calls it after the whitelist
 validation and `beforeSave` transforms (SCHEMA_ENGINE.md save pipeline).
+
+**Every batch item must be a builder-produced prepared statement** (`db.insert/update/delete/
+select`). A raw `db.run(sql\`…\`)` inside `db.batch()` TYPE-CHECKS but fails at runtime
+("Cannot read properties of undefined (reading 'bind')") — the D1 session can only bind prepared
+queries. For tables Drizzle can't know from schema.ts (virtual tables), define an out-of-schema
+table handle (see `src/db/fts-table.ts`) rather than reaching for raw SQL.
+
+## Events outbox (D33): in-batch, pointer-only, AUTOINCREMENT
+
+- **An event row is written INSIDE the mutation batch it describes — never a second write.**
+  Services attach an optional `EventInput` to the query input; query functions append
+  `eventInsert(db, event)` (src/db/queries/events.ts) to their existing batch. A mutation without
+  its event, or an event without its mutation, is impossible by construction. When you add a NEW
+  mutation path to documents/media/collections, thread an event through it.
+- `events.seq` is **INTEGER PRIMARY KEY AUTOINCREMENT — the documented exception to the nanoid-PK
+  convention**: the poll cursor must be monotonic and never reused, and a plain rowid PK recycles
+  the max after deletes. Do not add AUTOINCREMENT anywhere else without the same argument.
+- **No FKs on events** — an event must survive its subject's deletion (that IS the event).
+  Pointer columns only (type/collection/resource/principal/time); payload would leak content the
+  poller can't read at poll time.
+- Retention: daily `pruneEvents` (witness-free, `EVENTS_RETENTION_DAYS`); seq GAPS after pruning
+  (and after permission filtering) are legal — `since` is a horizon, not a contiguous log.
 
 ## JSON-as-text columns
 
@@ -105,6 +165,9 @@ validation and `beforeSave` transforms (SCHEMA_ENGINE.md save pipeline).
 - **`NOT NULL` by default**; be explicit with `.notNull()`. **CHECK constraints** for fixed enums
   (`status IN ('draft','published')`) — Drizzle doesn't generate these; add them in the raw migration.
   **UNIQUE constraints** for business rules (unique slug per collection) — app-level checks race.
+- **Partial indexes** for sparse flag/schedule columns — Drizzle Kit can't express `WHERE` indexes,
+  so hand-add them in the raw migration (precedent: `documents_publish_at_idx … WHERE publish_at IS
+  NOT NULL`, migration 0010 — the drain scans only pending schedules; almost every row is NULL).
 - **Cascades deliberately**: deleting a document cascades to its `document_revisions` and
   `document_index` rows; enable FK enforcement (`PRAGMA foreign_keys = ON` — Wrangler does this for D1).
 

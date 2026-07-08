@@ -25,15 +25,18 @@ export function SharePanel({
   grants,
   principals,
   roles,
+  teams,
 }: {
   slug: string;
   id: string;
   grants: ItemGrantRecord[];
   principals: ShareSubject[];
   roles: { slug: string; name: string }[];
+  teams: { id: string; name: string }[];
 }) {
   const action = `/admin/c/${slug}/${id}/share`;
   const nameById = new Map(principals.map((p) => [p.id, p.name]));
+  const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
 
   return (
     <Card class="mt-8">
@@ -51,15 +54,27 @@ export function SharePanel({
           ) : (
             grants.map((g) => (
               <div class="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2">
-                <Badge tone={g.subjectKind === 'role' ? 'accent' : g.subjectKind === 'link' ? 'warning' : 'info'}>
+                <Badge
+                  tone={
+                    g.subjectKind === 'role'
+                      ? 'accent'
+                      : g.subjectKind === 'link'
+                        ? 'warning'
+                        : g.subjectKind === 'team'
+                          ? 'success'
+                          : 'info'
+                  }
+                >
                   {g.subjectKind}
                 </Badge>
                 <span class="text-sm font-medium text-ink">
                   {g.subjectKind === 'principal'
                     ? (nameById.get(g.subjectId) ?? g.subjectId)
-                    : g.subjectKind === 'link'
-                      ? `link …${g.subjectId.slice(0, 8)}`
-                      : g.subjectId}
+                    : g.subjectKind === 'team'
+                      ? (teamNameById.get(g.subjectId) ?? g.subjectId)
+                      : g.subjectKind === 'link'
+                        ? `link …${g.subjectId.slice(0, 8)}`
+                        : g.subjectId}
                 </span>
                 <span class="flex flex-wrap gap-1">
                   {g.actions.map((a) => (
@@ -93,6 +108,13 @@ export function SharePanel({
                   </option>
                 ))}
               </optgroup>
+              {teams.length > 0 && (
+                <optgroup label="Teams">
+                  {teams.map((t) => (
+                    <option value={`team:${t.id}`}>{t.name}</option>
+                  ))}
+                </optgroup>
+              )}
               <optgroup label="Roles">
                 {roles.map((r) => (
                   <option value={`role:${r.slug}`}>{r.name}</option>
@@ -125,7 +147,7 @@ export function SharePanel({
           <FormField
             fieldId={`share-link-email-${id}`}
             label="Share by link (optionally email it)"
-            description="Creates a read-only link anyone can open — no account needed. Email delivery is stubbed (logged, not sent)."
+            description="Creates a read-only link anyone can open — no account needed. Emailed too, if delivery is configured."
           >
             <Input id={`share-link-email-${id}`} name="email" type="email" placeholder="someone@example.com (optional)" />
           </FormField>

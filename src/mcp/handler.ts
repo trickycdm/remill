@@ -17,7 +17,7 @@
 
 import type { Database } from '@/db/client';
 import type { Principal } from '@/access';
-import { buildToolsForPrincipal } from '@/mcp/tools';
+import { buildToolsForPrincipal, type McpToolContext } from '@/mcp/tools';
 import { listCollections } from '@/services/collections';
 import { getDocument, listDocuments } from '@/services/documents';
 import { AppError, ForbiddenError } from '@/lib/errors';
@@ -43,6 +43,8 @@ export async function handleMcp(
   principal: Principal,
   now: () => string,
   reqBody: JsonRpcRequest,
+  baseUrl = '',
+  ctx: McpToolContext = {},
 ): Promise<object | null> {
   const { id, method, params } = reqBody;
 
@@ -59,7 +61,7 @@ export async function handleMcp(
       return id === undefined ? null : result(id, {});
 
     case 'tools/list': {
-      const tools = await buildToolsForPrincipal(db, principal, now);
+      const tools = await buildToolsForPrincipal(db, principal, now, baseUrl, ctx);
       return result(id, {
         tools: tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
       });
@@ -68,7 +70,7 @@ export async function handleMcp(
     case 'tools/call': {
       const name = String(params?.name ?? '');
       const args = (params?.arguments ?? {}) as Record<string, unknown>;
-      const tools = await buildToolsForPrincipal(db, principal, now);
+      const tools = await buildToolsForPrincipal(db, principal, now, baseUrl, ctx);
       const tool = tools.find((t) => t.name === name);
       // A tool the principal can't see is, in effect, forbidden — don't leak its
       // existence differently from a permission denial.

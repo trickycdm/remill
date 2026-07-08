@@ -28,6 +28,11 @@ export interface SiteSettings {
   readonly dateFormat?: string;
   readonly defaultPageSize?: number;
   readonly logo?: string;
+  /** Sender for outgoing mail (D20). Overrides env.EMAIL_FROM when set. */
+  readonly emailFrom?: string;
+  /** Widens the PUBLIC-page CSP to allow whitelisted CDN script hosts (D27).
+   *  Default false; admin/API/MCP/auth stay strict regardless. */
+  readonly allowCdnScripts?: boolean;
 }
 
 /** Coerce a raw JSON value to a trimmed non-empty string, else undefined. */
@@ -42,7 +47,11 @@ function str(v: unknown): string | undefined {
  *  get a stable shape. */
 export async function getSettings(db: Database): Promise<SiteSettings> {
   const data = (await getSingletonData(db, 'settings')) ?? {};
-  const pageSize = typeof data.defaultPageSize === 'number' ? data.defaultPageSize : undefined;
+  // A stored 0 means "never set" (an empty number widget submits 0 under
+  // Datastar signals) — treat anything below 1 as unset so list surfaces fall
+  // back to DEFAULT_PAGE_SIZE instead of clamping to one-row pages.
+  const pageSize =
+    typeof data.defaultPageSize === 'number' && data.defaultPageSize >= 1 ? data.defaultPageSize : undefined;
   return {
     siteName: str(data.siteName),
     siteDescription: str(data.siteDescription),
@@ -52,5 +61,7 @@ export async function getSettings(db: Database): Promise<SiteSettings> {
     dateFormat: str(data.dateFormat),
     defaultPageSize: pageSize,
     logo: str(data.logo),
+    emailFrom: str(data.emailFrom),
+    allowCdnScripts: data.allowCdnScripts === true,
   };
 }

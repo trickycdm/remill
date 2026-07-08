@@ -13,7 +13,8 @@ import type { DocumentRecord, ExpandedDocument } from '@/services/documents';
 import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
 import { hasLifecycle } from '@/lib/lifecycle';
-import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, EmptyState } from '@/components/ui';
+import { titleOf } from '@/lib/def-helpers';
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, Checkbox, EmptyState } from '@/components/ui';
 
 type EditProps = { field: FieldDescriptor; config: unknown; value: unknown; signal: string };
 
@@ -97,15 +98,21 @@ export function GeneratedForm({
 }
 
 /** The generated list view: columns from `showInList` fields (or the first field).
- *  `settings` (optional) tunes the "Updated" timestamp's timezone/format. */
+ *  `settings` (optional) tunes the "Updated" timestamp's timezone/format.
+ *  `selectable` (D39) adds a leading checkbox column and a bulk-action bar,
+ *  wrapping everything in ONE classic form POSTing to `/admin/c/:slug/bulk` —
+ *  no signals for the submission (nanoid ids make poor signal names; works
+ *  without JS), just a select-all convenience one-liner. */
 export function GeneratedTable({
   def,
   rows,
   settings,
+  selectable = false,
 }: {
   def: CollectionDefinition;
   rows: ExpandedDocument[];
   settings?: SiteSettings;
+  selectable?: boolean;
 }) {
   const columns = def.fields.filter((f) => f.admin?.showInList);
   const cols = columns.length ? columns : def.fields.slice(0, 1);
@@ -123,10 +130,19 @@ export function GeneratedTable({
     );
   }
 
-  return (
-    <Table>
+  const table = (
+    <Table aria-label={`${def.name} list`}>
       <TableHead>
         <TableRow>
+          {selectable ? (
+            <TableHeaderCell class="w-10">
+              {/* Select-all: pure DOM convenience — the FORM is the state. */}
+              <Checkbox
+                aria-label="Select all rows"
+                data-on:change="el.closest('form').querySelectorAll('input[name=ids]').forEach((cb) => { cb.checked = el.checked })"
+              />
+            </TableHeaderCell>
+          ) : null}
           {cols.map((f) => (
             <TableHeaderCell>{fieldLabel(f)}</TableHeaderCell>
           ))}
@@ -137,6 +153,11 @@ export function GeneratedTable({
       <TableBody>
         {rows.map((doc) => (
           <TableRow>
+            {selectable ? (
+              <TableCell class="w-10">
+                <Checkbox name="ids" value={doc.id} aria-label={`Select ${titleOf(def, doc)}`} />
+              </TableCell>
+            ) : null}
             {cols.map((f, i) => (
               <TableCell>
                 {i === 0 ? (
@@ -162,5 +183,33 @@ export function GeneratedTable({
         ))}
       </TableBody>
     </Table>
+  );
+
+  if (!selectable) return table;
+
+  return (
+    <form method="post" action={`/admin/c/${def.slug}/bulk`}>
+      {table}
+      {/* The bulk bar — sticky so it stays reachable on long pages. Buttons are
+          the op dispatch; publish/unpublish only for lifecycle collections
+          (setPublished enforces hasLifecycle — B4). */}
+      <div class="sticky bottom-2 mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-2.5 shadow-md">
+        <span class="text-sm font-medium text-ink">With selected:</span>
+        {showStatus ? (
+          <>
+            <Button type="submit" name="op" value="publish" variant="secondary" size="sm">
+              Publish
+            </Button>
+            <Button type="submit" name="op" value="unpublish" variant="secondary" size="sm">
+              Unpublish
+            </Button>
+          </>
+        ) : null}
+        <Button type="submit" name="op" value="trash" variant="danger" size="sm">
+          Move to trash
+        </Button>
+        <span class="text-xs text-ink-subtle">Trash is recoverable for 30 days.</span>
+      </div>
+    </form>
   );
 }

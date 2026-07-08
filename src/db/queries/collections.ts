@@ -11,6 +11,8 @@
 import { eq } from 'drizzle-orm';
 import type { Database } from '@/db/client';
 import { collections } from '@/db/schema';
+import { documentFts } from '@/db/fts-table';
+import { eventInsert, type EventInput } from '@/db/queries/events';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import type { Grant } from '@/access/grant';
 
@@ -24,6 +26,7 @@ function toDomain(row: Row): CollectionDefinition {
     fields: JSON.parse(row.fieldsJson || '[]') as FieldDescriptor[],
     workflow: row.workflowJson ? JSON.parse(row.workflowJson) : undefined,
     access: row.accessJson ? JSON.parse(row.accessJson) : undefined,
+    renderMode: (row.renderMode as CollectionDefinition['renderMode']) ?? undefined,
     protected: row.protected === 1,
   };
 }
@@ -46,18 +49,23 @@ export async function insertCollection(
   def: CollectionDefinition,
   now: string,
   _grant: Grant,
+  event?: EventInput,
 ): Promise<void> {
-  await db.insert(collections).values({
+  const insert = db.insert(collections).values({
     slug: def.slug,
     name: def.name,
     shape: def.shape,
     fieldsJson: JSON.stringify(def.fields),
     workflowJson: def.workflow ? JSON.stringify(def.workflow) : null,
     accessJson: def.access ? JSON.stringify(def.access) : null,
+    renderMode: def.renderMode ?? null,
     protected: def.protected ? 1 : 0,
     createdAt: now,
     updatedAt: now,
   });
+  // Outbox event (D33) rides the same atomic batch as the row it describes.
+  if (event) await db.batch([insert, eventInsert(db, event)]);
+  else await insert;
 }
 
 export async function updateCollectionRow(
@@ -66,8 +74,9 @@ export async function updateCollectionRow(
   def: CollectionDefinition,
   now: string,
   _grant: Grant,
+  event?: EventInput,
 ): Promise<void> {
-  await db
+  const update = db
     .update(collections)
     .set({
       name: def.name,
@@ -75,15 +84,25 @@ export async function updateCollectionRow(
       fieldsJson: JSON.stringify(def.fields),
       workflowJson: def.workflow ? JSON.stringify(def.workflow) : null,
       accessJson: def.access ? JSON.stringify(def.access) : null,
+      renderMode: def.renderMode ?? null,
       updatedAt: now,
     })
     .where(eq(collections.slug, slug));
+  if (event) await db.batch([update, eventInsert(db, event)]);
+  else await update;
 }
 
 export async function deleteCollectionRow(
   db: Database,
   slug: string,
   _grant: Grant,
+  event?: EventInput,
 ): Promise<void> {
-  await db.delete(collections).where(eq(collections.slug, slug));
+  // Documents/index/revisions cascade via FK; the FTS virtual table has no FK,
+  // so its rows for the collection are cleared in the same batch (D28).
+  await db.batch([
+    db.delete(collections).where(eq(collections.slug, slug)),
+    db.delete(documentFts).where(eq(documentFts.collection, slug)),
+    ...(event ? [eventInsert(db, event)] : []),
+  ]);
 }

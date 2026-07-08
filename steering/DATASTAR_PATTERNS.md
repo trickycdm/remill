@@ -52,6 +52,12 @@ at its initial value when inputs change. **Inline the whole chain off the base s
 computed you actually display. Keep intermediate computeds only for their own displays (they read base
 signals and do react).
 
+**Gotcha — an EMPTY bound `<input type="number">` submits `0`, not undefined.** Number signals
+initialize to `0`, so "the user never touched this field" and "the user typed 0" are
+indistinguishable in the stored data — an unset `defaultPageSize` persisted as `0` and every list
+page silently clamped to one-row pages. Guard at the READ seam: treat out-of-domain numerics as
+unset (`getSettings` treats `defaultPageSize < 1` as undefined — the precedent).
+
 **Gotcha — reactive expressions are opaque to the type-checker.** `data-computed`/`data-bind`/
 `data-text`/`data-on` expressions are plain strings — neither `type-check` nor unit tests (which assert
 server-rendered HTML) catch a broken one. **Playwright is the only safety net** (E2E_TESTING.md): when
@@ -180,8 +186,8 @@ things Datastar genuinely can't express:
 | Situation | Use |
 |---|---|
 | Forms, toggles, tabs, partial swaps, redirects, save feedback | **Datastar** (`data-*`, `@post`/`@get`, SSE) |
-| Markdown editing | island — CodeMirror 6 (`src/client/`) |
-| Resumable multipart uploads + progress | island — Uppy (`src/client/`) |
+| Markdown editing | island — CodeMirror 6 (`src/client/markdown-editor.ts`, D38) |
+| Media browsing/upload in the editor | island — media picker (`src/client/media-picker.ts`, D38 — supersedes D12/Uppy) |
 | Slow server-rendered section behind a skeleton | island — lazy-fragment (below) |
 
 **Gotcha — `@get` on a load-fragment can loop into a full-page reload.** Using Datastar's
@@ -189,6 +195,37 @@ things Datastar genuinely can't express:
 `data-init`), and an SSE response made it a full-page reload loop. For one-shot lazy sections use a
 **plain `fetch` + `innerHTML` island** that removes its own `data-lazy-src` up front so it can never
 fetch twice; Datastar's MutationObserver still wires up reactive attributes in the injected markup.
+
+**Worked example 1 — CodeMirror sync (the island↔form handoff done right).** The `markdown`
+widget's `<Textarea data-bind={signal}>` STAYS in the DOM as the form/signal carrier; the island
+mounts CodeMirror beside it, then on every doc change writes `textarea.value = doc.toString()` and
+dispatches `new Event('input', {bubbles: true})` — Datastar's binding listens for native `input`,
+so the signal (and the whole-form `@post`) work unchanged, and no-JS degrades to the plain
+textarea. Hide the carrier with `sr-only` + `tabindex="-1"` + `aria-hidden` (NEVER `display:none`
+— a label click still forwards focus into the editor), and give the CM content an `aria-label`
+threaded via a `data-label` attribute. Theme maps `var(--color-*)` tokens directly — they are
+`light-dark()` values, so dark mode needs no JS branching. **Test impact:** the field now exposes
+TWO label-associated nodes; e2e must fill via `fillMarkdown` (e2e/helpers/editor.ts), never
+`getByLabel`.
+
+**Worked example 2 — the media picker (dialog + fetched fragment).** The widget renders the id
+input (data-bind), a JS-only "Browse…" button (hidden until the island mounts), and an EMPTY
+`<Dialog>` shell. On open, the island `fetch`es the server-rendered fragment
+(`GET /admin/media/picker`) and `innerHTML`s it into the dialog body — per the gotcha above,
+NEVER `@get`. Two hard constraints because the dialog sits INSIDE `#editor-form`: the fragment
+must contain **no `<form>`** (the island builds `FormData` from bare inputs for
+`POST /admin/media/picker`), and **every fragment button must be `type="button"`** (a bare
+`<button>` would submit the editor form). Selection writes the id into the field input +
+dispatches bubbling `input` — the same handoff as example 1.
+
+**Worked example 3 — bulk selection is a NATIVE form, not signals (D39).** The selectable list
+wraps table + bulk bar in one `<form method="post">`; row checkboxes are `name="ids"
+value={doc.id}` (the FORM is the state — nanoid ids make invalid signal names, and the flow must
+work without JS); the action buttons are the `op` dispatch (`name="op" value="publish|…"`).
+Datastar's only job is the select-all convenience one-liner:
+`data-on:change="el.closest('form').querySelectorAll('input[name=ids]').forEach((cb) => { cb.checked = el.checked })"`.
+Results come back as a `?bulk=ok:<n>,failed:<m>` query-param flash (`role="status"`), the same
+pattern as trash's `?restored=`.
 
 ---
 

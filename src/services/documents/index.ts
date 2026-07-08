@@ -15,10 +15,16 @@ import type { Database } from '@/db/client';
 import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference } from '@/fields/types';
 import { resolveField, isMultiValued, referencesOf } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
+import { trashDocument as trashDocumentRow } from '@/db/queries/trash';
+import { TRASH_MAX_REVISIONS } from '@/config/retention';
 import { getCollection, listCollections as listCollectionDefs } from '@/db/queries/collections';
-import { authorize, compileReadFilter, resolveAccess, anonymousPrincipal, type Principal } from '@/access';
+import { getGrantedDocumentIds } from '@/db/queries/grants';
+import { getPrincipalRoleSlugs } from '@/db/queries/roles';
+import { getPrincipalTeamIds } from '@/db/queries/teams';
+import { authorize, compileReadFilter, resolveAccess, anonymousPrincipal, systemPrincipal, type Principal } from '@/access';
 import { newId } from '@/lib/id';
 import { hasLifecycle } from '@/lib/lifecycle';
+import { titleFieldOf } from '@/lib/def-helpers';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
 import {
   InputValidationError,
@@ -32,6 +38,8 @@ import type { DocumentRecord } from '@/db/queries/documents';
 
 export type { DocumentRecord } from '@/db/queries/documents';
 export type { ExpandedReference } from '@/fields/types';
+export { FILTER_OPS } from '@/db/queries/documents';
+export type { FilterOp } from '@/db/queries/documents';
 
 /** A read result: the raw document plus (when the collection has referencing
  *  fields) the expansion of each reference into `{id, title, collection}`.
@@ -122,8 +130,10 @@ function coerceNumericFilter(field: FieldDescriptor, raw: string): string {
 /** Build document_index rows for every indexed field (SCHEMA_ENGINE.md surface 1).
  *  A multi-valued `toIndex` returns an array — one row PER ELEMENT, so each edge of
  *  a multi-relation is independently filterable and reverse-lookupable (B1). The
- *  sync layer replaces a document's rows wholesale, so N rows need no query change. */
-function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): dq.IndexValue[] {
+ *  sync layer replaces a document's rows wholesale, so N rows need no query change.
+ *  Exported for the trash restore path (D29), which re-indexes a snapshot against
+ *  the CURRENT definition. */
+export function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): dq.IndexValue[] {
   const rows: dq.IndexValue[] = [];
   for (const field of def.fields) {
     if (!field.index) continue;
@@ -144,6 +154,44 @@ function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): d
     }
   }
   return rows;
+}
+
+/** Build the document's FTS row (D28): `title` from the collection's display
+ *  title field (pickTitleField — same heuristic relation expansion uses), `body`
+ *  from every field with searchable text. Fields need NOT be `index:true` — FTS
+ *  is its own surface. `toSearchText` supplies FULL text (markdown/html strip to
+ *  plain text untruncated); types without it fall back to their string `toIndex`
+ *  output (text/slug/tags/select…). Exported for the rebuild path
+ *  (src/services/search). */
+export function buildSearchText(
+  def: CollectionDefinition,
+  data: Record<string, unknown>,
+): dq.SearchText | null {
+  const titleKey = pickTitleField(def);
+  const rawTitle = titleKey ? data[titleKey] : undefined;
+  const title = typeof rawTitle === 'string' && rawTitle.length ? rawTitle : null;
+
+  const parts: string[] = [];
+  for (const field of def.fields) {
+    if (field.key === titleKey) continue; // already the weighted title column
+    const { ft } = resolveField(field);
+    const v = data[field.key];
+    if (v === null || v === undefined) continue;
+    let text: string | null = null;
+    if (ft.toSearchText) {
+      text = ft.toSearchText(v as never);
+    } else if (ft.toIndex) {
+      const idx = ft.toIndex(v as never);
+      const strings = (Array.isArray(idx) ? idx : [idx]).filter(
+        (x): x is string => typeof x === 'string',
+      );
+      text = strings.length ? strings.join(' ') : null;
+    }
+    if (text) parts.push(text);
+  }
+  const body = parts.join('\n');
+  if (!title && !body) return null;
+  return { title, body };
 }
 
 /** True when a batch failed on the document_index unique index (COR-8) — the
@@ -174,6 +222,13 @@ async function checkUnique(
   }
 }
 
+/** Revision author for a write: the system actor (D30) has NO principals row
+ *  for `document_revisions.saved_by` to reference, so its revisions carry NULL —
+ *  the audit row (surface 'system') is the attribution. */
+function revisionAuthor(principal: Principal): string | null {
+  return principal.kind === 'system' ? null : principal.id;
+}
+
 function initialStatus(def: CollectionDefinition): 'draft' | 'published' {
   // lifecycle:'none' docs are ALWAYS born published — status stays load-bearing
   // in the access layer (the `published` condition, publicRead), so opting out
@@ -186,12 +241,10 @@ function initialStatus(def: CollectionDefinition): 'draft' | 'published' {
 // Relation read-expansion (B2)
 // ---------------------------------------------------------------------------
 
-/** The target's display-title field: the configured `titleField` when it exists
- *  on the target, else the target's first text/slug field. */
-function pickTitleField(def: CollectionDefinition, configured?: string): string | undefined {
-  if (configured && def.fields.some((f) => f.key === configured)) return configured;
-  return def.fields.find((f) => f.type === 'text' || f.type === 'slug')?.key;
-}
+// The display-title heuristic moved to src/lib/def-helpers.ts (titleFieldOf,
+// D35) so feeds/OG/homepage share it with search indexing and relation
+// expansion — one heuristic, every surface.
+const pickTitleField = titleFieldOf;
 
 /**
  * Expand every referencing field's id(s) into `{id, title, collection}`,
@@ -337,6 +390,86 @@ export async function getBacklinks(
   return out;
 }
 
+/** One row of the "Shared with me" surface: a document the principal can read
+ *  because someone granted it (directly, via a role, or via a team — D24). */
+export interface SharedWithMeRow {
+  readonly id: string;
+  readonly collection: string;
+  readonly title: string | null;
+  readonly status: string;
+  readonly actions: readonly string[];
+  /** null = at least one applicable grant never expires. */
+  readonly expiresAt: string | null;
+}
+
+/**
+ * The documents item-granted to this principal (as itself, its roles, or its
+ * teams — never link subjects). UN-GATED identity-scoped read: a principal may
+ * always learn what was shared with it. Content still flows through the gated
+ * pipeline — per collection we authorize('read') + compile the read filter and
+ * batch-read under the witness (getBacklinks pattern), so a grant a collection
+ * denies anyway (e.g. revoked role) yields no row.
+ */
+export async function listSharedWithMe(db: Database, principal: Principal, now: string): Promise<SharedWithMeRow[]> {
+  const [roleSlugs, teamIds] = await Promise.all([
+    getPrincipalRoleSlugs(db, principal.id),
+    getPrincipalTeamIds(db, principal.id),
+  ]);
+  const granted = (await getGrantedDocumentIds(db, principal.id, roleSlugs, now, undefined, teamIds)).filter((g) =>
+    g.actions.includes('read'),
+  );
+  if (!granted.length) return [];
+
+  // Union actions + keep the longest-lived expiry per document: any unexpired
+  // grant keeps access, and null ("never expires") wins outright.
+  const byDoc = new Map<string, { actions: Set<string>; expiresAt: string | null; hasNoExpiry: boolean }>();
+  for (const g of granted) {
+    const entry = byDoc.get(g.documentId) ?? { actions: new Set<string>(), expiresAt: null, hasNoExpiry: false };
+    g.actions.forEach((a) => entry.actions.add(a));
+    if (g.expiresAt === null) entry.hasNoExpiry = true;
+    else if (!entry.hasNoExpiry && (entry.expiresAt === null || g.expiresAt > entry.expiresAt)) {
+      entry.expiresAt = g.expiresAt;
+    }
+    byDoc.set(g.documentId, entry);
+  }
+
+  const collectionsById = await dq.getDocumentCollections(db, [...byDoc.keys()]);
+  const idsByCollection = new Map<string, string[]>();
+  for (const [id, collection] of collectionsById) {
+    idsByCollection.set(collection, [...(idsByCollection.get(collection) ?? []), id]);
+  }
+
+  const out: SharedWithMeRow[] = [];
+  for (const [slug, ids] of idsByCollection) {
+    let rows: DocumentRecord[];
+    let def: CollectionDefinition;
+    try {
+      def = await loadCollection(db, slug);
+      const resolved = await resolveAccess(db, principal.id, slug);
+      const grant = await authorize(db, principal, 'read', { collection: slug }, now, resolved);
+      const filter = await compileReadFilter(db, principal, slug, now, resolved);
+      rows = await dq.getDocumentsByIds(db, slug, ids, filter, grant);
+    } catch (e) {
+      if (!(e instanceof ForbiddenError)) throw e;
+      continue; // collection unreadable for this principal — its grants are inert
+    }
+    const titleKey = pickTitleField(def);
+    for (const row of rows) {
+      const raw = titleKey ? row.data[titleKey] : undefined;
+      const entry = byDoc.get(row.id);
+      out.push({
+        id: row.id,
+        collection: slug,
+        title: typeof raw === 'string' && raw.length ? raw : null,
+        status: row.status,
+        actions: [...(entry?.actions ?? [])],
+        expiresAt: entry?.hasNoExpiry ? null : (entry?.expiresAt ?? null),
+      });
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Read
 // ---------------------------------------------------------------------------
@@ -363,10 +496,49 @@ export interface ListParams {
    *  it supersedes `page` (COR-7). Obtain it from a prior result's `nextCursor`. */
   readonly cursor?: string;
   readonly status?: 'draft' | 'published';
-  /** Exact-match filters by field key (REST `?filter[field]=`). */
-  readonly filters?: Record<string, string>;
+  /** Filters by field key (REST `?filter[field]=` / `?filter[field][op]=`, D28).
+   *  A plain string is an exact match; an object carries operator → value
+   *  entries, so a range is `{ gte: '10', lte: '20' }` on one field. */
+  readonly filters?: Record<string, string | Readonly<Partial<Record<dq.FilterOp, string>>>>;
   /** Sort by field key + direction (REST `?sort=field` / `?sort=-field`). */
   readonly sort?: { field: string; dir: 'asc' | 'desc' };
+}
+
+/** Cap on `in` filter set size (D28) — bounds the compiled IN (...) list. */
+export const MAX_IN_FILTER_VALUES = 20;
+
+/** Compile one field's filter spec into ListFilters, validating op semantics. */
+function compileFilters(
+  def: CollectionDefinition,
+  fieldKey: string,
+  spec: string | Readonly<Partial<Record<dq.FilterOp, string>>>,
+): dq.ListFilter[] {
+  const field = assertIndexed(def, fieldKey, 'filter');
+  const kind = indexKind(field);
+  const entries: [string, string][] =
+    typeof spec === 'string' ? [['eq', spec]] : Object.entries(spec).map(([o, v]) => [o, String(v)]);
+  return entries.map(([op, value]) => {
+    if (!dq.FILTER_OPS.includes(op as dq.FilterOp)) {
+      throw new BadRequestError(`Unknown filter operator '${op}' (expected ${dq.FILTER_OPS.join('/')}).`);
+    }
+    if (op === 'contains' && kind === 'num') {
+      throw new BadRequestError(`Field '${fieldKey}' is numeric; 'contains' applies to text fields.`);
+    }
+    if (op === 'in') {
+      const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!parts.length || parts.length > MAX_IN_FILTER_VALUES) {
+        throw new BadRequestError(`'in' filter takes 1–${MAX_IN_FILTER_VALUES} comma-separated values.`);
+      }
+      const coerced = kind === 'num' ? parts.map((p) => coerceNumericFilter(field, p)) : parts;
+      return { fieldKey, kind, op: op as dq.FilterOp, value: coerced.join(',') };
+    }
+    return {
+      fieldKey,
+      kind,
+      op: op as dq.FilterOp,
+      value: kind === 'num' ? coerceNumericFilter(field, value) : value,
+    };
+  });
 }
 
 export interface ListResult {
@@ -426,11 +598,7 @@ export async function listDocuments(
   let sort: dq.ListSort | undefined;
   const rawFilters = Object.entries(params.filters ?? {});
   if (rawFilters.length || params.sort) {
-    filters = rawFilters.map(([fieldKey, value]) => {
-      const field = assertIndexed(def, fieldKey, 'filter');
-      const kind = indexKind(field);
-      return { fieldKey, kind, value: kind === 'num' ? coerceNumericFilter(field, value) : value };
-    });
+    filters = rawFilters.flatMap(([fieldKey, spec]) => compileFilters(def, fieldKey, spec));
     if (params.sort) {
       const field = assertIndexed(def, params.sort.field, 'sort');
       // A multi-valued field has N index rows per document; the sort correlated
@@ -530,12 +698,25 @@ export async function listRevisions(
 // Write
 // ---------------------------------------------------------------------------
 
+/** Preserved fields an IMPORT (D37) may carry into a create. Internal to the
+ *  transfer service — which validates the shape and enforces the publish gate
+ *  for `status: 'published'` lines; ordinary creates never pass this. */
+export interface CreateOverrides {
+  readonly id?: string;
+  readonly status?: 'draft' | 'published';
+  readonly createdAt?: string;
+  readonly publishedAt?: string | null;
+}
+
+const DOC_ID_RE = /^doc_[A-Za-z0-9_-]+$/;
+
 export async function createDocument(
   db: Database,
   principal: Principal,
   collectionSlug: string,
   input: Record<string, unknown>,
   now: string,
+  overrides?: CreateOverrides,
 ): Promise<DocumentRecord> {
   const def = await loadCollection(db, collectionSlug);
   const grant = await authorize(db, principal, 'create', { collection: collectionSlug }, now);
@@ -544,9 +725,12 @@ export async function createDocument(
   const data = await runTransforms(def, validated, principal.id, now, true);
   await checkUnique(db, def, data);
 
-  const id = newId('document');
-  const status = initialStatus(def);
-  const publishedAt = status === 'published' ? now : null;
+  if (overrides?.id !== undefined && !DOC_ID_RE.test(overrides.id)) {
+    throw new InputValidationError([{ path: 'id', message: "Preserved ids must match 'doc_' + [A-Za-z0-9_-]." }]);
+  }
+  const id = overrides?.id ?? newId('document');
+  const status = overrides?.status ?? initialStatus(def);
+  const publishedAt = status === 'published' ? (overrides?.publishedAt ?? now) : null;
   try {
     await dq.insertDocument(
       db,
@@ -557,8 +741,11 @@ export async function createDocument(
         status,
         createdBy: principal.id,
         now,
+        createdAt: overrides?.createdAt,
         publishedAt,
         index: buildIndex(def, data),
+        search: buildSearchText(def, data),
+        event: { type: 'document.created', collection: collectionSlug, resource: id, principalId: principal.id, at: now },
       },
       grant,
     );
@@ -573,9 +760,10 @@ export async function createDocument(
     data,
     status,
     createdBy: principal.id,
-    createdAt: now,
+    createdAt: overrides?.createdAt ?? now,
     updatedAt: now,
     publishedAt,
+    publishAt: null,
   };
 }
 
@@ -618,11 +806,14 @@ export async function updateDocument(
         collection: collectionSlug,
         data,
         status: existing.status,
-        savedBy: principal.id,
+        savedBy: revisionAuthor(principal),
         now,
         publishedAt: existing.publishedAt,
+        publishAt: existing.publishAt, // an ordinary edit never touches the schedule
         revision: await dq.nextRevisionNumber(db, id),
         index: buildIndex(def, data),
+        search: buildSearchText(def, data),
+        event: { type: 'document.updated', collection: collectionSlug, resource: id, principalId: principal.id, at: now },
       },
       grant,
     );
@@ -701,18 +892,101 @@ export async function setPublished(
       collection: collectionSlug,
       data: existing.data,
       status,
-      savedBy: principal.id,
+      savedBy: revisionAuthor(principal),
       now,
       publishedAt,
+      // Publishing consumes any pending schedule (D32); unpublishing can't
+      // leave one behind (a published doc never holds a schedule).
+      publishAt: null,
       revision: await dq.nextRevisionNumber(db, id),
       index: buildIndex(def, existing.data),
+      search: buildSearchText(def, existing.data),
+      event: {
+        type: publish ? 'document.published' : 'document.unpublished',
+        collection: collectionSlug,
+        resource: id,
+        principalId: principal.id,
+        at: now,
+      },
     },
     grant,
   );
   // Construct the written record from known values — no re-fetch round-trip (TD-9).
-  return { ...existing, status, updatedAt: now, publishedAt };
+  return { ...existing, status, updatedAt: now, publishedAt, publishAt: null };
 }
 
+/**
+ * Set (or cancel, with null) a draft's scheduled-publish time (D32). Requires
+ * the `publish` action — scheduling IS a deferred publish decision. The write
+ * is narrow (no data change ⇒ no revision, no index churn): the per-minute
+ * drain later runs the due draft through the full `setPublished` pipeline as
+ * the system actor.
+ */
+export async function scheduleDocument(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  publishAt: string | null,
+  now: string,
+): Promise<DocumentRecord> {
+  const readGrant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
+  if (!existing) throw new NotFoundError('Document');
+
+  const def = await loadCollection(db, collectionSlug);
+  if (!hasLifecycle(def)) {
+    throw new BadRequestError(`'${collectionSlug}' has no publish lifecycle.`);
+  }
+  if (publishAt !== null) {
+    if (Number.isNaN(Date.parse(publishAt))) {
+      throw new InputValidationError([{ path: 'publishAt', message: 'A valid ISO-8601 datetime is required.' }]);
+    }
+    if (existing.status === 'published') {
+      throw new BadRequestError('Already published — unpublish first to schedule.');
+    }
+  }
+  // A publish_at in the past is allowed: the next drain publishes it (documented).
+  const grant = await authorize(
+    db,
+    principal,
+    'publish',
+    { collection: collectionSlug, documentId: id, status: existing.status, createdBy: existing.createdBy ?? undefined },
+    now,
+  );
+  await dq.setPublishAt(db, { id, publishAt, now }, grant);
+  return { ...existing, publishAt, updatedAt: now };
+}
+
+/**
+ * The per-minute scheduled-publish drain (D32), called from cron
+ * (src/jobs/index.ts — the purgeExpiredTrash pattern). Selects due drafts with
+ * a witness-free metadata query, then publishes EACH through the full
+ * `setPublished` pipeline as the SYSTEM actor (D30) — full validation, a
+ * revision append, and one attributed audit row (surface 'system') per
+ * publish; `publish_at` clears in the same atomic update. One failing document
+ * never blocks the rest: failures log, the schedule stays set, and the next
+ * drain retries. Returns the number published (for tests/observability).
+ */
+export async function drainScheduledPublishes(db: Database, now: string): Promise<number> {
+  const DRAIN_LIMIT = 50; // a minute's backlog beyond this drains next minute
+  const due = await dq.listDueScheduled(db, now, DRAIN_LIMIT);
+  let published = 0;
+  for (const doc of due) {
+    try {
+      await setPublished(db, systemPrincipal(), doc.collection, doc.id, true, now);
+      published += 1;
+    } catch (e) {
+      console.error(`[cron] scheduled publish failed for ${doc.collection}/${doc.id}`, e);
+    }
+  }
+  return published;
+}
+
+/** Delete = snapshot-then-delete (D29): the document + its newest revisions are
+ *  copied into `document_trash`, then the original row is hard-deleted (FK
+ *  cascades clear index/revisions/grants; the FTS row goes in the same batch).
+ *  Recoverable from /admin/trash (or REST /api/trash) for TRASH_RETENTION_DAYS. */
 export async function deleteDocument(
   db: Database,
   principal: Principal,
@@ -724,7 +998,79 @@ export async function deleteDocument(
   const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
   if (!existing) throw new NotFoundError('Document');
   const grant = await authorize(db, principal, 'delete', { collection: collectionSlug, documentId: id }, now);
-  await dq.deleteDocument(db, id, grant);
+  const revisions = (await dq.listRevisions(db, id, readGrant))
+    .slice(0, TRASH_MAX_REVISIONS)
+    .map((r) => ({ revision: r.revision, data: r.data, savedBy: r.savedBy, savedAt: r.savedAt }));
+  await trashDocumentRow(
+    db,
+    {
+      documentId: id,
+      collection: collectionSlug,
+      data: existing.data,
+      status: existing.status,
+      revisions,
+      createdBy: existing.createdBy,
+      createdAt: existing.createdAt,
+      updatedAt: existing.updatedAt,
+      publishedAt: existing.publishedAt,
+      deletedBy: principal.id,
+      deletedAt: now,
+      event: { type: 'document.deleted', collection: collectionSlug, resource: id, principalId: principal.id, at: now },
+    },
+    grant,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Bulk actions (D39)
+// ---------------------------------------------------------------------------
+
+export const BULK_OPS = ['publish', 'unpublish', 'trash'] as const;
+export type BulkOp = (typeof BULK_OPS)[number];
+
+/** Cap on ids per bulk request (D39) — bounds the per-item loop. */
+export const MAX_BULK_IDS = 100;
+
+export interface BulkResult {
+  readonly ok: number;
+  readonly failed: number;
+  readonly errors: { id: string; error: string }[];
+}
+
+/**
+ * Bulk publish/unpublish/trash (D39): loops the EXISTING single-item services
+ * per id — per-item authorize, audit, revision, and outbox event all
+ * preserved; one failing item never blocks the rest, and completed items are
+ * never rolled back (documented partial-failure semantics). No bulk REST/MCP
+ * surface — agents compose the per-item tools.
+ */
+export async function bulkDocuments(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  op: BulkOp,
+  ids: readonly string[],
+  now: string,
+): Promise<BulkResult> {
+  if (!BULK_OPS.includes(op)) {
+    throw new BadRequestError(`Unknown bulk op '${String(op)}' (expected ${BULK_OPS.join('/')}).`);
+  }
+  if (ids.length === 0) throw new BadRequestError('Select at least one item.');
+  if (ids.length > MAX_BULK_IDS) {
+    throw new BadRequestError(`Bulk actions take at most ${MAX_BULK_IDS} items at once.`);
+  }
+  let ok = 0;
+  const errors: { id: string; error: string }[] = [];
+  for (const id of ids) {
+    try {
+      if (op === 'trash') await deleteDocument(db, principal, collectionSlug, id, now);
+      else await setPublished(db, principal, collectionSlug, id, op === 'publish', now);
+      ok += 1;
+    } catch (e) {
+      errors.push({ id, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return { ok, failed: errors.length, errors };
 }
 
 /** Restore a prior revision as a new save (append-only history is preserved). */

@@ -34,15 +34,48 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   );
   const pages = Math.max(1, Math.ceil(total / pageSize));
 
+  // Bulk-result flash (D39): ?bulk=ok:<n>,failed:<m> from the bulk POST.
+  const bulk = c.req.query('bulk');
+  const bulkMatch = bulk?.match(/^ok:(\d+),failed:(\d+)$/);
+  const flash =
+    bulk === 'none'
+      ? { tone: 'warning' as const, text: 'Nothing selected — tick at least one row first.' }
+      : bulkMatch
+        ? {
+            tone: Number(bulkMatch[2]) > 0 ? ('warning' as const) : ('success' as const),
+            text: `Bulk action: ${bulkMatch[1]} done${Number(bulkMatch[2]) > 0 ? `, ${bulkMatch[2]} failed` : ''}.`,
+          }
+        : null;
+
   return c.render(
     <AdminShell user={user} current="content">
       <PageHeader
         breadcrumb={[{ label: 'Content', href: '/admin/c' }, { label: def.name }]}
         title={def.name}
         description={`${total} ${total === 1 ? 'item' : 'items'}`}
-        actions={<Button href={`/admin/c/${slug}/new`}>New {def.name}</Button>}
+        actions={
+          <div class="flex items-center gap-2">
+            <Button href={`/admin/c/${slug}/export`} variant="ghost" size="sm">
+              Export
+            </Button>
+            <Button href={`/admin/c/${slug}/import`} variant="ghost" size="sm">
+              Import
+            </Button>
+            <Button href={`/admin/c/${slug}/new`}>New {def.name}</Button>
+          </div>
+        }
       />
-      <GeneratedTable def={def} rows={rows} settings={settings} />
+      {flash ? (
+        <p
+          role="status"
+          class={`mb-4 rounded-md border px-3 py-2 text-sm font-medium ${
+            flash.tone === 'success' ? 'border-border bg-success-soft text-success' : 'border-border bg-warning-soft text-warning'
+          }`}
+        >
+          {flash.text}
+        </p>
+      ) : null}
+      <GeneratedTable def={def} rows={rows} settings={settings} selectable />
       {pages > 1 && (
         <nav aria-label="Pagination" class="mt-6 flex items-center justify-center gap-2 text-sm">
           {page > 1 && (

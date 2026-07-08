@@ -1,13 +1,16 @@
 /**
  * `markdown` — a multi-line Markdown-source field. The value is the raw Markdown
- * text (agent-legible, decision D3). Phase 4 swaps the plain <textarea> for a
- * CodeMirror island; a textarea is the correct baseline widget for now.
+ * text (agent-legible, decision D3). The widget is a plain <textarea> that the
+ * CodeMirror island (src/client/markdown-editor.ts, D38/D13) progressively
+ * enhances on the editor routes: the textarea stays in the DOM as the
+ * form/Datastar value carrier (§g); without JS it simply stays visible.
  */
 
 import { z } from 'zod';
 import { Textarea } from '@/components/ui';
 import { FieldShell, controlProps, requiredNonEmpty } from '@/fields/field-shell';
 import { renderMarkdown } from '@/lib/markdown';
+import { fieldLabel } from '@/lib/humanize';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
 
 /** Fallback cap when a markdown field declares no `maxLength` — generous for long
@@ -44,9 +47,15 @@ export const markdownField: FieldType<MarkdownConfig, string> = {
   valueSchema,
   // A searchable plain-text lead-in (value_text). Not the full document.
   toIndex: (v) => (v ? toPlainText(v).slice(0, 200) : null),
+  // The FULL plain text feeds the FTS5 search index (D28).
+  toSearchText: (v) => (v ? toPlainText(v) : null),
   EditComponent: ({ field, value, signal }) => (
     <FieldShell field={field} signal={signal}>
-      <Textarea {...controlProps({ field, signal })} value={value ?? ''} rows={12} />
+      {/* The island mounts CodeMirror here and sr-only's the textarea; the
+          label text rides data-label for the editor's aria-label. */}
+      <div data-md-editor data-label={fieldLabel(field)}>
+        <Textarea {...controlProps({ field, signal })} value={value ?? ''} rows={12} />
+      </div>
     </FieldShell>
   ),
   CellComponent: ({ value }) => <span>{value ? value.slice(0, 80) : ''}</span>,

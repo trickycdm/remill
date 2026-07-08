@@ -19,6 +19,7 @@ import { decide, scopeMatches } from '@/access/permissions';
 import { appendAudit } from '@/db/queries/audit';
 import { getPrincipalPermissions, getPrincipalRoleSlugs, type EffectivePermission } from '@/db/queries/roles';
 import { getApplicableGrants, getGrantedDocumentIds } from '@/db/queries/grants';
+import { getPrincipalTeamIds } from '@/db/queries/teams';
 import { getCollection } from '@/db/queries/collections';
 import { getDocumentMetaForAuth } from '@/db/queries/documents';
 import { ForbiddenError } from '@/lib/errors';
@@ -41,6 +42,15 @@ export function principalFromSession(user: SessionUser): Principal {
  *  caller passes the surface it arrived on so audit attribution stays correct. */
 export function anonymousPrincipal(surface: Surface): Principal {
   return { id: 'anonymous', kind: 'user', surface };
+}
+
+/** The platform acting from cron (D30) — e.g. the scheduled-publish drain. No
+ *  principals row, no permissions: `authorize()` allows it BY KIND but still
+ *  writes the audit row (surface 'system'), so every scheduled action stays
+ *  attributed and visible in /admin/activity. Never construct one in a request
+ *  handler — requests always have a real (or anonymous) principal. */
+export function systemPrincipal(): Principal {
+  return { id: 'system', kind: 'system', surface: 'system' };
 }
 
 async function collectionPublicRead(db: Database, slug: string): Promise<boolean> {
@@ -86,6 +96,24 @@ export async function authorize(
   now: string,
   preResolved?: ResolvedAccess,
 ): Promise<Grant> {
+  // The system actor (D30) is the platform itself, acting from cron — there are
+  // no permission rows to resolve and no conditions to evaluate. It is allowed
+  // by kind, but the audit row is NOT skipped: "authorize() is the only audit
+  // writer" survives, and every scheduled action stays attributed.
+  if (principal.kind === 'system') {
+    await appendAudit(db, {
+      principalId: principal.id,
+      tokenId: undefined,
+      surface: principal.surface,
+      action,
+      resource: resourceKey(resource),
+      collection: resource.collection,
+      allowed: true,
+      now,
+    });
+    return Grant.__mint(principal.id, action, resource);
+  }
+
   const permissions = preResolved?.permissions ?? (await getPrincipalPermissions(db, principal.id));
   const publicRead = preResolved?.publicRead ?? (await collectionPublicRead(db, resource.collection));
 
@@ -104,16 +132,15 @@ export async function authorize(
     }
   }
 
-  const grants = resolved.documentId
-    ? await getApplicableGrants(
-        db,
-        resolved.documentId,
-        principal.id,
-        await getPrincipalRoleSlugs(db, principal.id),
-        now,
-        principal.linkId,
-      )
-    : [];
+  let grants: Awaited<ReturnType<typeof getApplicableGrants>> = [];
+  if (resolved.documentId) {
+    // Roles and teams are both subject-resolution inputs (D24) — resolve together.
+    const [roleSlugs, teamIds] = await Promise.all([
+      getPrincipalRoleSlugs(db, principal.id),
+      getPrincipalTeamIds(db, principal.id),
+    ]);
+    grants = await getApplicableGrants(db, resolved.documentId, principal.id, roleSlugs, now, principal.linkId, teamIds);
+  }
 
   const allowed = decide({ principal, action, resource: resolved, permissions, grants, publicRead, tokenScope: principal.tokenScope });
 
@@ -123,6 +150,7 @@ export async function authorize(
     surface: principal.surface,
     action,
     resource: resourceKey(resolved),
+    collection: resolved.collection,
     allowed,
     now,
   });
@@ -170,8 +198,11 @@ export async function compileReadFilter(
     clauses.push(sql`${documents.createdBy} = ${principal.id}`);
   }
 
-  const roleSlugs = await getPrincipalRoleSlugs(db, principal.id);
-  const granted = await getGrantedDocumentIds(db, principal.id, roleSlugs, now, principal.linkId);
+  const [roleSlugs, teamIds] = await Promise.all([
+    getPrincipalRoleSlugs(db, principal.id),
+    getPrincipalTeamIds(db, principal.id),
+  ]);
+  const granted = await getGrantedDocumentIds(db, principal.id, roleSlugs, now, principal.linkId, teamIds);
   const readableIds = granted.filter((g) => g.actions.includes('read')).map((g) => g.documentId);
   if (readableIds.length) clauses.push(inArray(documents.id, readableIds));
 

@@ -111,18 +111,37 @@ item grants. Everything — every allow and every deny — is audited with princ
   draft/published). `repeater`/`object` composites remain deferred.
 - **Track C (publish & connect): shipped** — sanitized markdown→HTML rendering via `ViewComponent`,
   public pages at `/{collection}/{slug}` (+ the admin read-only detail view), share links
-  (`item_grants` with `subjectKind='link'`, public `/s/:token`), email-share via the stubbed
-  transport.
+  (`item_grants` with `subjectKind='link'`, public `/s/:token`).
+- **Tier 1 platform completion (Phases 1–4): shipped** — full-text search (FTS5, bm25-ranked, with
+  REST `?q=` + operator filters and MCP `search_<slug>` tool), recoverable delete (trash snapshot,
+  30-day purge, scheduled Worker jobs), MCP content parity (`upload_media`, `revisions_<slug>`,
+  `restore_<slug>`), and audit surfacing (`/admin/activity`, `/api/audit`, MCP `list_audit`). Agents
+  over MCP now have full parity with non-technical admins for all content operations; access-management
+  mutations remain deliberately human-only.
+- **Sharing fabric v2 (shipped before Tier 1)** — teams as a fourth grant subject kind + multi-use
+  expiring join links (D24), agent-mintable expiring share links via the `share_link` action (D26),
+  Resend email transport realized behind `EmailTransport` (D20), trusted `html` field type +
+  per-collection `renderMode: 'raw'` for full pages with per-surface CSP fork (D25/D27).
+- **Tier 2 (Phases 5–8): shipped** — scheduled publishing with nullable `publish_at` + per-minute
+  cron drain (D30/D32); public discovery pack (D35/D36) — `/rss.xml`, `/sitemap.xml`, `/robots.txt`,
+  per-page OG/canonical head props, and `/` homepage; events outbox (D33) — poll-based change feed
+  with per-collection read filtering via `GET /api/events` + MCP `poll_events`; import/export as
+  NDJSON with upsert-by-id + publish gate, and R2 full-site snapshots (D37).
+- **Tier 3 (Phases 9–11): shipped** — editor islands (D38: CodeMirror 6 markdown + native Dialog
+  media picker, progressive enhancement over `data-bind` carriers; implements D13, supersedes D12/Uppy),
+  revision diff viewer, and bulk list actions via one native form with per-item authorize/audit/events (D39).
 
-The roadmap with per-phase detail: `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`
-(+ `worklog.md` for what's landed).
+Roadmap detail and per-phase status: `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`
+(Tracks A–C, worklogs), plus the full completion roadmap
+`plans/2026-07-07-platform_completion_tiered_roadmap/plan.md` (11/11 phases complete; Tier 4 & deferred
+items recorded in that plan's `Deferred` section).
 
 ## Non-goals (current)
 
 Multi-tenancy/multi-site; a theme/template *system* (public pages are one owned layout, not a
 pluggable theme engine); a plugin system; field-level access control (hook point reserved);
-localization/i18n; webhooks; realtime collaboration; video transcoding; real email provider
-integration (transport is stubbed by decision D20 — logs, never sends).
+localization/i18n; push webhooks (events outbox D33 is the deliberate poll-based alternative);
+realtime collaboration; video transcoding.
 
 ## Success criteria
 
@@ -142,4 +161,4 @@ integration (transport is stubbed by decision D20 — logs, never sends).
 9. *(Track C)* A published document in a public-read collection renders as sanitized HTML at a public
    URL with relations as working links; drafts and non-public collections 404 anonymously.
 10. *(Track C)* A share link grants an outsider scoped read of one non-public item; expiry and
-    revocation are honored; "share by email" logs through the stubbed transport.
+    revocation are honored; "share by email" sends via Resend (or console logs in test/keyless mode).

@@ -4,13 +4,17 @@
  * decision-log entry (plan §8). Default-deny, additive-only, no negative rules.
  */
 
-/** The closed action vocabulary. */
+/** The closed action vocabulary. `share_link` (D26) is the right to mint an
+ *  anonymous, expiring `/s/:token` share link for a readable document — split
+ *  out of `manage_access` so it can be granted to an agent WITHOUT giving it
+ *  any access-management power. */
 export const ACTIONS = [
   'read',
   'create',
   'update',
   'delete',
   'publish',
+  'share_link',
   'manage_schema',
   'manage_access',
 ] as const;
@@ -19,15 +23,19 @@ export type Action = (typeof ACTIONS)[number];
 /** The closed condition enum (never arbitrary code). */
 export type Condition = 'own' | 'published';
 
-/** The surface a request came through — recorded on every audit row. */
-export type Surface = 'admin' | 'rest' | 'mcp';
+/** The surface a request came through — recorded on every audit row. `system`
+ *  is the cron surface (D30): no request, no session, no token. */
+export type Surface = 'admin' | 'rest' | 'mcp' | 'system';
 
 /** A principal: every actor (human or agent) resolves to one before any decision.
  *  Permissions come from `principal_roles` (resolved by authorize), NOT from a
- *  field here — `kind` and `surface` are for attribution only. */
+ *  field here — `kind` and `surface` are for attribution only. `kind: 'system'`
+ *  is the platform itself acting from cron (D30): it has NO principals row and
+ *  NO seeded permissions — authorize() allows it by kind, but still writes the
+ *  audit row, so scheduled actions stay fully attributed. */
 export interface Principal {
-  readonly id: string; // prn_…
-  readonly kind: 'user' | 'agent';
+  readonly id: string; // prn_… ('system' / 'anonymous' for the built-ins)
+  readonly kind: 'user' | 'agent' | 'system';
   /** The surface + token this request arrived on (for audit attribution). */
   readonly surface: Surface;
   readonly tokenId?: string;

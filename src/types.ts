@@ -17,10 +17,17 @@ export type Env = {
   // Secrets
   SESSION_SECRET: string;
 
+  // Resend API key (D20). OPTIONAL by design: absent locally/in tests, where the
+  // email transport degrades to the console stub (RATE_LIMIT? precedent).
+  // Set with `wrangler secret put RESEND_API_KEY`; local via .dev.vars.
+  RESEND_API_KEY?: string;
+
   // Bootstrap: the first-admin password used ONLY by scripts/bootstrap-admin.ts.
   // Never committed; supplied at bootstrap time (see .dev.vars.tpl / C1).
   ADMIN_BOOTSTRAP_PASSWORD?: string;
 
   // Vars
   BASE_URL: string;
+  // Default From address for outgoing mail; settings.emailFrom overrides it.
+  EMAIL_FROM?: string;
 };

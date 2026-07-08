@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { Context } from 'hono';
-import app from '@/main';
+import { app } from '@/main';
 import { createTestD1 } from '@/test/d1';
 import { getDb, type Database } from '@/db/client';
 import * as media from '@/services/media';

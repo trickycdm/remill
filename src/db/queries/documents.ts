@@ -13,6 +13,8 @@ import { and, eq, sql, desc, count, inArray, type SQL } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { Database } from '@/db/client';
 import { documents, documentIndex, documentRevisions } from '@/db/schema';
+import { documentFts } from '@/db/fts-table';
+import { eventInsert, type EventInput } from '@/db/queries/events';
 import { newId } from '@/lib/id';
 import type { Grant } from '@/access/grant';
 
@@ -25,6 +27,9 @@ export interface DocumentRecord {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly publishedAt: string | null;
+  /** Pending scheduled-publish time (D32) — set only while status is 'draft';
+   *  cleared by the drain, by manual publish, and by cancel. */
+  readonly publishAt: string | null;
 }
 
 /** Which document_index column a field's values live in: number/boolean field
@@ -55,6 +60,7 @@ function toDomain(row: Row): DocumentRecord {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     publishedAt: row.publishedAt,
+    publishAt: row.publishAt,
   };
 }
 
@@ -111,6 +117,22 @@ export async function getDocumentCollection(db: Database, id: string): Promise<s
   return rows[0]?.collection ?? null;
 }
 
+/** Batch variant of getDocumentCollection — `{id → collection}` for a set of
+ *  ids. Metadata only, NO witness (content never flows through here); used to
+ *  group a principal's granted document ids by collection ("Shared with me"). */
+export async function getDocumentCollections(db: Database, ids: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const CHUNK = 80;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const rows = await db
+      .select({ id: documents.id, collection: documents.collection })
+      .from(documents)
+      .where(inArray(documents.id, [...ids.slice(i, i + CHUNK)]));
+    for (const r of rows) out.set(r.id, r.collection);
+  }
+  return out;
+}
+
 /** Read one document by id (scoped to a collection). Witness required. */
 export async function getDocument(
   db: Database,
@@ -126,10 +148,17 @@ export async function getDocument(
   return rows[0] ? toDomain(rows[0]) : null;
 }
 
+/** Filter comparison operators (D28). `eq` is the default; `contains` is a LIKE
+ *  substring match on value_text; `in` matches any of a comma-separated set. */
+export const FILTER_OPS = ['eq', 'gte', 'lte', 'contains', 'in'] as const;
+export type FilterOp = (typeof FILTER_OPS)[number];
+
 export interface ListFilter {
   readonly fieldKey: string;
   readonly kind: IndexKind;
-  /** Raw filter value; coerced to a number by the query when `kind === 'num'`. */
+  readonly op: FilterOp;
+  /** Raw filter value; coerced to a number by the query when `kind === 'num'`.
+   *  For `op: 'in'` this is the comma-separated set (validated by the service). */
   readonly value: string;
 }
 
@@ -165,13 +194,40 @@ export interface ListOptions {
   readonly sort?: ListSort;
 }
 
-/** Predicate: documents whose indexed `fieldKey` equals `value` (in this collection).
- *  number/boolean fields (kind 'num') compare `value_num` (text is NULL for them),
- *  everything else compares `value_text` (COR-3). */
+/** Escape LIKE wildcards in a user-supplied substring (used with ESCAPE '\'). */
+function escapeLike(v: string): string {
+  return v.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
+
+/** Predicate: documents whose indexed `fieldKey` matches the filter (in this
+ *  collection). number/boolean fields (kind 'num') compare `value_num` (text is
+ *  NULL for them), everything else compares `value_text` (COR-3). Operators
+ *  (D28): gte/lte compare on the kind-matched column (ISO datetimes compare
+ *  correctly as text); `contains` is a LIKE on value_text (the service rejects
+ *  it for numeric kinds); `in` matches any element of the comma-separated set. */
 function indexFilter(collection: string, f: ListFilter): SQL {
   const col = f.kind === 'num' ? documentIndex.valueNum : documentIndex.valueText;
-  const val: string | number = f.kind === 'num' ? Number(f.value) : f.value;
-  return sql`${documents.id} IN (SELECT ${documentIndex.documentId} FROM ${documentIndex} WHERE ${documentIndex.collection} = ${collection} AND ${documentIndex.fieldKey} = ${f.fieldKey} AND ${col} = ${val})`;
+  const coerce = (raw: string): string | number => (f.kind === 'num' ? Number(raw) : raw);
+  let cmp: SQL;
+  switch (f.op) {
+    case 'gte':
+      cmp = sql`${col} >= ${coerce(f.value)}`;
+      break;
+    case 'lte':
+      cmp = sql`${col} <= ${coerce(f.value)}`;
+      break;
+    case 'contains':
+      cmp = sql`${documentIndex.valueText} LIKE '%' || ${escapeLike(f.value)} || '%' ESCAPE '\\'`;
+      break;
+    case 'in': {
+      const vals = f.value.split(',').map((s) => coerce(s.trim()));
+      cmp = sql`${col} IN (${sql.join(vals.map((v) => sql`${v}`), sql`, `)})`;
+      break;
+    }
+    default:
+      cmp = sql`${col} = ${coerce(f.value)}`;
+  }
+  return sql`${documents.id} IN (SELECT ${documentIndex.documentId} FROM ${documentIndex} WHERE ${documentIndex.collection} = ${collection} AND ${documentIndex.fieldKey} = ${f.fieldKey} AND ${cmp})`;
 }
 
 /** Keyset predicate for the default order (createdAt DESC, id DESC): rows strictly
@@ -316,6 +372,40 @@ export async function isIndexValueTaken(
 
 type Batch = [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]];
 
+/** Full-text row for `document_fts` (D28) — the FTS5 virtual table lives ONLY in
+ *  migration 0007 (never schema.ts), so it is addressed with raw SQL here. */
+export interface SearchText {
+  readonly title: string | null;
+  readonly body: string;
+}
+
+/** Batch items keeping `document_fts` in sync with a document write. The FTS row
+ *  is replaced wholesale (delete-then-insert), mirroring the document_index sync;
+ *  FK cascades cannot clear a virtual table, so deletes are explicit. Uses the
+ *  out-of-schema table handle (src/db/fts-table.ts) — D1 batches only PREPARED
+ *  statements, never raw sql. */
+function ftsSync(
+  db: Database,
+  documentId: string,
+  collection: string,
+  search: SearchText | null,
+): BatchItem<'sqlite'>[] {
+  const items: BatchItem<'sqlite'>[] = [
+    db.delete(documentFts).where(eq(documentFts.documentId, documentId)),
+  ];
+  if (search && (search.title || search.body)) {
+    items.push(
+      db.insert(documentFts).values({
+        documentId,
+        collection,
+        title: search.title ?? '',
+        body: search.body,
+      }),
+    );
+  }
+  return items;
+}
+
 function indexInserts(db: Database, documentId: string, collection: string, values: IndexValue[]) {
   return values.map((v) =>
     db.insert(documentIndex).values({
@@ -337,8 +427,14 @@ export interface InsertInput {
   readonly status: 'draft' | 'published';
   readonly createdBy: string;
   readonly now: string;
+  /** Preserved original creation time (import, D37); defaults to `now`. */
+  readonly createdAt?: string;
   readonly publishedAt: string | null;
   readonly index: IndexValue[];
+  /** Full-text search row content (D28); null ⇒ nothing searchable. */
+  readonly search: SearchText | null;
+  /** Outbox event (D33) committed atomically with the write. */
+  readonly event?: EventInput;
 }
 
 /** Create a document + its index rows + revision 1, atomically. Witness required. */
@@ -354,7 +450,7 @@ export async function insertDocument(
       dataJson: JSON.stringify(input.data),
       status: input.status,
       createdBy: input.createdBy,
-      createdAt: input.now,
+      createdAt: input.createdAt ?? input.now,
       updatedAt: input.now,
       publishedAt: input.publishedAt,
     }),
@@ -367,6 +463,8 @@ export async function insertDocument(
       savedBy: input.createdBy,
       savedAt: input.now,
     }),
+    ...ftsSync(db, input.id, input.collection, input.search),
+    ...(input.event ? [eventInsert(db, input.event)] : []),
   ];
   await db.batch(stmts as Batch);
 }
@@ -376,11 +474,22 @@ export interface UpdateInput {
   readonly collection: string;
   readonly data: Record<string, unknown>;
   readonly status: 'draft' | 'published';
-  readonly savedBy: string;
+  /** Revision author. NULL for the system actor (D30) — it has no principals
+   *  row for the FK to reference; the audit row (surface 'system') carries the
+   *  attribution instead. */
+  readonly savedBy: string | null;
   readonly now: string;
   readonly publishedAt: string | null;
+  /** Pending schedule after this write (D32) — callers preserve the existing
+   *  value on ordinary saves; publish/unpublish pass null (publishing clears
+   *  the schedule, and a published document can't hold one). */
+  readonly publishAt: string | null;
   readonly revision: number;
   readonly index: IndexValue[];
+  /** Full-text search row content (D28); null ⇒ nothing searchable. */
+  readonly search: SearchText | null;
+  /** Outbox event (D33) committed atomically with the write. */
+  readonly event?: EventInput;
 }
 
 /** Update a document: replace data, re-sync index (delete-then-insert), append a
@@ -398,6 +507,7 @@ export async function updateDocument(
         status: input.status,
         updatedAt: input.now,
         publishedAt: input.publishedAt,
+        publishAt: input.publishAt,
       })
       .where(eq(documents.id, input.id)),
     db.delete(documentIndex).where(eq(documentIndex.documentId, input.id)),
@@ -410,17 +520,58 @@ export async function updateDocument(
       savedBy: input.savedBy,
       savedAt: input.now,
     }),
+    ...ftsSync(db, input.id, input.collection, input.search),
+    ...(input.event ? [eventInsert(db, input.event)] : []),
   ];
   await db.batch(stmts as Batch);
 }
 
-/** Delete a document (index + revisions cascade via FK). Witness required. */
-export async function deleteDocument(
+/** Set or clear a document's pending scheduled-publish time (D32). Deliberately
+ *  NARROW: data is untouched, so no index/FTS re-sync and NO revision append —
+ *  scheduling is not an edit. Witness required (the service authorized
+ *  `publish`). */
+export async function setPublishAt(
   db: Database,
-  id: string,
+  input: { readonly id: string; readonly publishAt: string | null; readonly now: string },
   _grant: Grant,
 ): Promise<void> {
-  await db.delete(documents).where(eq(documents.id, id));
+  await db
+    .update(documents)
+    .set({ publishAt: input.publishAt, updatedAt: input.now })
+    .where(eq(documents.id, input.id));
+}
+
+/** Drafts whose schedule is due (D32) — the per-minute drain's selection. NO
+ *  witness: this is metadata-only (id + collection, never data_json), read by
+ *  the cron job to decide WHAT to attempt; each publish then runs the full
+ *  authorize()-gated `setPublished` pipeline (getDocumentMetaForAuth
+ *  precedent). Oldest schedules first so a backlog drains in order. */
+export async function listDueScheduled(
+  db: Database,
+  now: string,
+  limit: number,
+): Promise<{ id: string; collection: string }[]> {
+  return db
+    .select({ id: documents.id, collection: documents.collection })
+    .from(documents)
+    .where(and(eq(documents.status, 'draft'), sql`${documents.publishAt} IS NOT NULL`, sql`${documents.publishAt} <= ${now}`))
+    .orderBy(documents.publishAt, documents.id)
+    .limit(limit);
+}
+
+// NOTE: there is deliberately NO hard `deleteDocument` query — deletion is the
+// snapshot-then-delete batch in src/db/queries/trash.ts (D29). Don't add one back.
+
+/** Replace the FTS rows for a batch of documents (the rebuild path, D28).
+ *  Witness required — the caller has read-authorized each collection. */
+export async function replaceFtsRows(
+  db: Database,
+  rows: readonly { id: string; collection: string; search: SearchText | null }[],
+  _grant: Grant,
+): Promise<void> {
+  if (!rows.length) return;
+  const stmts = rows.flatMap((r) => ftsSync(db, r.id, r.collection, r.search));
+  await db.batch(stmts as Batch);
 }
 
 /** Revision history for a document, newest first. Witness required. */
