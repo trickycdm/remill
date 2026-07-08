@@ -101,6 +101,11 @@ Routes / DOs  →  Services (src/services/)  →  Queries (src/db/queries/)  →
 - **`||` not `??` for user-facing fallbacks.** `user.displayName || user.email` — `||` lets empty
   strings (`''`) fall through to the fallback; `??` only catches `null`/`undefined`, and an empty
   string can trip a downstream `z.string().min(1)`.
+- **Size algorithms to the Worker's 128 MB ceiling, not to Big-O alone.** An O(n·m)-MEMORY
+  structure over user-sized input is a production OOM, not a perf nit — a 5000²-line LCS DP table
+  is ~100 MB. Shrink the problem first (trim shared prefix/suffix), use compact typed arrays
+  (`Uint16Array`), and hard-cap the core with a graceful "too large" fallback
+  (`src/lib/diff.ts` is the worked precedent).
 
 ## When in doubt
 

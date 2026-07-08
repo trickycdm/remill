@@ -1,5 +1,10 @@
 # Tier 3 Execution Plan — Phases 9–11 (editor islands, revision diff, bulk actions)
 
+**Status: COMPLETE — 2026-07-08** (execution overlay of the tiered roadmap; all three phases
+shipped as per-phase commits e2b6c4d/da546d9/3293759 + close-out 4e2eb82. The canonical record —
+final state, RE-PLANs, and step log — lives in
+`plans/2026-07-07-platform_completion_tiered_roadmap/{plan,worklog}.md`.)
+
 ## Context
 
 Tiers 1–2 (Phases 1–8) of `plans/2026-07-07-platform_completion_tiered_roadmap/plan.md` are

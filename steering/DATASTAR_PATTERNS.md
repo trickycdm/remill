@@ -52,6 +52,12 @@ at its initial value when inputs change. **Inline the whole chain off the base s
 computed you actually display. Keep intermediate computeds only for their own displays (they read base
 signals and do react).
 
+**Gotcha — an EMPTY bound `<input type="number">` submits `0`, not undefined.** Number signals
+initialize to `0`, so "the user never touched this field" and "the user typed 0" are
+indistinguishable in the stored data — an unset `defaultPageSize` persisted as `0` and every list
+page silently clamped to one-row pages. Guard at the READ seam: treat out-of-domain numerics as
+unset (`getSettings` treats `defaultPageSize < 1` as undefined — the precedent).
+
 **Gotcha — reactive expressions are opaque to the type-checker.** `data-computed`/`data-bind`/
 `data-text`/`data-on` expressions are plain strings — neither `type-check` nor unit tests (which assert
 server-rendered HTML) catch a broken one. **Playwright is the only safety net** (E2E_TESTING.md): when

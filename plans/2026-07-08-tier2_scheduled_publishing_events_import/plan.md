@@ -1,5 +1,9 @@
 # Tier 2 Execution Plan — Phases 5–8 (scheduled publishing, discovery, events outbox, import/export)
 
+**Status: COMPLETE — 2026-07-08** (execution overlay of the tiered roadmap; all four phases
+shipped as per-phase commits ac35d4b/eeb7c60/02654c4/2b8bb42. The canonical record lives in
+`plans/2026-07-07-platform_completion_tiered_roadmap/{plan,worklog}.md`.)
+
 ## Context
 
 Tier 1 (Phases 1–4) of `plans/2026-07-07-platform_completion_tiered_roadmap/plan.md` is committed

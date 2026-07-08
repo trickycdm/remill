@@ -148,7 +148,7 @@ An agent is the model *plus* the harness around it — the rules, tools, hooks, 
 
 ### 18. Worklogs live alongside the plan
 
-**Rule 18 — Keep a `worklog.md` next to the plan** recording what actually happened — timestamped actions, deviations, and a close-out stamp. The plan is intent; the worklog is the record.
+**Rule 18 — Keep a `worklog.md` next to the plan** recording what actually happened — timestamped actions, deviations, and a close-out stamp. The plan is intent; the worklog is the record. When a plan's implementation detail (a file list, a placement) conflicts with a repo invariant or steering rule, **the invariant wins** — deviate, and log the deviation as a `RE-PLAN` worklog row (e.g. a plan that named `src/jobs/publish.ts` lost to "jobs call services only"; the drain landed in the service).
 
 *Why it matters:* Plans drift from reality as work uncovers surprises. The worklog captures the delta — what changed, what was added mid-flight, what was deferred — so a future session can trust the plan's *intent* while knowing the *actual* path taken.
 

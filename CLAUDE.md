@@ -81,12 +81,17 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `loadRoutes`, `notFound` — never register routes there by hand.
 - **Services** `src/services/` — all business logic **and all authorization** (`authorize()` before any
   read/write; identity-scoped operations like `/admin/account` skip gating). Call queries, never D1.
-  Includes search (FTS querying), trash (snapshots + recovery), and access (audit, grants).
+  Includes search (FTS querying), trash (snapshots + recovery), access (audit, grants), discovery
+  (anonymous gated reads for feeds/sitemap/OG, D35), events (outbox + poll feed, D33), transfer
+  (NDJSON import/export + R2 snapshots, D37), and scheduled publishing (drainScheduledPublishes
+  service, runs per-minute as the system actor, D30/D32).
 - **Jobs** `src/jobs/` — cron-triggered maintenance (per `wrangler.jsonc` triggers). Dispatch handler calls
-  services only; no D1 access. Examples: document retention purge (D29), scheduled publishing (TODO).
+  services only; no D1 access. Per-minute: drainScheduledPublishes (D30/D32). Daily: retention purge
+  (D29), events pruning (D33).
 - **Queries** `src/db/queries/` — the **only** layer importing Drizzle; row↔domain mapping is private
   here; no Drizzle types leak upward. Includes search (FTS5 querying via `src/db/fts-table.ts`, kept
-  outside schema.ts), trash (snapshots + restore), and audit reads.
+  outside schema.ts), trash (snapshots + restore), audit reads, and events (outbox rows inserted
+  inside mutation batches via eventInsert, D33).
 - **Fields** `src/fields/` — the FieldType registry; one module per type, including `relation.tsx`
   (graph edges and backlinks) and `html.tsx` (D25 trusted raw HTML; powers `renderMode: 'raw'`
   pages, D27). The most important interface in the codebase (SCHEMA_ENGINE.md).
@@ -98,19 +103,26 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `share_<slug>` tools; the `share_link` action (D26) lets granted agents mint expiring anonymous
   links over MCP; public invite consumption at `src/routes/auth/set-password/[token].tsx`, team
   join links at `/auth/join/:token`, "Shared with me" at `/admin/shared`. Admin also surfaces activity
-  log at `/admin/activity`, search at `/admin/search` (D28), and recoverable delete at `/admin/trash` (D29).
+  log at `/admin/activity`, search at `/admin/search` (D28), recoverable delete at `/admin/trash` (D29),
+  revision diff viewer at `/admin/c/:collection/:id/revisions` (D39), and bulk actions at
+  `/admin/c/:collection/bulk` (D39).
 - **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
   module owning the MCP protocol surface (decision D18). Tools include `share_<slug>` (subjectKind
   principal|role|team), `share_link_<slug>` (D26 agent-mintable links), `list_teams` (D24), `search_<slug>`
   + `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
-  (D34 parity), and `list_audit` (audit log access).
+  (D34 parity), `schedule_<slug>` (D32 per-collection scheduled publishing), `poll_events` (D33 outbox
+  change feed), and `list_audit` (audit log access).
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
   Person/Service/Agent display persona), `email/` (`EmailTransport` — Resend + styled templates,
   D20 realized; console stub fallback), `base-url.ts` (resolveBaseUrl for minted links),
   `lifecycle.ts` (hasLifecycle), `fts.ts` (FTS5 MATCH escaping, snippet render), `base64.ts` (strict
-  base64 decode for MCP uploads), `markdown/` (micromark, sanitized); **`src/components/`** Hono JSX with
-  `field-view.tsx` (ViewComponent), `document-view.tsx`, `layouts/public-shell.tsx` (read-only
-  render); **`src/client/`** browser islands.
+  base64 decode for MCP uploads), `markdown/` (micromark, sanitized), `def-helpers.ts`
+  (titleFieldOf/titleOf/publicUrlOf/excerptFrom — shared title/URL/excerpt heuristics, D35),
+  `feeds.ts` (pure RSS/sitemap/robots builders, D35), `ndjson.ts` (import/export, D37), `diff.ts`
+  (LCS line diff for revision compare view, D39); **`src/components/`** Hono JSX with `field-view.tsx`
+  (ViewComponent), `document-view.tsx`, `layouts/public-shell.tsx` (read-only render); **`src/client/`**
+  browser islands: `init.ts` (global loader), `markdown-editor.ts` (CodeMirror 6, D38),
+  `media-picker.ts` (dialog picker, D38).
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
 operations go through services → queries. Cron jobs also call services only. All authorization goes through
