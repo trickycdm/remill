@@ -27,8 +27,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
     <AdminShell user={user} current="media">
       <PageHeader title="Media" description={`${total} asset${total === 1 ? '' : 's'}`} />
 
-      {/* Upload — native multipart to keep the pipeline dependency-free. Uppy is a
-          deferred UX enhancement (MEDIA_STANDARDS.md); the route is Uppy-agnostic. */}
+      {/* Upload — native multipart; the pipeline is dependency-free by decision
+          (D38 superseded D12/Uppy — the editor's media-picker island uploads
+          through the same service). */}
       <Card class="mb-8">
         <CardContent class="pt-6">
           <form method="post" action="/admin/media/upload" enctype="multipart/form-data" class="flex flex-wrap items-end gap-4">

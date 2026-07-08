@@ -24,14 +24,16 @@ There is no parallel media permission system.
 
 ## Upload pipeline
 
-- Client uploads via **Uppy** (island in `src/client/`) → Worker route → R2.
+- Client uploads are **native multipart** → Worker route → R2, from three doors: the Media library
+  form (`/admin/media/upload`), the editor's media-picker island (`POST /admin/media/picker`,
+  D38 — **superseded D12/Uppy**; no upload framework exists or is planned), and REST
+  `POST /api/media` (token-authed; MCP `upload_media` rides it as base64, D34). All call the ONE
+  `uploadMedia` service.
 - **Never fully buffer** large files in the Worker. Stream request body → R2. For files above the
   multipart threshold, use **R2 multipart upload** driven from the client (video/audio can be large).
 - **Single-request upload cap: 25 MB** (`MAX_UPLOAD_BYTES` in `src/services/media/`), well under the
   Worker request-body limit. Larger media (video/audio) MUST use **client-driven R2 multipart** —
-  that path is a Phase-5 backlog item; the current admin uploader is native multipart under the cap.
-  Uppy (decision D12) is a deferred UX enhancement layered on the same route — the pipeline is
-  Uppy-agnostic.
+  that path remains a backlog item; every current uploader is native multipart under the cap.
 
 ## MIME handling — never trust the extension
 

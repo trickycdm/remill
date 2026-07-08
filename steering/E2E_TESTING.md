@@ -68,7 +68,7 @@ e2e/
 ├── auth/                   # login, redirect-after-login, invalid creds, route protection
 ├── collections/            # schema builder: create/edit a collection and fields via the UI
 ├── documents/              # generated list + edit view, draft/publish, revision restore
-├── media/                  # upload (Uppy), alt editing, library browse
+├── media/                  # upload (native multipart), alt editing, library browse
 ├── access/                 # principals, roles, tokens, item grants, audit log
 ├── a11y/pages.spec.ts      # axe sweep across every admin page
 └── smoke.spec.ts
