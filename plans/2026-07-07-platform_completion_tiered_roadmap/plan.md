@@ -1,15 +1,17 @@
 # Platform Completion Roadmap — Tiers 1–3
 
-**Status: PARTIAL — 2026-07-08 (Tier 1 / Phases 1–4 of 11 DONE, verified; Tiers 2–3 not started)**
+**Status: PARTIAL — 2026-07-08 (Tiers 1–2 / Phases 1–8 of 11 DONE, verified; Tier 3 not started)**
 
-> **STATUS: TIER 1 COMPLETE (Phases 1–4, 2026-07-08) — Tiers 2–3 (Phases 5–11) not started.**
-> Tier 1 lives on `feature/platform-completion-tier1` (uncommitted working tree), verified:
-> 283 unit / 44 e2e / lint / build / migrations 0007–0009 applied locally. See worklog.md for the
-> step record incl. two minor RE-PLANs (FTS batching via prepared statements — D1 can't batch raw
-> SQL in db.batch; audit_log gained a `collection` column). 11 phases, each independently shippable. This plan is written to be
-> executed by a fresh session with no conversation context — every design decision is already made
-> and recorded here. Do not re-litigate decisions; if an assumption proves wrong, follow the
-> Re-planning Rules (log `RE-PLAN` in worklog.md, edit this file in place, add a Revision Log entry).
+> **STATUS: TIERS 1–2 COMPLETE (Phases 1–8, 2026-07-08) — Tier 3 (Phases 9–11) not started.**
+> All eight phases live on `feature/platform-completion-tier1` (per-phase commits from ac35d4b
+> on; Tier 1 = 7f8815d), verified at Tier-2 close: 323 unit / 53 e2e / lint / build / migrations
+> 0007–0011 applied locally. See worklog.md for the step record incl. the RE-PLANs (Tier 1: FTS
+> prepared-statement batching, audit_log `collection` column; Tier 2: drain-in-service, system
+> revisions saved_by NULL, discovery service module, import publish-gate). 11 phases, each
+> independently shippable. This plan is written to be executed by a fresh session with no
+> conversation context — every design decision is already made and recorded here. Do not
+> re-litigate decisions; if an assumption proves wrong, follow the Re-planning Rules (log
+> `RE-PLAN` in worklog.md, edit this file in place, add a Revision Log entry).
 
 ## Context
 
@@ -40,10 +42,10 @@ considered and deliberately excluded are listed at the bottom — do not impleme
 | 1 | Query power: filter operators + FTS5 search | 1 — DONE |
 | 1 | MCP parity: trash + delete/upload/revisions tools | 2, 3 — DONE |
 | 1 | Audit surfacing + token last-used | 4 — DONE |
-| 2 | Scheduled publishing | 5 |
-| 2 | Public discovery: feeds/sitemap/OG/`/` index | 6 |
-| 2 | Events outbox (poll-based change feed) | 7 |
-| 2 | Import/export + R2 snapshot | 8 |
+| 2 | Scheduled publishing | 5 — DONE |
+| 2 | Public discovery: feeds/sitemap/OG/`/` index | 6 — DONE |
+| 2 | Events outbox (poll-based change feed) | 7 — DONE |
+| 2 | Import/export + R2 snapshot | 8 — DONE |
 | 3 | Editor islands: CodeMirror + media picker | 9 |
 | 3 | Revision diff viewer | 10 |
 | 3 | Bulk actions on admin lists | 11 |
@@ -456,7 +458,7 @@ make one MCP call with a token, confirm "Last used" updates.
 **Steering:** API_AND_MCP_STANDARDS (audit endpoint/tool), ACCESS_CONTROL (audit exposure gated
 `manage_access`; the new collection column).
 
-## Phase 5 — Scheduled publishing
+## Phase 5 — Scheduled publishing — **DONE 2026-07-08**
 
 **Goal:** `publish_at` on drafts; per-minute drain publishes them with full audit attribution.
 Builds CC-2 (system actor).
@@ -499,7 +501,7 @@ cancel). Manual: set publish_at 1 min out locally and invoke the drain via the u
 **Steering:** ACCESS_CONTROL (system actor section), API_AND_MCP_STANDARDS (schedule tool +
 endpoint), DATABASE_STANDARDS (partial index). Decisions **D30**, **D32**.
 
-## Phase 6 — Public discovery: feeds, sitemap, OG meta, `/` index
+## Phase 6 — Public discovery: feeds, sitemap, OG meta, `/` index — **DONE 2026-07-08**
 
 **Goal:** published content becomes findable and shareable. Builds CC-3 (head threading).
 
@@ -543,7 +545,7 @@ sitemap/homepage**). Manual: `curl -s 127.0.0.1:3100/rss.xml | head`.
 
 **Steering:** SECURITY_STANDARDS (three intentional new public routes). Decisions **D35**, **D36**.
 
-## Phase 7 — Events outbox
+## Phase 7 — Events outbox — **DONE 2026-07-08**
 
 **Goal:** a poll-based change feed: "what changed since seq N", permission-filtered.
 
@@ -584,7 +586,7 @@ filtering incl. wildcard, publicRead, and tokenScope mask; prune. Manual: mutate
 **Steering:** DATABASE_STANDARDS (AUTOINCREMENT-seq exception; outbox-in-batch rule),
 API_AND_MCP_STANDARDS (events endpoint/tool, gap semantics). Decision **D33**.
 
-## Phase 8 — Import/export + snapshot
+## Phase 8 — Import/export + snapshot — **DONE 2026-07-08**
 
 **Goal:** data egress/ingress as a product feature; full-site snapshot to R2.
 
@@ -810,3 +812,15 @@ deliberate poll-based alternative), realtime collaboration, video transcoding.
   for clean activity filtering; trash listing compiles own/published delete-conditions in-query
   (TrashScope) — a security tightening beyond the spec; shared Table wrapper became a focusable
   region (axe scrollable-region-focusable).
+- 2026-07-08 (later): Tier 2 (Phases 5–8) implemented and verified (per-phase commits; execution
+  overlay in plans/2026-07-08-tier2_scheduled_publishing_events_import/). Deviations from spec:
+  the publish drain lives in services/documents, not src/jobs/publish.ts (jobs call services ONLY
+  — the purgeExpiredTrash precedent); system-actor revisions carry `saved_by` NULL
+  (document_revisions.saved_by FKs principals and the system actor deliberately has no row — the
+  audit row is the attribution); Phase 6 added a services/discovery module (routes must not
+  compose gated reads) and created def-helpers fresh (Phase 1's RE-PLAN had skipped it); import
+  gained a publish gate — `status:'published'` lines require the `publish` action (security
+  tightening: import must not bypass "agent drafts, human publishes"); import-create preserves
+  id/status/createdAt/publishedAt but not updatedAt; snapshot also writes media.ndjson metadata;
+  drive-by: getSettings treats defaultPageSize<1 as unset (empty Datastar number signal stored 0,
+  clamping lists to one-row pages).

@@ -22,10 +22,13 @@ rendered public pages + share links.)
 > [`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md)
 > have also shipped** (B5 composites deferred), followed by **sharing fabric v2**: teams (D24),
 > agent-mintable share links (D26), Resend email (D20 realized), and raw HTML pages (D25/D27).
-> **Tier 1 of
+> **Tiers 1–2 of
 > [`plans/2026-07-07-platform_completion_tiered_roadmap/plan.md`](plans/2026-07-07-platform_completion_tiered_roadmap/plan.md)
-> (Phases 1–4) has shipped**: full-text search + filter operators (D28), cron + recoverable delete
-> (D29/D31), MCP parity (D34), and audit surfacing. Tiers 2–3 (Phases 5–11) are planned.
+> (Phases 1–8) have shipped**: full-text search + filter operators (D28), cron + recoverable delete
+> (D29/D31), MCP parity (D34), audit surfacing, scheduled publishing + the system actor (D30/D32),
+> the public discovery pack — rss/sitemap/robots/OG head props + the `/` homepage (D35/D36), the
+> events outbox (D33), and import/export + R2 snapshot (D37). Tier 3 (Phases 9–11: editor islands,
+> revision diff viewer, bulk actions) is planned.
 > Each steering doc carries its own STATUS header; the worklogs have the step-by-step record.
 
 ## The one idea
@@ -62,7 +65,8 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
   Public ──────────▶ /:c/:slug   Rendered pages (shell or raw HTML, D27) + /s/:token share links (anonymous)
-  Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29)
+                     / · /rss.xml · /sitemap.xml · /robots.txt   Discovery pack (D35, anonymous gated reads)
+  Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29: purges · D32: publish drain as the system actor)
 
   Routes / DOs → Services (src/services/) → Queries (src/db/queries/) → D1
                         ↑
