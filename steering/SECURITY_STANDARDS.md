@@ -161,7 +161,12 @@ onto the record — any field an attacker named got written. remill's fix, from 
   decided by one un-gated `getSettings` PK read per public request. **Classifier caveat: it is
   prefix-based** — any new top-level protected route MUST be added to `PROTECTED_PREFIXES` or it
   silently gets the public policy. Chart.js is vendored at `public/vendor/chart.umd.js` (served
-  under `'self'`), so charts work with the toggle OFF.
+  under `'self'`), so charts work with the toggle OFF. **Intentionally public top-level routes
+  (D35):** `/rss.xml`, `/sitemap.xml`, `/robots.txt`, and the `/` homepage — all read as the
+  anonymous principal through the gated pipeline (published + publicRead + lifecycle only; the
+  feed/sitemap can never leak a draft because the compiled read filter runs in-query), and all
+  correctly receive the public CSP. robots.txt disallows every protected prefix plus `/s/`
+  (share links are capability URLs — never crawlable).
 - **SEC-5 — public collection discovery is a deliberate, bounded exception** to the no-enumeration
   posture: discovery stays public (remill is agent-native), but an unauthenticated or unprivileged
   caller receives a **public-safe projection** that omits the internal `access`/`workflow` config —

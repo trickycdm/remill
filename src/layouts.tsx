@@ -3,6 +3,31 @@ import { ViteClient, Link, Script } from 'vite-ssr-components/hono';
 import { THEME_INIT_SNIPPET } from '@/components/layouts/admin-shell';
 
 /**
+ * Per-page head props (D36): routes pass them as `c.render(content, head)` —
+ * the second arg reaches the renderer as spread props. Routes compose the FULL
+ * title string themselves (`${docTitle} — ${siteName}`); the layout does no DB
+ * reads and falls back to the static branding when a prop is absent, so every
+ * existing single-arg `c.render(...)` call renders exactly as before.
+ */
+export interface PageHead {
+  readonly title?: string;
+  readonly description?: string;
+  /** Absolute canonical URL — also becomes og:url. */
+  readonly canonical?: string;
+  readonly ogType?: 'website' | 'article';
+  /** Absolute image URL. */
+  readonly ogImage?: string;
+  /** Feed href (usually '/rss.xml') — advertised for feed readers. */
+  readonly feedUrl?: string;
+}
+
+declare module 'hono' {
+  interface ContextRenderer {
+    (content: string | Promise<string>, head?: PageHead): Response | Promise<Response>;
+  }
+}
+
+/**
  * Root HTML document. Every route renders inside this via `c.render(<…/>)`.
  *
  * - Tailwind tokens come from `src/tailwind.css` (design system; the single
@@ -15,14 +40,26 @@ import { THEME_INIT_SNIPPET } from '@/components/layouts/admin-shell';
  *   stored it sets nothing, so `color-scheme: light dark` follows the OS. Static
  *   string with no interpolated data — safe to inline.
  */
-export const RootLayout = jsxRenderer(({ children }) => {
+export const RootLayout = jsxRenderer(({ children, title, description, canonical, ogType, ogImage, feedUrl }) => {
+  const pageTitle = title ?? 'remill';
+  const pageDescription = description ?? 'remill — a lightweight, agent-native CMS';
   return (
     <html lang="en">
       <head>
-        <title>remill</title>
+        <title>{pageTitle}</title>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta name="description" content="remill — a lightweight, agent-native CMS" />
+        <meta name="description" content={pageDescription} />
+
+        {/* Open Graph + discovery links (D36) — emitted only when a route set
+            head props; admin pages stay meta-minimal. */}
+        {title ? <meta property="og:title" content={title} /> : null}
+        {description ? <meta property="og:description" content={description} /> : null}
+        {ogType ? <meta property="og:type" content={ogType} /> : null}
+        {ogImage ? <meta property="og:image" content={ogImage} /> : null}
+        {canonical ? <meta property="og:url" content={canonical} /> : null}
+        {canonical ? <link rel="canonical" href={canonical} /> : null}
+        {feedUrl ? <link rel="alternate" type="application/rss+xml" title={pageTitle} href={feedUrl} /> : null}
 
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SNIPPET }} />
 

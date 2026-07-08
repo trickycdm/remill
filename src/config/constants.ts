@@ -31,5 +31,6 @@ export const RESERVED_FIELD_KEYS = [
   'createdAt',
   'updatedAt',
   'publishedAt',
+  'publishAt', // scheduled publishing (D32)
   'createdBy',
 ] as const;

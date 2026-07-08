@@ -24,6 +24,7 @@ import { getPrincipalTeamIds } from '@/db/queries/teams';
 import { authorize, compileReadFilter, resolveAccess, anonymousPrincipal, systemPrincipal, type Principal } from '@/access';
 import { newId } from '@/lib/id';
 import { hasLifecycle } from '@/lib/lifecycle';
+import { titleFieldOf } from '@/lib/def-helpers';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
 import {
   InputValidationError,
@@ -240,12 +241,10 @@ function initialStatus(def: CollectionDefinition): 'draft' | 'published' {
 // Relation read-expansion (B2)
 // ---------------------------------------------------------------------------
 
-/** The target's display-title field: the configured `titleField` when it exists
- *  on the target, else the target's first text/slug field. */
-function pickTitleField(def: CollectionDefinition, configured?: string): string | undefined {
-  if (configured && def.fields.some((f) => f.key === configured)) return configured;
-  return def.fields.find((f) => f.type === 'text' || f.type === 'slug')?.key;
-}
+// The display-title heuristic moved to src/lib/def-helpers.ts (titleFieldOf,
+// D35) so feeds/OG/homepage share it with search indexing and relation
+// expansion — one heuristic, every surface.
+const pickTitleField = titleFieldOf;
 
 /**
  * Expand every referencing field's id(s) into `{id, title, collection}`,

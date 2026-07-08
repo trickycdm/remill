@@ -9,6 +9,11 @@ import { AppError, ForbiddenError } from '@/lib/errors';
 import { dsRedirect, dsError } from '@/lib/datastar-response';
 import { getDb } from '@/db/client';
 import { generateOpenApi } from '@/lib/openapi';
+import { rssXml, sitemapXml, robotsTxt } from '@/lib/feeds';
+import { recentPublishedDocs, allPublishedDocs } from '@/services/discovery';
+import { getSettings } from '@/services/settings';
+import { resolveBaseUrl } from '@/lib/base-url';
+import { nowIso } from '@/lib/now';
 import { runScheduled } from '@/jobs';
 import { loadRoutes } from './router';
 
@@ -81,12 +86,56 @@ app.onError((err, c) => {
 // onRequestGet / onRequestPost / … exports and regenerate.
 // ---------------------------------------------------------------------------
 
-// The one hand-registered route: hono-router can't emit a valid import identifier
-// for a filename containing a dot, and this endpoint needs the literal
-// `/api/openapi.json` URL (surface 5). Generated from live definitions.
+// Hand-registered routes: hono-router can't emit a valid import identifier for
+// a filename containing a dot, and these endpoints need literal dotted URLs —
+// `/api/openapi.json` (surface 5) and the public discovery pack (D35:
+// /rss.xml, /sitemap.xml, /robots.txt — feed readers/crawlers expect exactly
+// these paths). The discovery handlers read as the anonymous principal through
+// the same gated pipeline as public pages; the public CSP applies automatically
+// (they sit outside PROTECTED_PREFIXES — an intentional classification,
+// SECURITY_STANDARDS.md).
 app.get('/api/openapi.json', async (c) => {
   const doc = await generateOpenApi(getDb(c.env.DB), c.env.BASE_URL ?? '');
   return c.json(doc);
+});
+
+app.get('/rss.xml', async (c) => {
+  const db = getDb(c.env.DB);
+  const settings = await getSettings(db);
+  const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
+  const collection = c.req.query('collection') || undefined;
+  const docs = await recentPublishedDocs(db, nowIso(), { collection });
+  const xml = rssXml({
+    siteName: settings.siteName?.trim() || 'remill',
+    siteDescription: settings.siteDescription ?? '',
+    baseUrl,
+    items: docs.map((d) => ({
+      title: d.title,
+      url: `${baseUrl}${d.path}`,
+      excerpt: d.excerpt,
+      publishedAt: d.publishedAt,
+      id: d.id,
+    })),
+  });
+  return c.body(xml, 200, { 'Content-Type': 'application/rss+xml; charset=utf-8' });
+});
+
+app.get('/sitemap.xml', async (c) => {
+  const db = getDb(c.env.DB);
+  const settings = await getSettings(db);
+  const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
+  const docs = await allPublishedDocs(db, nowIso());
+  const xml = sitemapXml([
+    { loc: `${baseUrl}/` },
+    ...docs.map((d) => ({ loc: `${baseUrl}${d.path}`, lastmod: d.updatedAt })),
+  ]);
+  return c.body(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8' });
+});
+
+app.get('/robots.txt', async (c) => {
+  const settings = await getSettings(getDb(c.env.DB));
+  const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
+  return c.text(robotsTxt(baseUrl));
 });
 
 loadRoutes(app);
