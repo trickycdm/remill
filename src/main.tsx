@@ -9,9 +9,13 @@ import { AppError, ForbiddenError } from '@/lib/errors';
 import { dsRedirect, dsError } from '@/lib/datastar-response';
 import { getDb } from '@/db/client';
 import { generateOpenApi } from '@/lib/openapi';
+import { runScheduled } from '@/jobs';
 import { loadRoutes } from './router';
 
-const app = new Hono<{ Bindings: Env }>();
+// Named export: tests drive the Hono instance directly via `app.request(...)`
+// (the default export is the two-handler Worker shape below, which has no
+// request helper).
+export const app = new Hono<{ Bindings: Env }>();
 
 // ---------------------------------------------------------------------------
 // Global middleware
@@ -102,4 +106,9 @@ app.notFound((c) => {
   );
 });
 
-export default app;
+// The Worker exports both halves: fetch (the app) and scheduled (cron jobs, D31
+// — see src/jobs). waitUntil keeps the invocation alive until the jobs settle.
+export default {
+  fetch: app.fetch,
+  scheduled: (controller, env, ctx) => ctx.waitUntil(runScheduled(controller.cron, env)),
+} satisfies ExportedHandler<Env>;

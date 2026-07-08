@@ -35,6 +35,11 @@ and the whole generated admin inherits it.
   Prefer the native `<dialog>` element (Escape-to-close + focus management for free); implement a
   manual focus trap only where `<dialog>` doesn't fit.
 - No positive `tabIndex` values.
+- **Scrollable containers must be keyboard-operable** (axe `scrollable-region-focusable`): any
+  `overflow-auto`/`overflow-x-auto` region whose content can overflow needs `tabindex="0"` +
+  `role="region"` + an `aria-label` so keyboard users can focus and scroll it. The shared `Table`
+  wrapper (`src/components/ui/table.tsx`) already does this — reuse it, and apply the same trio to
+  any new scrollable container (code blocks, diff panes, wide charts).
 
 ## Focus indicators
 

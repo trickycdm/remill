@@ -13,6 +13,7 @@ import { and, eq, sql, desc, count, inArray, type SQL } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { Database } from '@/db/client';
 import { documents, documentIndex, documentRevisions } from '@/db/schema';
+import { documentFts } from '@/db/fts-table';
 import { newId } from '@/lib/id';
 import type { Grant } from '@/access/grant';
 
@@ -142,10 +143,17 @@ export async function getDocument(
   return rows[0] ? toDomain(rows[0]) : null;
 }
 
+/** Filter comparison operators (D28). `eq` is the default; `contains` is a LIKE
+ *  substring match on value_text; `in` matches any of a comma-separated set. */
+export const FILTER_OPS = ['eq', 'gte', 'lte', 'contains', 'in'] as const;
+export type FilterOp = (typeof FILTER_OPS)[number];
+
 export interface ListFilter {
   readonly fieldKey: string;
   readonly kind: IndexKind;
-  /** Raw filter value; coerced to a number by the query when `kind === 'num'`. */
+  readonly op: FilterOp;
+  /** Raw filter value; coerced to a number by the query when `kind === 'num'`.
+   *  For `op: 'in'` this is the comma-separated set (validated by the service). */
   readonly value: string;
 }
 
@@ -181,13 +189,40 @@ export interface ListOptions {
   readonly sort?: ListSort;
 }
 
-/** Predicate: documents whose indexed `fieldKey` equals `value` (in this collection).
- *  number/boolean fields (kind 'num') compare `value_num` (text is NULL for them),
- *  everything else compares `value_text` (COR-3). */
+/** Escape LIKE wildcards in a user-supplied substring (used with ESCAPE '\'). */
+function escapeLike(v: string): string {
+  return v.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
+
+/** Predicate: documents whose indexed `fieldKey` matches the filter (in this
+ *  collection). number/boolean fields (kind 'num') compare `value_num` (text is
+ *  NULL for them), everything else compares `value_text` (COR-3). Operators
+ *  (D28): gte/lte compare on the kind-matched column (ISO datetimes compare
+ *  correctly as text); `contains` is a LIKE on value_text (the service rejects
+ *  it for numeric kinds); `in` matches any element of the comma-separated set. */
 function indexFilter(collection: string, f: ListFilter): SQL {
   const col = f.kind === 'num' ? documentIndex.valueNum : documentIndex.valueText;
-  const val: string | number = f.kind === 'num' ? Number(f.value) : f.value;
-  return sql`${documents.id} IN (SELECT ${documentIndex.documentId} FROM ${documentIndex} WHERE ${documentIndex.collection} = ${collection} AND ${documentIndex.fieldKey} = ${f.fieldKey} AND ${col} = ${val})`;
+  const coerce = (raw: string): string | number => (f.kind === 'num' ? Number(raw) : raw);
+  let cmp: SQL;
+  switch (f.op) {
+    case 'gte':
+      cmp = sql`${col} >= ${coerce(f.value)}`;
+      break;
+    case 'lte':
+      cmp = sql`${col} <= ${coerce(f.value)}`;
+      break;
+    case 'contains':
+      cmp = sql`${documentIndex.valueText} LIKE '%' || ${escapeLike(f.value)} || '%' ESCAPE '\\'`;
+      break;
+    case 'in': {
+      const vals = f.value.split(',').map((s) => coerce(s.trim()));
+      cmp = sql`${col} IN (${sql.join(vals.map((v) => sql`${v}`), sql`, `)})`;
+      break;
+    }
+    default:
+      cmp = sql`${col} = ${coerce(f.value)}`;
+  }
+  return sql`${documents.id} IN (SELECT ${documentIndex.documentId} FROM ${documentIndex} WHERE ${documentIndex.collection} = ${collection} AND ${documentIndex.fieldKey} = ${f.fieldKey} AND ${cmp})`;
 }
 
 /** Keyset predicate for the default order (createdAt DESC, id DESC): rows strictly
@@ -332,6 +367,40 @@ export async function isIndexValueTaken(
 
 type Batch = [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]];
 
+/** Full-text row for `document_fts` (D28) — the FTS5 virtual table lives ONLY in
+ *  migration 0007 (never schema.ts), so it is addressed with raw SQL here. */
+export interface SearchText {
+  readonly title: string | null;
+  readonly body: string;
+}
+
+/** Batch items keeping `document_fts` in sync with a document write. The FTS row
+ *  is replaced wholesale (delete-then-insert), mirroring the document_index sync;
+ *  FK cascades cannot clear a virtual table, so deletes are explicit. Uses the
+ *  out-of-schema table handle (src/db/fts-table.ts) — D1 batches only PREPARED
+ *  statements, never raw sql. */
+function ftsSync(
+  db: Database,
+  documentId: string,
+  collection: string,
+  search: SearchText | null,
+): BatchItem<'sqlite'>[] {
+  const items: BatchItem<'sqlite'>[] = [
+    db.delete(documentFts).where(eq(documentFts.documentId, documentId)),
+  ];
+  if (search && (search.title || search.body)) {
+    items.push(
+      db.insert(documentFts).values({
+        documentId,
+        collection,
+        title: search.title ?? '',
+        body: search.body,
+      }),
+    );
+  }
+  return items;
+}
+
 function indexInserts(db: Database, documentId: string, collection: string, values: IndexValue[]) {
   return values.map((v) =>
     db.insert(documentIndex).values({
@@ -355,6 +424,8 @@ export interface InsertInput {
   readonly now: string;
   readonly publishedAt: string | null;
   readonly index: IndexValue[];
+  /** Full-text search row content (D28); null ⇒ nothing searchable. */
+  readonly search: SearchText | null;
 }
 
 /** Create a document + its index rows + revision 1, atomically. Witness required. */
@@ -383,6 +454,7 @@ export async function insertDocument(
       savedBy: input.createdBy,
       savedAt: input.now,
     }),
+    ...ftsSync(db, input.id, input.collection, input.search),
   ];
   await db.batch(stmts as Batch);
 }
@@ -397,6 +469,8 @@ export interface UpdateInput {
   readonly publishedAt: string | null;
   readonly revision: number;
   readonly index: IndexValue[];
+  /** Full-text search row content (D28); null ⇒ nothing searchable. */
+  readonly search: SearchText | null;
 }
 
 /** Update a document: replace data, re-sync index (delete-then-insert), append a
@@ -426,17 +500,24 @@ export async function updateDocument(
       savedBy: input.savedBy,
       savedAt: input.now,
     }),
+    ...ftsSync(db, input.id, input.collection, input.search),
   ];
   await db.batch(stmts as Batch);
 }
 
-/** Delete a document (index + revisions cascade via FK). Witness required. */
-export async function deleteDocument(
+// NOTE: there is deliberately NO hard `deleteDocument` query — deletion is the
+// snapshot-then-delete batch in src/db/queries/trash.ts (D29). Don't add one back.
+
+/** Replace the FTS rows for a batch of documents (the rebuild path, D28).
+ *  Witness required — the caller has read-authorized each collection. */
+export async function replaceFtsRows(
   db: Database,
-  id: string,
+  rows: readonly { id: string; collection: string; search: SearchText | null }[],
   _grant: Grant,
 ): Promise<void> {
-  await db.delete(documents).where(eq(documents.id, id));
+  if (!rows.length) return;
+  const stmts = rows.flatMap((r) => ftsSync(db, r.id, r.collection, r.search));
+  await db.batch(stmts as Batch);
 }
 
 /** Revision history for a document, newest first. Witness required. */

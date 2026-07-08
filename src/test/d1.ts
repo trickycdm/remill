@@ -53,7 +53,9 @@ class BoundStatement {
     this.sql = sql;
   }
 
-  all(): D1Result {
+  /** Synchronous core — used by batch(), which runs inside a better-sqlite3
+   *  transaction (those callbacks must stay synchronous). */
+  allSync(): D1Result {
     if (isWriteStatement(this.sql)) {
       const info = this.stmt.run(...this.params);
       return { results: [], success: true, meta: writeMeta(info) };
@@ -62,17 +64,24 @@ class BoundStatement {
     return { results: rows, success: true, meta: emptyMeta() };
   }
 
-  run(): D1Result {
+  // The public methods are Promise-shaped like real D1: drizzle's raw-query path
+  // chains `.then(...)` directly on them (not just `await`), so returning a bare
+  // value breaks it.
+  async all(): Promise<D1Result> {
+    return this.allSync();
+  }
+
+  async run(): Promise<D1Result> {
     const info = this.stmt.run(...this.params);
     return { results: [], success: true, meta: writeMeta(info) };
   }
 
-  raw(): unknown[][] {
+  async raw(): Promise<unknown[][]> {
     const raw = (this.stmt as BetterSqliteStatement).raw();
     return raw.all(...this.params) as unknown[][];
   }
 
-  first(): Record<string, unknown> | null {
+  async first(): Promise<Record<string, unknown> | null> {
     const rows = this.stmt.all(...this.params) as Record<string, unknown>[];
     return rows[0] ?? null;
   }
@@ -99,7 +108,8 @@ class D1DatabaseAdapter {
 
   async batch(statements: BoundStatement[]): Promise<D1Result[]> {
     // D1 batch is atomic; better-sqlite3 transaction gives the same all-or-nothing.
-    const run = this.bsdb.transaction((stmts: BoundStatement[]) => stmts.map((s) => s.all()));
+    // allSync: transaction callbacks must not return promises.
+    const run = this.bsdb.transaction((stmts: BoundStatement[]) => stmts.map((s) => s.allSync()));
     return run(statements);
   }
 

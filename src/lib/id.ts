@@ -24,6 +24,7 @@ export const ID_PREFIX = {
   team: 'tem',
   teamMember: 'tmm', // team_members join rows
   teamInvite: 'tin', // team_invites rows (multi-use join links)
+  trash: 'trh', // document_trash snapshots (D29)
 } as const;
 
 type Entity = keyof typeof ID_PREFIX;

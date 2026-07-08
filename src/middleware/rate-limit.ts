@@ -52,8 +52,40 @@ declare module 'hono' {
 export const RATE_LIMIT_INFO_KEY = 'rateLimitInfo';
 
 /** The edge-set client IP, or a stable fallback for local/dev where it's absent. */
-function clientKey(c: Context<{ Bindings: Env }>): string {
+export function clientKey(c: Context<{ Bindings: Env }>): string {
   return c.req.header('CF-Connecting-IP') || 'local';
+}
+
+/**
+ * Consume one unit of a fixed-window limit for `clientId`, or throw 429. The
+ * shared core behind the route middleware AND in-handler consumers (the MCP
+ * `upload_media` tool, which shares the 'upload' bucket with REST — D34).
+ * No KV binding → allow (tests / unconfigured local; see file header).
+ */
+export async function consumeRateLimit(
+  kv: KVNamespace | undefined,
+  name: string,
+  tier: RateLimitTier,
+  clientId: string,
+): Promise<RateLimitInfo | undefined> {
+  if (!kv) return undefined;
+
+  const window = Math.floor(Date.now() / 1000 / tier.windowSeconds);
+  const key = `rl:${name}:${window}:${clientId}`;
+  const count = Number((await kv.get(key)) ?? '0') || 0;
+
+  if (count >= tier.limit) {
+    throw new AppError(
+      `Rate limit exceeded for ${name}`,
+      429,
+      'RATE_LIMITED',
+      'Too many requests — please slow down and try again shortly.',
+    );
+  }
+
+  // Increment; keep the counter for two windows so late requests still count.
+  await kv.put(key, String(count + 1), { expirationTtl: Math.max(60, tier.windowSeconds * 2) });
+  return { limit: tier.limit, remaining: Math.max(0, tier.limit - (count + 1)) };
 }
 
 /**
@@ -62,27 +94,15 @@ function clientKey(c: Context<{ Bindings: Env }>): string {
  */
 export function rateLimit(name: string, tier: RateLimitTier) {
   return createMiddleware<{ Bindings: Env }>(async (c, next) => {
-    const kv = c.env.RATE_LIMIT;
-    // No binding → degrade to allow (tests / unconfigured local). See file header.
-    if (!kv) return next();
-
-    const window = Math.floor(Date.now() / 1000 / tier.windowSeconds);
-    const key = `rl:${name}:${window}:${clientKey(c)}`;
-    const count = Number((await kv.get(key)) ?? '0') || 0;
-
-    if (count >= tier.limit) {
-      c.header('Retry-After', String(tier.windowSeconds));
-      throw new AppError(
-        `Rate limit exceeded for ${name}`,
-        429,
-        'RATE_LIMITED',
-        'Too many requests — please slow down and try again shortly.',
-      );
+    try {
+      const info = await consumeRateLimit(c.env.RATE_LIMIT, name, tier, clientKey(c));
+      if (info) c.set(RATE_LIMIT_INFO_KEY, info);
+    } catch (e) {
+      if (e instanceof AppError && e.code === 'RATE_LIMITED') {
+        c.header('Retry-After', String(tier.windowSeconds));
+      }
+      throw e;
     }
-
-    // Increment; keep the counter for two windows so late requests still count.
-    await kv.put(key, String(count + 1), { expirationTtl: Math.max(60, tier.windowSeconds * 2) });
-    c.set(RATE_LIMIT_INFO_KEY, { limit: tier.limit, remaining: Math.max(0, tier.limit - (count + 1)) });
     return next();
   });
 }

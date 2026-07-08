@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import app from '@/main';
+import { app } from '@/main';
 import { createTestD1 } from '@/test/d1';
 import { getDb, type Database } from '@/db/client';
 import { documents } from '@/db/schema';

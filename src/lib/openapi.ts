@@ -39,6 +39,22 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
           { name: 'pageSize', in: 'query', schema: { type: 'integer' } },
           ...(lifecycle ? [{ name: 'status', in: 'query', schema: { type: 'string', enum: ['draft', 'published'] } }] : []),
           { name: 'sort', in: 'query', schema: { type: 'string' } },
+          {
+            name: 'q',
+            in: 'query',
+            schema: { type: 'string' },
+            description:
+              'Full-text search (D28): words are ANDed, the last word prefix-matches; results are relevance-ranked (so `sort` cannot combine with `q`). Response items carry {id, title, snippet, status}.',
+          },
+          {
+            name: 'filter',
+            in: 'query',
+            style: 'deepObject',
+            explode: true,
+            schema: { type: 'object', additionalProperties: { type: 'string' } },
+            description:
+              'Filters on indexed fields: filter[field]=v (exact) or filter[field][op]=v with op one of eq/gte/lte/contains/in (in: comma-separated values; contains: text fields only — note markdown/html index a 200-char lead-in).',
+          },
         ],
         responses: { '200': { description: 'A page of documents' } },
       },
@@ -65,9 +81,67 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
   };
 }
 
+/** Fixed (non-generated) endpoints — hand-listed because generateOpenApi only
+ *  iterates collection definitions. Extend when adding a static /api route. */
+function staticPaths(): Record<string, unknown> {
+  const trashTag = 'Trash';
+  return {
+    '/api/trash': {
+      get: {
+        tags: [trashTag],
+        summary: 'List trashed documents (D29)',
+        description:
+          'Trashed documents across every collection the caller can delete (own/published conditions applied). Entries are purged after 30 days.',
+        parameters: [
+          { name: 'limit', in: 'query', schema: { type: 'integer' } },
+          { name: 'offset', in: 'query', schema: { type: 'integer' } },
+        ],
+        responses: { '200': { description: 'Trash entries, newest deletions first' } },
+      },
+    },
+    '/api/trash/{id}': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      delete: {
+        tags: [trashTag],
+        summary: 'Permanently delete a trash entry',
+        responses: { '200': { description: 'Deleted forever' } },
+      },
+    },
+    '/api/audit': {
+      get: {
+        tags: ['Audit'],
+        summary: 'Query the audit trail (manage_access)',
+        description:
+          'Every authorization decision (allow and deny) across admin/REST/MCP. Keyset-paginated via nextCursor.',
+        parameters: [
+          { name: 'principal', in: 'query', schema: { type: 'string' } },
+          { name: 'action', in: 'query', schema: { type: 'string' } },
+          { name: 'collection', in: 'query', schema: { type: 'string' } },
+          { name: 'result', in: 'query', schema: { type: 'string', enum: ['allow', 'deny'] } },
+          { name: 'surface', in: 'query', schema: { type: 'string', enum: ['admin', 'rest', 'mcp'] } },
+          { name: 'cursor', in: 'query', schema: { type: 'string' } },
+          { name: 'limit', in: 'query', schema: { type: 'integer' } },
+        ],
+        responses: { '200': { description: 'Audit rows, newest first, with nextCursor' } },
+      },
+    },
+    '/api/trash/{id}/restore': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      post: {
+        tags: [trashTag],
+        summary: 'Restore a trashed document under its original id',
+        responses: {
+          '200': { description: 'Restored' },
+          '409': { description: 'Collection gone, or id/unique value re-taken since deletion' },
+        },
+      },
+    },
+  };
+}
+
 export async function generateOpenApi(db: Database, baseUrl: string): Promise<Record<string, unknown>> {
   const defs = await listCollections(db);
-  const paths: Record<string, unknown> = {};
+  const paths: Record<string, unknown> = staticPaths();
   const schemas: Record<string, JSONSchema> = {};
   for (const def of defs) {
     Object.assign(paths, collectionPaths(def));

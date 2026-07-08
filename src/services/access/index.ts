@@ -8,7 +8,7 @@
  */
 
 import type { Database } from '@/db/client';
-import { authorize, ACTIONS, type Principal } from '@/access';
+import { authorize, ACTIONS, scopeMatches, type Principal } from '@/access';
 import * as roleQ from '@/db/queries/roles';
 import * as grantQ from '@/db/queries/grants';
 import * as principalQ from '@/db/queries/principals';
@@ -16,6 +16,7 @@ import * as inviteQ from '@/db/queries/invites';
 import * as teamQ from '@/db/queries/teams';
 import { getUserByEmail } from '@/db/queries/users';
 import { recentAudit } from '@/db/queries/audit';
+import * as auditQ from '@/db/queries/audit';
 import { generateToken, generateShareToken, generateJoinToken, hashToken } from '@/lib/token';
 import { hashPassword } from '@/lib/password';
 import type { PermissionSpec, RoleSpec } from '@/access/policy';
@@ -45,6 +46,35 @@ export const listRoles = roleQ.listRoles;
  * un-gated: a principal may always learn its OWN capabilities.
  */
 export const getPrincipalPermissions = roleQ.getPrincipalPermissions;
+
+/**
+ * The collections on which `principal` holds `action` via roles, intersected
+ * with the token scope mask exactly as decide() narrows (TD-5): `'*'` for an
+ * unmasked wildcard grant, else the explicit slug list. A capability PRE-CHECK
+ * for cross-collection surfaces (trash listing; later the events feed) so they
+ * can scope queries without spraying deny rows into the audit log — per-item
+ * authorize() still gates every action taken. NOTE: deliberately does NOT add
+ * `publicRead` collections for `read`; anonymous-readable surfaces resolve
+ * that themselves (see services/search).
+ */
+export async function collectionsWithAction(
+  db: Database,
+  principal: Principal,
+  action: Action,
+): Promise<'*' | string[]> {
+  const perms = await roleQ.getPrincipalPermissions(db, principal.id);
+  const matching = perms.filter((p) => p.action === action);
+  if (matching.some((p) => p.collection === '*')) {
+    // A wildcard role grant is still narrowed by a scoped token (a mask never widens).
+    if (!principal.tokenScope) return '*';
+    const masked = principal.tokenScope.filter((s) => s.action === action).map((s) => s.collection);
+    return masked.includes('*') ? '*' : [...new Set(masked)];
+  }
+  const scoped = matching
+    .map((p) => p.collection)
+    .filter((col) => !principal.tokenScope || scopeMatches(principal.tokenScope, action, col));
+  return [...new Set(scoped)];
+}
 
 /**
  * Structurally refuse access-management mutations by agent principals (SEC-8).
@@ -265,6 +295,40 @@ export async function listItemGrants(
 export async function listAudit(db: Database, principal: Principal, now: string, limit = 100) {
   await authorize(db, principal, 'manage_access', ROOT, now);
   return recentAudit(db, limit);
+}
+
+/** Filtered + keyset-paginated audit page (the /admin/activity surface + REST
+ *  /api/audit + MCP list_audit). Gated `manage_access` like every audit read. */
+export async function listAuditPage(
+  db: Database,
+  principal: Principal,
+  params: {
+    readonly filters?: auditQ.AuditFilters;
+    readonly cursor?: string;
+    readonly limit?: number;
+  },
+  now: string,
+) {
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  const limit = Math.min(200, Math.max(1, params.limit ?? 50));
+  const cursor = params.cursor ? decodeAuditCursor(params.cursor) : undefined;
+  const rows = await auditQ.listAuditPage(db, { filters: params.filters, cursor, limit });
+  const page = rows.slice(0, limit);
+  const last = page[page.length - 1];
+  const nextCursor =
+    rows.length > limit && last ? btoa(`${last.createdAt}|${last.id}`) : undefined;
+  return { rows: page, limit, nextCursor };
+}
+
+function decodeAuditCursor(s: string): auditQ.AuditCursor | undefined {
+  try {
+    const raw = atob(s);
+    const i = raw.indexOf('|');
+    if (i < 0) return undefined;
+    return { createdAt: raw.slice(0, i), id: raw.slice(i + 1) };
+  } catch {
+    return undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -44,6 +44,8 @@ export const markdownField: FieldType<MarkdownConfig, string> = {
   valueSchema,
   // A searchable plain-text lead-in (value_text). Not the full document.
   toIndex: (v) => (v ? toPlainText(v).slice(0, 200) : null),
+  // The FULL plain text feeds the FTS5 search index (D28).
+  toSearchText: (v) => (v ? toPlainText(v) : null),
   EditComponent: ({ field, value, signal }) => (
     <FieldShell field={field} signal={signal}>
       <Textarea {...controlProps({ field, signal })} value={value ?? ''} rows={12} />

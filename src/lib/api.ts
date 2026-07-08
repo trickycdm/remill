@@ -12,6 +12,7 @@ import { resolvePrincipal } from '@/lib/api-auth';
 import { AppError, BadRequestError } from '@/lib/errors';
 import type { Principal } from '@/access';
 import { parseSort, clampPage, clampPageSize, type SortSpec } from '@/lib/list-query';
+import { FILTER_OPS, type FilterOp } from '@/services/documents';
 import {
   GLOBAL_RATE_LIMIT,
   RATE_LIMIT_INFO_KEY,
@@ -21,6 +22,11 @@ import {
 /** Max accepted JSON request-body size (SEC-4). Content beyond this is a DoS vector;
  *  reject before parsing. 1 MiB is generous for document/collection payloads. */
 export const MAX_JSON_BODY_BYTES = 1024 * 1024;
+
+/** The /mcp body cap (D34) — larger than REST's because `upload_media` carries
+ *  base64 file content (~33% inflation ⇒ ~6 MiB effective file). Larger files
+ *  use REST multipart POST /api/media (25 MiB service cap). */
+export const MAX_MCP_BODY_BYTES = 8 * 1024 * 1024;
 
 export async function apiPrincipal(c: Context<{ Bindings: Env }>, now: string): Promise<Principal> {
   return resolvePrincipal(getDb(c.env.DB), c, 'rest', now);
@@ -57,19 +63,28 @@ export async function jsonBody(c: Context): Promise<Record<string, unknown>> {
   return parsed as Record<string, unknown>;
 }
 
-/** Parse REST list query params (?page, ?pageSize, ?status, ?sort, ?filter[f]=v). */
+/** Parse REST list query params (?page, ?pageSize, ?status, ?sort, ?q,
+ *  ?filter[f]=v and ?filter[f][op]=v — D28). Operator entries for one field
+ *  merge, so `filter[views][gte]=10&filter[views][lte]=20` is a range. */
 export function listQuery(c: Context): {
   page: number;
   pageSize: number;
   status?: 'draft' | 'published';
   sort?: SortSpec;
-  filters: Record<string, string>;
+  q?: string;
+  filters: Record<string, Partial<Record<FilterOp, string>>>;
 } {
   const q = c.req.query();
-  const filters: Record<string, string> = {};
+  const filters: Record<string, Partial<Record<FilterOp, string>>> = {};
   for (const [k, v] of Object.entries(q)) {
-    const m = /^filter\[(.+)\]$/.exec(k);
-    if (m) filters[m[1]] = v;
+    const m = /^filter\[([^\]]+)\](?:\[([^\]]+)\])?$/.exec(k);
+    if (!m) continue;
+    const [, field, rawOp] = m;
+    const op = rawOp ?? 'eq';
+    if (!FILTER_OPS.includes(op as FilterOp)) {
+      throw new BadRequestError(`Unknown filter operator '${op}' (expected ${FILTER_OPS.join('/')}).`);
+    }
+    filters[field] = { ...filters[field], [op]: v };
   }
   const status = q.status === 'draft' || q.status === 'published' ? q.status : undefined;
   return {
@@ -77,6 +92,7 @@ export function listQuery(c: Context): {
     pageSize: clampPageSize(q.pageSize),
     status,
     sort: parseSort(q.sort),
+    q: typeof q.q === 'string' && q.q.trim() ? q.q : undefined,
     filters,
   };
 }

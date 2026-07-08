@@ -123,6 +123,7 @@ export async function authorize(
     surface: principal.surface,
     action,
     resource: resourceKey(resolved),
+    collection: resolved.collection,
     allowed,
     now,
   });

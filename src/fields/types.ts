@@ -149,6 +149,12 @@ export interface FieldType<Config = unknown, Value = unknown> {
    *  reverse-lookupable); scalar returns emit a single row as before. */
   readonly toIndex?: (v: Value) => string | number | ReadonlyArray<string | number> | null;
 
+  /** (1b) FULL plain text for the FTS5 search index (D28) — unlike `toIndex`,
+   *  which may truncate (markdown/html store a 200-char lead-in), this returns
+   *  the complete searchable text. Omitted ⇒ the engine falls back to the
+   *  field's `toIndex` string output (nothing for non-text values). */
+  readonly toSearchText?: (v: Value) => string | null;
+
   /** Whether this field indexes as multi-valued under `cfg` (its `toIndex` may
    *  return an array). Multi-valued fields cannot be `unique` (all rows would
    *  share one unique_key → false collisions) and cannot be sorted on (the sort

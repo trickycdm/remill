@@ -1,18 +1,26 @@
 import { createFactory } from 'hono/factory';
 import type { Env } from '@/types';
 import { requireAuth, getUser } from '@/lib/auth';
+import { getDb } from '@/db/client';
+import { requirePrincipal } from '@/lib/principal';
+import { nowIso } from '@/lib/now';
+import { listAudit } from '@/services/access';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, Card, CardHeader, CardTitle, CardContent, EmptyState } from '@/components/ui';
+import { PageHeader, Card, CardHeader, CardTitle, CardContent, EmptyState, Badge } from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
 
 /**
- * GET /admin — the dashboard. Phase 1 renders the styled shell + a welcome and
- * "getting started" surface. Live activity/stats arrive with the generated admin
- * (Phase 4) once documents exist to count.
+ * GET /admin — the dashboard: getting-started links + a recent-activity feed
+ * (the audit log's newest rows) for admins. Non-admins keep the empty state —
+ * the role check is UI-hiding only; `listAudit` itself is manage_access-gated.
  */
-export const onRequestGet = factory.createHandlers(requireAuth(), (c) => {
+export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
+  const audit =
+    user.role === 'admin'
+      ? await listAudit(getDb(c.env.DB), requirePrincipal(c), nowIso(), 10)
+      : [];
 
   return c.render(
     <AdminShell user={user} current="dashboard">
@@ -46,10 +54,30 @@ export const onRequestGet = factory.createHandlers(requireAuth(), (c) => {
             <CardTitle>Recent activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <EmptyState
-              title="Nothing yet"
-              description="Activity from you and your agents will appear here once content exists."
-            />
+            {audit.length === 0 ? (
+              <EmptyState
+                title="Nothing yet"
+                description="Activity from you and your agents will appear here once content exists."
+              />
+            ) : (
+              <>
+                <ol class="divide-y divide-border text-sm">
+                  {audit.map((a) => (
+                    <li class="flex items-center gap-2 py-2 first:pt-0 last:pb-0">
+                      <Badge tone={a.allowed ? 'success' : 'danger'}>{a.allowed ? 'allow' : 'deny'}</Badge>
+                      <span class="text-ink">{a.action}</span>
+                      <span class="min-w-0 flex-1 truncate font-mono text-xs text-ink-subtle">{a.resource}</span>
+                      <span class="shrink-0 font-mono text-xs text-ink-subtle">
+                        {a.createdAt.slice(5, 16).replace('T', ' ')}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                <a href="/admin/activity" class="mt-3 inline-block text-sm text-accent-text hover:underline">
+                  All activity →
+                </a>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

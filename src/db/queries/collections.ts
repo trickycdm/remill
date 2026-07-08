@@ -11,6 +11,7 @@
 import { eq } from 'drizzle-orm';
 import type { Database } from '@/db/client';
 import { collections } from '@/db/schema';
+import { documentFts } from '@/db/fts-table';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import type { Grant } from '@/access/grant';
 
@@ -88,5 +89,10 @@ export async function deleteCollectionRow(
   slug: string,
   _grant: Grant,
 ): Promise<void> {
-  await db.delete(collections).where(eq(collections.slug, slug));
+  // Documents/index/revisions cascade via FK; the FTS virtual table has no FK,
+  // so its rows for the collection are cleared in the same batch (D28).
+  await db.batch([
+    db.delete(collections).where(eq(collections.slug, slug)),
+    db.delete(documentFts).where(eq(documentFts.collection, slug)),
+  ]);
 }

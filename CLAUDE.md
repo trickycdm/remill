@@ -22,6 +22,10 @@ rendered public pages + share links.)
 > [`plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`](plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md)
 > have also shipped** (B5 composites deferred), followed by **sharing fabric v2**: teams (D24),
 > agent-mintable share links (D26), Resend email (D20 realized), and raw HTML pages (D25/D27).
+> **Tier 1 of
+> [`plans/2026-07-07-platform_completion_tiered_roadmap/plan.md`](plans/2026-07-07-platform_completion_tiered_roadmap/plan.md)
+> (Phases 1–4) has shipped**: full-text search + filter operators (D28), cron + recoverable delete
+> (D29/D31), MCP parity (D34), and audit surfacing. Tiers 2–3 (Phases 5–11) are planned.
 > Each steering doc carries its own STATUS header; the worklogs have the step-by-step record.
 
 ## The one idea
@@ -58,6 +62,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
   Public ──────────▶ /:c/:slug   Rendered pages (shell or raw HTML, D27) + /s/:token share links (anonymous)
+  Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29)
 
   Routes / DOs → Services (src/services/) → Queries (src/db/queries/) → D1
                         ↑
@@ -70,8 +75,12 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `loadRoutes`, `notFound` — never register routes there by hand.
 - **Services** `src/services/` — all business logic **and all authorization** (`authorize()` before any
   read/write; identity-scoped operations like `/admin/account` skip gating). Call queries, never D1.
+  Includes search (FTS querying), trash (snapshots + recovery), and access (audit, grants).
+- **Jobs** `src/jobs/` — cron-triggered maintenance (per `wrangler.jsonc` triggers). Dispatch handler calls
+  services only; no D1 access. Examples: document retention purge (D29), scheduled publishing (TODO).
 - **Queries** `src/db/queries/` — the **only** layer importing Drizzle; row↔domain mapping is private
-  here; no Drizzle types leak upward.
+  here; no Drizzle types leak upward. Includes search (FTS5 querying via `src/db/fts-table.ts`, kept
+  outside schema.ts), trash (snapshots + restore), and audit reads.
 - **Fields** `src/fields/` — the FieldType registry; one module per type, including `relation.tsx`
   (graph edges and backlinks) and `html.tsx` (D25 trusted raw HTML; powers `renderMode: 'raw'`
   pages, D27). The most important interface in the codebase (SCHEMA_ENGINE.md).
@@ -82,19 +91,25 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `src/components/admin/share-panel.tsx`, the `/api/c/:collection/:id/grants` route, and the MCP
   `share_<slug>` tools; the `share_link` action (D26) lets granted agents mint expiring anonymous
   links over MCP; public invite consumption at `src/routes/auth/set-password/[token].tsx`, team
-  join links at `/auth/join/:token`, "Shared with me" at `/admin/shared`.
+  join links at `/auth/join/:token`, "Shared with me" at `/admin/shared`. Admin also surfaces activity
+  log at `/admin/activity`, search at `/admin/search` (D28), and recoverable delete at `/admin/trash` (D29).
 - **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
-  module owning the MCP protocol surface (decision D18). Tools include `share_<slug>`
-  (subjectKind principal|role|team), `share_link_<slug>` (D26), and `list_teams`.
+  module owning the MCP protocol surface (decision D18). Tools include `share_<slug>` (subjectKind
+  principal|role|team), `share_link_<slug>` (D26 agent-mintable links), `list_teams` (D24), `search_<slug>`
+  + `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
+  (D34 parity), and `list_audit` (audit log access).
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
   Person/Service/Agent display persona), `email/` (`EmailTransport` — Resend + styled templates,
   D20 realized; console stub fallback), `base-url.ts` (resolveBaseUrl for minted links),
-  `lifecycle.ts` (hasLifecycle), `markdown/` (micromark, sanitized); **`src/components/`** Hono JSX with
+  `lifecycle.ts` (hasLifecycle), `fts.ts` (FTS5 MATCH escaping, snippet render), `base64.ts` (strict
+  base64 decode for MCP uploads), `markdown/` (micromark, sanitized); **`src/components/`** Hono JSX with
   `field-view.tsx` (ViewComponent), `document-view.tsx`, `layouts/public-shell.tsx` (read-only
   render); **`src/client/`** browser islands.
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
-operations go through services → queries. All authorization goes through `authorize()` (except permission-free `getSettings()` reads on the render path, mirroring `collectionPublicRead`).
+operations go through services → queries. Cron jobs also call services only. All authorization goes through
+`authorize()` (except permission-free `getSettings()` reads on the render path, and retention purges in
+cron jobs, documented in ACCESS_CONTROL.md). Mirroring `collectionPublicRead`.
 
 ## Security posture (why this project exists)
 
@@ -148,5 +163,6 @@ When a rule here conflicts with existing code, flag it — the doc is usually ri
 
 Background context in `docs/`, read on demand: `docs/PROJECT_BRIEF.md` (the whole-system overview —
 scope, the six surfaces, the Blogmill lineage, current state & direction) and `docs/TECH_DECISIONS.md`
-(the D1–D27 decision log). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
-the **active roadmap** (Tracks A–C) in `plans/2026-07-05-platform_knowledge_publishing_roadmap/`.
+(the D1–D34 decision log). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
+Tracks A–C roadmap in `plans/2026-07-05-platform_knowledge_publishing_roadmap/`; the tiered completion
+roadmap in `plans/2026-07-07-platform_completion_tiered_roadmap/`.

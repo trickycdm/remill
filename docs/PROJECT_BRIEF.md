@@ -113,6 +113,12 @@ item grants. Everything — every allow and every deny — is audited with princ
   public pages at `/{collection}/{slug}` (+ the admin read-only detail view), share links
   (`item_grants` with `subjectKind='link'`, public `/s/:token`), email-share via the stubbed
   transport.
+- **Tier 1 platform completion (Phases 1–4): shipped** — full-text search (FTS5, bm25-ranked, with
+  REST `?q=` + operator filters and MCP `search_<slug>` tool), recoverable delete (trash snapshot,
+  30-day purge, scheduled Worker jobs), MCP content parity (`upload_media`, `revisions_<slug>`,
+  `restore_<slug>`), and audit surfacing (`/admin/activity`, `/api/audit`, MCP `list_audit`). Agents
+  over MCP now have full parity with non-technical admins for all content operations; access-management
+  mutations remain deliberately human-only.
 
 The roadmap with per-phase detail: `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`
 (+ `worklog.md` for what's landed).

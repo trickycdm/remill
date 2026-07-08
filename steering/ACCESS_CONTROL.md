@@ -116,6 +116,14 @@ it into the tool error payload).
 
 ## Audit
 
+The trail is READABLE (completion-roadmap Phase 4): `/admin/activity` (filters + keyset paging),
+the dashboard recent-activity card, REST `GET /api/audit`, and the MCP `list_audit` tool — all
+through `access.listAuditPage`, all gated `manage_access`. Rows carry a denormalized `collection`
+column (stamped by `authorize()`; NULL on rows predating it) because the `resource` string for a
+document doesn't name its collection. Token liveness: `resolvePrincipal` stamps
+`api_tokens.last_used_at` on every authenticated REST/MCP call; the Access page surfaces it per
+token ("used …"/"never used").
+
 Every allow **and** every deny writes an `audit_log` row attributing principal, token (if any),
 surface, action, and resource. Audit writes are append-only — no update or delete path exists in
 code. The audit log is itself readable only with `manage_access`.
@@ -144,6 +152,22 @@ code. The audit log is itself readable only with `manage_access`.
   need: `getSettings()` reads the `settings` singleton's non-sensitive display fields via a witness-free
   query (mirroring `collectionPublicRead`). WRITES to settings still run the full `authorize()`-gated
   document pipeline. Do not widen this to document content.
+- **Trash (D29): `delete` on the collection gates the whole surface** — who can delete can list,
+  restore, and destroy those snapshots; no new action. Listing compiles the caller's own/published
+  delete-conditions into the query (`TrashScope`, mirroring `compileReadFilter` — never post-filter);
+  restore/destroy authorize the ITEM decision with the snapshot's `createdBy`/`status`, so conditions
+  evaluate exactly as against the live document. Metadata-only helpers (`getTrashMeta`,
+  `trashedCollections`) are witness-free (getDocumentMetaForAuth precedent); full snapshot reads
+  demand a Grant.
+- **Witness-free maintenance (D31)**: retention purges (trash; later events) run from cron with no
+  principal — they are maintenance, not authorization decisions, so they are witness-free query
+  functions and write NO audit rows. Keep this category to deletions of derived/expired state; a
+  cron job that touches live content must go through a service with a real decision
+  (see the system-actor pattern when scheduled publishing lands).
+- **Capability pre-checks don't replace authorize()**: `collectionsWithAction` (services/access)
+  scopes cross-collection surfaces (trash; later events) WITHOUT spraying deny rows into the audit
+  log, but every included collection is still `authorize()`d for its Grant and every action taken
+  is an item-level decision.
 
 ## Deferred: field-level access
 

@@ -61,6 +61,8 @@ interface FieldType<Config, Value> {
   toIndex?: (v: Value) =>                        // (1) promoted to document_index for query/sort;
     string | number |                            //     an ARRAY return emits one row PER ELEMENT
     ReadonlyArray<string | number> | null        //     (multi-valued fields, e.g. multi-relation)
+  toSearchText?: (v: Value) => string | null     // (1b) FULL plain text for the FTS5 search index
+                                                 //     (D28); fallback: toIndex's string output
   multiValued?: (cfg: Config) => boolean         // declares the array-return case for this config
   beforeSave?: (v: Value, ctx: SaveCtx) => Value | Promise<Value>
   beforeRender?: (v: Value, ctx: RenderCtx) => unknown | Promise<unknown>
@@ -78,6 +80,11 @@ Rules:
   Zod validator. Never add surface-specific validation.
 - `toIndex` returns a scalar, an array, or null. Omit it for types that can't be meaningfully
   sorted/filtered (e.g. `json`); such fields cannot set `"index": true`.
+- `toSearchText` (D28) feeds the FTS5 search index with the field's FULL plain text — unlike
+  `toIndex`, which may truncate (markdown/html store a 200-char lead-in). Implement it on any type
+  whose `toIndex` truncates or that carries prose; types without it fall back to their `toIndex`
+  string output. Search indexing ignores `index: true` — every field with text is searchable
+  (`?q=`/`search_<slug>` — FTS is its own surface, DATABASE_STANDARDS.md).
 - **Multi-valued indexing:** a type whose `toIndex` may return an array MUST declare it via
   `multiValued(cfg)`. The engine writes one `document_index` row per element (each independently
   filterable — filter matches ANY element — and reverse-lookupable for backlinks), and enforces

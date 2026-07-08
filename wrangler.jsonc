@@ -21,6 +21,13 @@
   "vars": {
     "BASE_URL": "http://127.0.0.1:3100"
   },
+  // Cron triggers (D31), dispatched on controller.cron in src/jobs:
+  //  - per-minute: scheduled-publish drain (activates in the scheduled-publishing
+  //    phase; a cheap no-op selection until then)
+  //  - daily 03:00 UTC: maintenance (trash purge D29; events pruning later)
+  "triggers": {
+    "crons": ["* * * * *", "0 3 * * *"]
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -71,7 +78,10 @@
           "binding": "RATE_LIMIT",
           "id": "00000000000000000000000000000000"
         }
-      ]
+      ],
+      "triggers": {
+        "crons": ["* * * * *", "0 3 * * *"]
+      }
     }
   }
 }

@@ -15,6 +15,8 @@ import type { Database } from '@/db/client';
 import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference } from '@/fields/types';
 import { resolveField, isMultiValued, referencesOf } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
+import { trashDocument as trashDocumentRow } from '@/db/queries/trash';
+import { TRASH_MAX_REVISIONS } from '@/config/retention';
 import { getCollection, listCollections as listCollectionDefs } from '@/db/queries/collections';
 import { getGrantedDocumentIds } from '@/db/queries/grants';
 import { getPrincipalRoleSlugs } from '@/db/queries/roles';
@@ -35,6 +37,8 @@ import type { DocumentRecord } from '@/db/queries/documents';
 
 export type { DocumentRecord } from '@/db/queries/documents';
 export type { ExpandedReference } from '@/fields/types';
+export { FILTER_OPS } from '@/db/queries/documents';
+export type { FilterOp } from '@/db/queries/documents';
 
 /** A read result: the raw document plus (when the collection has referencing
  *  fields) the expansion of each reference into `{id, title, collection}`.
@@ -125,8 +129,10 @@ function coerceNumericFilter(field: FieldDescriptor, raw: string): string {
 /** Build document_index rows for every indexed field (SCHEMA_ENGINE.md surface 1).
  *  A multi-valued `toIndex` returns an array — one row PER ELEMENT, so each edge of
  *  a multi-relation is independently filterable and reverse-lookupable (B1). The
- *  sync layer replaces a document's rows wholesale, so N rows need no query change. */
-function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): dq.IndexValue[] {
+ *  sync layer replaces a document's rows wholesale, so N rows need no query change.
+ *  Exported for the trash restore path (D29), which re-indexes a snapshot against
+ *  the CURRENT definition. */
+export function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): dq.IndexValue[] {
   const rows: dq.IndexValue[] = [];
   for (const field of def.fields) {
     if (!field.index) continue;
@@ -147,6 +153,44 @@ function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): d
     }
   }
   return rows;
+}
+
+/** Build the document's FTS row (D28): `title` from the collection's display
+ *  title field (pickTitleField — same heuristic relation expansion uses), `body`
+ *  from every field with searchable text. Fields need NOT be `index:true` — FTS
+ *  is its own surface. `toSearchText` supplies FULL text (markdown/html strip to
+ *  plain text untruncated); types without it fall back to their string `toIndex`
+ *  output (text/slug/tags/select…). Exported for the rebuild path
+ *  (src/services/search). */
+export function buildSearchText(
+  def: CollectionDefinition,
+  data: Record<string, unknown>,
+): dq.SearchText | null {
+  const titleKey = pickTitleField(def);
+  const rawTitle = titleKey ? data[titleKey] : undefined;
+  const title = typeof rawTitle === 'string' && rawTitle.length ? rawTitle : null;
+
+  const parts: string[] = [];
+  for (const field of def.fields) {
+    if (field.key === titleKey) continue; // already the weighted title column
+    const { ft } = resolveField(field);
+    const v = data[field.key];
+    if (v === null || v === undefined) continue;
+    let text: string | null = null;
+    if (ft.toSearchText) {
+      text = ft.toSearchText(v as never);
+    } else if (ft.toIndex) {
+      const idx = ft.toIndex(v as never);
+      const strings = (Array.isArray(idx) ? idx : [idx]).filter(
+        (x): x is string => typeof x === 'string',
+      );
+      text = strings.length ? strings.join(' ') : null;
+    }
+    if (text) parts.push(text);
+  }
+  const body = parts.join('\n');
+  if (!title && !body) return null;
+  return { title, body };
 }
 
 /** True when a batch failed on the document_index unique index (COR-8) — the
@@ -446,10 +490,49 @@ export interface ListParams {
    *  it supersedes `page` (COR-7). Obtain it from a prior result's `nextCursor`. */
   readonly cursor?: string;
   readonly status?: 'draft' | 'published';
-  /** Exact-match filters by field key (REST `?filter[field]=`). */
-  readonly filters?: Record<string, string>;
+  /** Filters by field key (REST `?filter[field]=` / `?filter[field][op]=`, D28).
+   *  A plain string is an exact match; an object carries operator → value
+   *  entries, so a range is `{ gte: '10', lte: '20' }` on one field. */
+  readonly filters?: Record<string, string | Readonly<Partial<Record<dq.FilterOp, string>>>>;
   /** Sort by field key + direction (REST `?sort=field` / `?sort=-field`). */
   readonly sort?: { field: string; dir: 'asc' | 'desc' };
+}
+
+/** Cap on `in` filter set size (D28) — bounds the compiled IN (...) list. */
+export const MAX_IN_FILTER_VALUES = 20;
+
+/** Compile one field's filter spec into ListFilters, validating op semantics. */
+function compileFilters(
+  def: CollectionDefinition,
+  fieldKey: string,
+  spec: string | Readonly<Partial<Record<dq.FilterOp, string>>>,
+): dq.ListFilter[] {
+  const field = assertIndexed(def, fieldKey, 'filter');
+  const kind = indexKind(field);
+  const entries: [string, string][] =
+    typeof spec === 'string' ? [['eq', spec]] : Object.entries(spec).map(([o, v]) => [o, String(v)]);
+  return entries.map(([op, value]) => {
+    if (!dq.FILTER_OPS.includes(op as dq.FilterOp)) {
+      throw new BadRequestError(`Unknown filter operator '${op}' (expected ${dq.FILTER_OPS.join('/')}).`);
+    }
+    if (op === 'contains' && kind === 'num') {
+      throw new BadRequestError(`Field '${fieldKey}' is numeric; 'contains' applies to text fields.`);
+    }
+    if (op === 'in') {
+      const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!parts.length || parts.length > MAX_IN_FILTER_VALUES) {
+        throw new BadRequestError(`'in' filter takes 1–${MAX_IN_FILTER_VALUES} comma-separated values.`);
+      }
+      const coerced = kind === 'num' ? parts.map((p) => coerceNumericFilter(field, p)) : parts;
+      return { fieldKey, kind, op: op as dq.FilterOp, value: coerced.join(',') };
+    }
+    return {
+      fieldKey,
+      kind,
+      op: op as dq.FilterOp,
+      value: kind === 'num' ? coerceNumericFilter(field, value) : value,
+    };
+  });
 }
 
 export interface ListResult {
@@ -509,11 +592,7 @@ export async function listDocuments(
   let sort: dq.ListSort | undefined;
   const rawFilters = Object.entries(params.filters ?? {});
   if (rawFilters.length || params.sort) {
-    filters = rawFilters.map(([fieldKey, value]) => {
-      const field = assertIndexed(def, fieldKey, 'filter');
-      const kind = indexKind(field);
-      return { fieldKey, kind, value: kind === 'num' ? coerceNumericFilter(field, value) : value };
-    });
+    filters = rawFilters.flatMap(([fieldKey, spec]) => compileFilters(def, fieldKey, spec));
     if (params.sort) {
       const field = assertIndexed(def, params.sort.field, 'sort');
       // A multi-valued field has N index rows per document; the sort correlated
@@ -642,6 +721,7 @@ export async function createDocument(
         now,
         publishedAt,
         index: buildIndex(def, data),
+        search: buildSearchText(def, data),
       },
       grant,
     );
@@ -706,6 +786,7 @@ export async function updateDocument(
         publishedAt: existing.publishedAt,
         revision: await dq.nextRevisionNumber(db, id),
         index: buildIndex(def, data),
+        search: buildSearchText(def, data),
       },
       grant,
     );
@@ -789,6 +870,7 @@ export async function setPublished(
       publishedAt,
       revision: await dq.nextRevisionNumber(db, id),
       index: buildIndex(def, existing.data),
+      search: buildSearchText(def, existing.data),
     },
     grant,
   );
@@ -796,6 +878,10 @@ export async function setPublished(
   return { ...existing, status, updatedAt: now, publishedAt };
 }
 
+/** Delete = snapshot-then-delete (D29): the document + its newest revisions are
+ *  copied into `document_trash`, then the original row is hard-deleted (FK
+ *  cascades clear index/revisions/grants; the FTS row goes in the same batch).
+ *  Recoverable from /admin/trash (or REST /api/trash) for TRASH_RETENTION_DAYS. */
 export async function deleteDocument(
   db: Database,
   principal: Principal,
@@ -807,7 +893,26 @@ export async function deleteDocument(
   const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
   if (!existing) throw new NotFoundError('Document');
   const grant = await authorize(db, principal, 'delete', { collection: collectionSlug, documentId: id }, now);
-  await dq.deleteDocument(db, id, grant);
+  const revisions = (await dq.listRevisions(db, id, readGrant))
+    .slice(0, TRASH_MAX_REVISIONS)
+    .map((r) => ({ revision: r.revision, data: r.data, savedBy: r.savedBy, savedAt: r.savedAt }));
+  await trashDocumentRow(
+    db,
+    {
+      documentId: id,
+      collection: collectionSlug,
+      data: existing.data,
+      status: existing.status,
+      revisions,
+      createdBy: existing.createdBy,
+      createdAt: existing.createdAt,
+      updatedAt: existing.updatedAt,
+      publishedAt: existing.publishedAt,
+      deletedBy: principal.id,
+      deletedAt: now,
+    },
+    grant,
+  );
 }
 
 /** Restore a prior revision as a new save (append-only history is preserved). */

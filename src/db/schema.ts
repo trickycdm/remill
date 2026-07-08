@@ -31,6 +31,10 @@ export const auditLog = sqliteTable(
     surface: text('surface').notNull(), // 'admin' | 'rest' | 'mcp'
     action: text('action').notNull(),
     resource: text('resource').notNull(), // e.g. 'collection:posts' or 'document:doc_x'
+    // The resource's collection, denormalized for filtering (the `resource`
+    // string for a document doesn't carry it). Nullable: rows predating the
+    // activity surface have NULL here (rendered as —).
+    collection: text('collection'),
     allowed: integer('allowed').notNull(), // 0/1
     createdAt: text('created_at').notNull(),
   },
@@ -160,6 +164,39 @@ export const documentRevisions = sqliteTable(
   (t) => [
     uniqueIndex('document_revisions_doc_rev_unique').on(t.documentId, t.revision),
     index('document_revisions_doc_idx').on(t.documentId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Document trash — recoverable delete (D29). Deleting a document SNAPSHOTS it
+// (data + its newest revisions) here, then hard-deletes the original so the FK
+// cascades clear index/revisions/grants — zero changes to any read path, and
+// uniqueness checks stay exact. Restore re-inserts under the ORIGINAL id (so
+// relations/backlinks resume) against the CURRENT definition. `collection` has
+// deliberately NO FK: the snapshot must survive collection deletion (restore
+// then 409s). Purged after TRASH_RETENTION_DAYS by the daily maintenance cron.
+// ---------------------------------------------------------------------------
+
+export const documentTrash = sqliteTable(
+  'document_trash',
+  {
+    id: text('id').primaryKey(), // trh_…
+    documentId: text('document_id').notNull(), // the original doc_… id
+    collection: text('collection').notNull(), // slug snapshot, NO FK (see header)
+    dataJson: text('data_json').notNull(),
+    status: text('status').notNull(), // 'draft' | 'published' at deletion time
+    revisionsJson: text('revisions_json').notNull().default('[]'), // newest ≤20
+    createdBy: text('created_by'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    publishedAt: text('published_at'),
+    deletedBy: text('deleted_by'),
+    deletedAt: text('deleted_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('document_trash_document_unique').on(t.documentId),
+    index('document_trash_deleted_at_idx').on(t.deletedAt),
+    index('document_trash_collection_idx').on(t.collection),
   ],
 );
 

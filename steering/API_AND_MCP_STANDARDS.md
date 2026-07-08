@@ -54,6 +54,15 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
 - **Listing** supports `?filter[field]=`, `?sort=`, `?page=`, `?status=`. Filtering and sorting are
   only allowed on **indexed** fields (those with `index: true`, present in `document_index`).
   Requesting a filter/sort on a non-indexed field returns a structured 400 — never silently ignore it.
+- **Filter operators (D28)**: `?filter[field][op]=value` with `op` ∈ `eq` (default) / `gte` / `lte` /
+  `contains` (text kinds only — 400 on numeric) / `in` (comma-separated, ≤20 values). Operator
+  entries on one field merge into a range (`filter[views][gte]=10&filter[views][lte]=20`). Unknown
+  op → 400. Caveat: `contains` sees only what `toIndex` stored — for markdown/html that is a
+  200-char lead-in; use `?q=` for full text.
+- **Full-text search (D28)**: `?q=` on the per-collection list runs FTS5 (words ANDed, last word
+  prefix-matched, bm25-ranked — so `q` + `sort` is a 400). Response items are search hits
+  `{id, collection, title, snippet, status, updatedAt}` with `hasMore` (offset paging, no total).
+  The caller's compiled read filter applies in-query per collection, same as lists.
 - **Permission-filtered lists**: the query applies the SQL predicates compiled by the access module
   (ACCESS_CONTROL.md). **Never post-filter in memory** — pagination counts must match the filtered
   set exactly.
@@ -72,8 +81,18 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   target, and each SOURCE collection is queried under the caller's own compiled filter, so a
   referrer the reader cannot see is simply absent. Capped per source collection (display, not
   pagination).
+- **Audit (Phase 4)**: `GET /api/audit` (and the MCP `list_audit` tool, visible with
+  `manage_access`) reads the audit trail — filters `principal/action/collection/result/surface`,
+  keyset `cursor` paging, newest first.
+- **Trash (D29)**: `DELETE /api/c/:collection/:id` moves to trash (recoverable ~30 days), it no
+  longer destroys. `GET /api/trash` lists entries across collections the caller can `delete`
+  (conditions applied in-query); `POST /api/trash/:id/restore` restores under the original id
+  (409 when the collection is gone or the id/unique value was re-taken);
+  `DELETE /api/trash/:id` destroys permanently.
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
+  Static (non-generated) endpoints like `/api/trash` must be hand-added in `staticPaths()`
+  (src/lib/openapi.ts) — the generator only iterates collections.
 - **Rate-limit headers** are stubbed in v1 (`X-RateLimit-*` present, not enforced). Wire real limits
   post-v1.
 
@@ -84,15 +103,24 @@ A direct streamable-HTTP JSON-RPC endpoint at `/mcp` (`src/mcp/handler.ts` + `to
 tokens** as REST.
 
 - **Tools are generated per collection** from field descriptors (surface 6), not hand-listed:
-  - Per collection: `list_<slug>`, `get_<slug>`, `backlinks_<slug>` (reverse links, read-gated),
-    `create_<slug>`, `update_<slug>`, `publish_<slug>`,
+  - Per collection: `list_<slug>` (accepts a `filters` array `{field, op?, value}`, D28),
+    `search_<slug>` (full-text, read-gated, plain-text snippets, D28), `get_<slug>`,
+    `backlinks_<slug>` (reverse links, read-gated), `revisions_<slug>` (read-gated, D34),
+    `restore_<slug>` (update-gated — restoring a revision IS an update, D34),
+    `create_<slug>`, `update_<slug>`, `delete_<slug>` (delete-gated; moves to trash,
+    recoverable ~30 days — D29), `publish_<slug>`,
     `share_<slug>` (item grant; `subjectKind: 'principal' | 'role' | 'team'`; visible only with
     `manage_access`), and `share_link_<slug>` (anonymous share link, D26 — see below)
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
   - Schema management: `list_collections`, `create_collection`, `update_collection`
     (require `manage_schema`).
   - Teams: `list_teams` (visible only with `manage_access`).
-  - Media: `list_media`, `get_media_url`.
+  - Media: `list_media`, `get_media_url`, and `upload_media` (D34 — base64, create-gated,
+    offered only when the route threads the R2 bucket via `McpToolContext`; reuses the REST
+    upload service verbatim: MIME sniffed from bytes, 25 MiB service cap, alt required for
+    images; shares REST's 'upload' rate bucket keyed tokenId-else-IP). Body caps: /mcp accepts
+    8 MiB (`MAX_MCP_BODY_BYTES`, ≈6 MiB effective file after base64); REST JSON stays 1 MiB;
+    files beyond that use REST multipart `POST /api/media`.
   - Resources: published documents exposed as MCP resources for read-heavy clients.
 - **`share_link_<slug>` (D26)** mints an anonymous share link for one document. Visibility and
   gating key on the `share_link` action — not `manage_access`, and not agent-refused. The grant is

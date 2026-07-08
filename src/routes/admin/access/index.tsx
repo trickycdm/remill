@@ -105,13 +105,20 @@ function PrincipalCard({
                 <span class="text-ink-subtle">none</span>
               ) : (
                 tokens.map((t) => (
-                  <form method="post" action="/admin/access/tokens" class="contents">
-                    <input type="hidden" name="op" value="revoke" />
-                    <input type="hidden" name="tokenId" value={t.id} />
-                    <button type="submit">
-                      <Badge tone="neutral">{t.name} ✕</Badge>
-                    </button>
-                  </form>
+                  <span class="inline-flex items-center gap-1.5">
+                    <form method="post" action="/admin/access/tokens" class="contents">
+                      <input type="hidden" name="op" value="revoke" />
+                      <input type="hidden" name="tokenId" value={t.id} />
+                      <button type="submit" aria-label={`Revoke token ${t.name}`}>
+                        <Badge tone="neutral">{t.name} ✕</Badge>
+                      </button>
+                    </form>
+                    {/* Liveness at a glance: resolvePrincipal stamps last_used_at
+                        on every authenticated REST/MCP call. */}
+                    <span class="font-mono text-xs text-ink-subtle">
+                      {t.lastUsedAt ? `used ${t.lastUsedAt.slice(0, 16).replace('T', ' ')}` : 'never used'}
+                    </span>
+                  </span>
                 ))
               )}
             </div>
