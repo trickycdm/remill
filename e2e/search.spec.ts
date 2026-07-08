@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { fillMarkdown } from './helpers/editor';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2: 10/min per
 // CF-Connecting-IP) buckets each file separately. See admin-content.spec.ts.
@@ -17,7 +18,7 @@ test.describe('D28 — full-text search', () => {
     // Create a post whose title carries a unique token.
     await page.goto('/admin/c/posts/new');
     await page.getByLabel(/^title/i).fill(`Search probe ${TOKEN}`);
-    await page.getByLabel(/^body/i).fill(`Body text mentioning ${TOKEN} twice, ${TOKEN}.`);
+    await fillMarkdown(page, /^body/i, `Body text mentioning ${TOKEN} twice, ${TOKEN}.`);
     await page.getByRole('button', { name: /Create Posts/i }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 

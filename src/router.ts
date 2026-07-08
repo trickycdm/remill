@@ -35,6 +35,7 @@ import * as admin_account_profile from './routes/admin/account/profile';
 import * as admin_c_collection_index from './routes/admin/c/[collection]';
 import * as admin_collections_slug_index from './routes/admin/collections/[slug]';
 import * as admin_collections_new from './routes/admin/collections/new';
+import * as admin_media_picker from './routes/admin/media/picker';
 import * as admin_media_upload from './routes/admin/media/upload';
 import * as admin_settings_rebuild_search from './routes/admin/settings/rebuild-search';
 import * as admin_settings_snapshot from './routes/admin/settings/snapshot';
@@ -114,6 +115,8 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/collections/new', ...admin_collections_new.onRequestPost);
 	app.get('/admin/collections/:slug', ...admin_collections_slug_index.onRequestGet);
 	app.post('/admin/collections/:slug', ...admin_collections_slug_index.onRequestPost);
+	app.get('/admin/media/picker', ...admin_media_picker.onRequestGet);
+	app.post('/admin/media/picker', ...admin_media_picker.onRequestPost);
 	app.post('/admin/media/upload', ...admin_media_upload.onRequestPost);
 	app.post('/admin/settings/rebuild-search', ...admin_settings_rebuild_search.onRequestPost);
 	app.post('/admin/settings/snapshot', ...admin_settings_snapshot.onRequestPost);

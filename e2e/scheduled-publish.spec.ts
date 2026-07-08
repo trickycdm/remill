@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { fillMarkdown } from './helpers/editor';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2: 10/min per
 // CF-Connecting-IP) buckets each file separately. See admin-content.spec.ts.
@@ -16,7 +17,7 @@ test.describe('D32 — scheduled publishing', () => {
     // Create a draft post.
     await page.goto('/admin/c/posts/new');
     await page.getByLabel(/^title/i).fill(TITLE);
-    await page.getByLabel(/^body/i).fill('Publishes itself later.');
+    await fillMarkdown(page, /^body/i, 'Publishes itself later.');
     await page.getByRole('button', { name: /Create Posts/i }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 
@@ -41,7 +42,7 @@ test.describe('D32 — scheduled publishing', () => {
     const live = `${TITLE} live`;
     await page.goto('/admin/c/posts/new');
     await page.getByLabel(/^title/i).fill(live);
-    await page.getByLabel(/^body/i).fill('x');
+    await fillMarkdown(page, /^body/i, 'x');
     await page.getByRole('button', { name: /Create Posts/i }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 

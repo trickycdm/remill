@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
+import { fillMarkdown } from './helpers/editor';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2: 10/min per
 // CF-Connecting-IP) buckets each file separately — the suite's many logins would
@@ -22,7 +23,7 @@ test.describe('Phase 4 — generated document admin', () => {
     await page.getByRole('link', { name: /New Posts/i }).first().click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/new$/);
     await page.getByLabel('title').fill('My First Post');
-    await page.getByLabel('body').fill('# Hello\n\nThis is generated.');
+    await fillMarkdown(page, 'body', '# Hello\n\nThis is generated.');
     await page.getByRole('button', { name: /Create Posts/i }).click();
 
     // Redirected to the editor; slug was derived by the field type's beforeSave.
@@ -63,7 +64,7 @@ test.describe('Phase 4 — generated document admin', () => {
     await page.goto('/admin/c/posts/new');
     // Leave required title empty; the browser's native required may block, so fill
     // then clear is unreliable — instead submit with only body and rely on server.
-    await page.getByLabel('body').fill('no title');
+    await fillMarkdown(page, 'body', 'no title');
     // Force submit past native validation by removing the required attr.
     await page.evaluate(() => document.querySelectorAll('[required]').forEach((el) => el.removeAttribute('required')));
     await page.getByRole('button', { name: /Create Posts/i }).click();

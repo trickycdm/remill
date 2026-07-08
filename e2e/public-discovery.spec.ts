@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
+import { fillMarkdown } from './helpers/editor';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2) buckets
 // this file separately. See admin-content.spec.ts.
@@ -46,7 +47,7 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     await page.goto('/admin/c/stories/new');
     await page.getByLabel(/^title/i).fill(PUB);
     await page.getByLabel(/^slug/i).fill(`launch-post-${runId}`);
-    await page.getByLabel(/^body/i).fill('The launch is **now** — read all about it.');
+    await fillMarkdown(page, /^body/i, 'The launch is **now** — read all about it.');
     await page.getByRole('button', { name: /Create Stories/i }).click();
     await page.waitForURL(/\/admin\/c\/stories\/doc_/);
     await page.getByRole('button', { name: 'Publish', exact: true }).click();
@@ -55,7 +56,7 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     // …and one that stays a draft.
     await page.goto('/admin/c/stories/new');
     await page.getByLabel(/^title/i).fill(DRAFT);
-    await page.getByLabel(/^body/i).fill('Not for anyone.');
+    await fillMarkdown(page, /^body/i, 'Not for anyone.');
     await page.getByRole('button', { name: /Create Stories/i }).click();
     await page.waitForURL(/\/admin\/c\/stories\/doc_/);
   });

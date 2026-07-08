@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
+import { fillMarkdown } from './helpers/editor';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2) buckets
 // this file separately from the others.
@@ -8,11 +9,16 @@ test.use({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.42' } });
 
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
-/** Create a doc in `collection`, filling `fields` by label; returns its doc_ id. */
+/** Create a doc in `collection`, filling `fields` by label; returns its doc_ id.
+ *  Markdown fields are CodeMirror islands since D38 — getByLabel would strict-
+ *  violate on the (hidden textarea, CM textbox) pair, so those fill through
+ *  the fillMarkdown helper instead. */
 async function createDoc(page: Page, collection: string, fields: Record<string, string>): Promise<string> {
   await page.goto(`/admin/c/${collection}/new`);
   for (const [label, value] of Object.entries(fields)) {
-    await page.getByLabel(label).fill(value);
+    const isMarkdown = (await page.locator(`[data-md-editor]:has(textarea[name="${label}"])`).count()) > 0;
+    if (isMarkdown) await fillMarkdown(page, new RegExp(`^${label}`, 'i'), value);
+    else await page.getByLabel(label).fill(value);
   }
   await page.getByRole('button', { name: /Create /i }).click();
   await page.waitForURL(new RegExp(`/admin/c/${collection}/doc_`));

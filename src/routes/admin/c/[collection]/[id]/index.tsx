@@ -1,4 +1,5 @@
 import { createFactory } from 'hono/factory';
+import { Script } from 'vite-ssr-components/hono';
 import type { Env } from '@/types';
 import { requireAuth, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
@@ -57,6 +58,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
   return c.render(
     <AdminShell user={user} current="content">
+      {/* Editor islands (D38) — Scripts live in ROUTE files (vite-ssr-components
+          only discovers them here + layouts.tsx, never in shared components). */}
+      <Script src="/src/client/markdown-editor.ts" />
+      <Script src="/src/client/media-picker.ts" />
       <PageHeader
         breadcrumb={[
           { label: 'Content', href: '/admin/c' },

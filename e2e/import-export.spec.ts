@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
+import { fillMarkdown } from './helpers/editor';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2) buckets
 // this file separately. See admin-content.spec.ts.
@@ -21,7 +22,7 @@ test.describe.serial('D37 — import/export', () => {
     // A document to export.
     await page.goto('/admin/c/posts/new');
     await page.getByLabel(/^title/i).fill(ORIGINAL);
-    await page.getByLabel(/^body/i).fill('Round-trip me.');
+    await fillMarkdown(page, /^body/i, 'Round-trip me.');
     await page.getByRole('button', { name: /Create Posts/i }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 
