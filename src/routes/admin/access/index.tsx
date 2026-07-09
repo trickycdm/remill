@@ -314,8 +314,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
         {/* Invite / add a Person */}
         <form
-          method="post"
-          action="/admin/access/users"
+          data-indicator:invbusy=""
+          data-on:submit="!$invbusy && @post('/admin/access/users', {contentType: 'form'})"
           class="mb-4 flex flex-col gap-2 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:flex-wrap sm:items-end"
         >
           <FormField fieldId="invite-name" label="Add a person — name">
@@ -336,10 +336,13 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           <FormField fieldId="invite-password" label="Password (optional)">
             <Input id="invite-password" name="password" type="password" placeholder="blank → email an invite link" />
           </FormField>
-          <Button type="submit" variant="secondary">
+          <Button type="submit" variant="secondary" busy="$invbusy">
             Add person
           </Button>
         </form>
+        {/* Datastar morphs the invite link (+ copy button) into this slot in place;
+            the direct-password path navigates back here via dsRedirect instead. */}
+        <div id="invite-reveal" />
 
         <PersonaGroup
           title="People"

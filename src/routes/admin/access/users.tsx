@@ -1,6 +1,6 @@
 import { createFactory } from 'hono/factory';
 import type { Env } from '@/types';
-import { requireAuth, getUser } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { createUser } from '@/services/access';
@@ -9,8 +9,9 @@ import { resolveBaseUrl } from '@/lib/base-url';
 import { getEmailTransport } from '@/lib/email';
 import { inviteEmail } from '@/lib/email/templates';
 import { nowIso } from '@/lib/now';
-import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, Card, CardContent, Button } from '@/components/ui';
+import { dsRedirect } from '@/lib/datastar-response';
+import { jsonForScript } from '@/lib/json-for-script';
+import { Button } from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -38,33 +39,50 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
     now,
   );
 
-  // Direct-password path: the person can sign in immediately.
-  if (!inviteToken) return c.redirect('/admin/access', 303);
+  // Direct-password path: the person can sign in immediately → navigate back to
+  // the refreshed list. dsRedirect (text/javascript), NOT a 3xx — Datastar would
+  // otherwise follow the redirect into HTML and morph it onto the current page.
+  if (!inviteToken) return dsRedirect(c, '/admin/access');
 
-  // Invite path: build the set-password link, send it (real or stubbed by
-  // config), and surface it once so the admin can hand it over directly.
+  // Invite path: build the set-password link, send it (real or stubbed by config),
+  // then morph it into the form's `#invite-reveal` slot once — with a copy button.
+  // No navigation means no dead POST-only URL and no refresh re-issuing the invite.
   const settings = await getSettings(db);
   const link = `${resolveBaseUrl(c.env, settings, c.req.url)}/auth/set-password/${inviteToken}`;
   const transport = getEmailTransport(c.env, settings);
   await transport.send({ to: String(body.email ?? ''), ...inviteEmail({ link, siteName: settings.siteName }) });
 
-  const user = getUser(c);
-  return c.render(
-    <AdminShell user={user} current="access">
-      <PageHeader title="Invitation created" description="Share this set-password link — it will not be shown again." />
-      <Card>
-        <CardContent class="pt-6">
-          <p class="mb-3 text-sm text-ink-muted">
-            {transport.kind === 'resend'
-              ? 'An invite email was sent. This single-use link expires in 7 days; copy it now if you also want to share it directly.'
-              : 'An invite email was queued (delivery is stubbed in this build). This single-use link expires in 7 days; copy it now if you want to share it directly.'}
-          </p>
-          <code class="block overflow-x-auto rounded-md bg-hover px-4 py-3 font-mono text-sm break-all">{link}</code>
-          <div class="mt-5">
-            <Button href="/admin/access">Back to Access</Button>
-          </div>
-        </CardContent>
-      </Card>
-    </AdminShell>,
+  return c.html(
+    <div id="invite-reveal">
+      <div class="mt-3 rounded-md border border-accent/40 bg-accent/5 p-4" data-signals={jsonForScript({ inviteCopied: false })}>
+        <p class="text-sm font-medium text-ink">Invitation created — copy the link now</p>
+        <p class="mt-0.5 mb-3 text-[13px] text-ink-muted">
+          {transport.kind === 'resend'
+            ? 'An invite email was sent. This single-use link expires in 7 days; copy it if you also want to share it directly.'
+            : 'An invite email was queued (delivery is stubbed in this build). This single-use link expires in 7 days; copy it to share directly.'}
+        </p>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <code
+            id="invite-link"
+            class="min-w-0 flex-1 overflow-x-auto rounded-md bg-hover px-3 py-2 font-mono text-sm break-all"
+          >
+            {link}
+          </code>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            aria-label="Copy invite link to clipboard"
+            data-on:click="navigator.clipboard.writeText(document.getElementById('invite-link').textContent.trim()); $inviteCopied = true"
+          >
+            <span data-show="!$inviteCopied">Copy</span>
+            <span data-show="$inviteCopied" style="display:none">
+              Copied!
+            </span>
+          </Button>
+        </div>
+      </div>
+    </div>,
+    200,
   );
 });
