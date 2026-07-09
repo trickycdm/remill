@@ -119,7 +119,10 @@ export async function buildToolsForPrincipal(
   if (couldDo(perms, principal, 'manage_schema', '*', false)) {
     tools.push({
       name: 'create_collection',
-      description: 'Define a new content type. The body is a collection definition (slug, name, shape, fields[]).',
+      description:
+        'Define a new content type. The body is a collection definition (slug, name, shape, fields[]). ' +
+        'Field keys are lowercase snake_case (^[a-z][a-z0-9_]*$). A slug field is indexed by default so it ' +
+        'serves the pretty public URL; set index:true on any relation field you want backlinks or filtering on.',
       inputSchema: { type: 'object', properties: { definition: { type: 'object' } }, required: ['definition'] },
       handler: async (args) =>
         collectionsService.createCollection(db, principal, args.definition as CollectionDefinition, now()),

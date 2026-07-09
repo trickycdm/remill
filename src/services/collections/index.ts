@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 import type { Database } from '@/db/client';
-import type { CollectionDefinition } from '@/fields/types';
+import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import { requireFieldType, isIndexable, isMultiValued } from '@/fields/registry';
 import * as q from '@/db/queries/collections';
 import { authorize, type Principal } from '@/access';
@@ -51,9 +51,24 @@ export async function getCollectionOrThrow(db: Database, slug: string): Promise<
   return def;
 }
 
+/**
+ * Field-level normalization applied before validation. A `slug` field's whole
+ * purpose is the pretty URL — which the public route (`getDocumentBySlug`) and
+ * the feeds/canonical (`publicUrlOf`) resolve through the index. An un-indexed
+ * slug silently 404s and drops out of RSS/sitemap/OG, so default it to indexed
+ * unless the definition explicitly opts out (`index: false`). Relations still
+ * opt in explicitly: indexing one powers backlinks + relation filters, but
+ * carries a per-edge write cost the author should choose deliberately.
+ */
+function withFieldDefaults(f: FieldDescriptor): FieldDescriptor {
+  if (f.type === 'slug' && f.index === undefined) return { ...f, index: true };
+  return f;
+}
+
 /** Validate + normalize a definition, or throw InputValidationError. */
 export function validateDefinition(input: CollectionDefinition): CollectionDefinition {
   const issues: ErrorDetails[] = [];
+  const fields = Array.isArray(input.fields) ? input.fields.map(withFieldDefaults) : [];
 
   if (!SLUG_RE.test(input.slug)) {
     issues.push({ path: 'slug', message: 'Slug must be lowercase, start with a letter (a-z0-9-).' });
@@ -72,7 +87,7 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
   }
 
   const seen = new Set<string>();
-  (input.fields ?? []).forEach((f, i) => {
+  fields.forEach((f, i) => {
     const at = `fields[${i}]`;
     if (!KEY_RE.test(f.key ?? '')) {
       issues.push({ path: `${at}.key`, message: `Invalid field key '${f.key}'.` });
@@ -145,7 +160,7 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     slug: input.slug,
     name: input.name.trim(),
     shape: input.shape,
-    fields: input.fields,
+    fields,
     workflow: input.workflow,
     access: input.access,
     renderMode: input.renderMode,

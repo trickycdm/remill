@@ -136,6 +136,11 @@ Rules:
 
 - Field `key`s must be unique per collection, `^[a-z][a-z0-9_]*$`, and must not collide with
   engine-reserved keys (`id`, `status`, `createdAt`, `updatedAt`, `publishedAt`, `createdBy`).
+- A `slug` field is **indexed by default** (`index: true` unless explicitly set `false`): its value
+  is the pretty public URL, which `getDocumentBySlug` and `publicUrlOf` (feeds/canonical/OG) resolve
+  through `document_index` — an un-indexed slug silently 404s and drops out of RSS/sitemap. A
+  `relation` you want **backlinks** or filtering on must still set `index: true` explicitly (the
+  reverse-edge lookup reads the relation's index rows; indexing carries a per-edge write cost).
 - `config` is validated by the field type's `configSchema` when the collection is saved. A
   collection definition with an unknown `type` or invalid `config` is rejected — bad definitions
   never reach the database.
