@@ -37,8 +37,8 @@
     {
       "binding": "DB",
       "database_name": "remill",
-      // Replace with your D1 id after `wrangler d1 create remill`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Provisioned by setup-production (WEUR — primary near the UK operator).
+      "database_id": "6baea339-ac8c-44da-8fb2-ac3ead5309a2",
       "migrations_dir": "src/db/migrations"
     }
   ],
