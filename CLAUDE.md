@@ -30,8 +30,8 @@ rendered public pages + share links.)
 > (D29/D31), MCP parity (D34), audit surfacing, scheduled publishing + the system actor (D30/D32),
 > the public discovery pack — rss/sitemap/robots/OG head props + the `/` homepage (D35/D36), the
 > events outbox (D33), import/export + R2 snapshot (D37), the editor islands — CodeMirror markdown
-> + dialog media picker (D38, implements D13/supersedes D12), the revision diff viewer, and bulk
-> list actions (D39). The plan's Deferred/Tier-4 list records what was consciously not built.
+> + dialog media picker (D38, implements D13/supersedes D12), the revision diff viewer, bulk
+> list actions (D39), and public reading templates (D41). The plan's Deferred/Tier-4 list records what was consciously not built.
 > Each steering doc carries its own STATUS header; the worklogs have the step-by-step record.
 
 ## The one idea
@@ -68,7 +68,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
-  Public ──────────▶ /:c/:slug   Rendered pages (shell or raw HTML, D27) + /s/:token share links (anonymous)
+  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41) + /s/:token share links (anonymous)
                      / · /rss.xml · /sitemap.xml · /robots.txt   Discovery pack (D35, anonymous gated reads)
   Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29: purges · D32: publish drain as the system actor)
 
@@ -97,6 +97,12 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **Fields** `src/fields/` — the FieldType registry; one module per type, including `relation.tsx`
   (graph edges and backlinks) and `html.tsx` (D25 trusted raw HTML; powers `renderMode: 'raw'`
   pages, D27). The most important interface in the codebase (SCHEMA_ENGINE.md).
+- **Templates** `src/templates/` — the render-template registry (the code side of the public
+  reading surface); a collection selects a template by name via its `template` key (D41).
+  Includes `article.tsx` (the shipped article reading template), `lib/conventions.ts` (pure
+  heuristics for hero/dek/body/meta field binding), `blog-pack.ts` (the blog-collection
+  scaffold: article template + co-designed collection definition). Templates are code; the
+  registry is closed (`keys.ts`).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
   (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
   invite a person via `users.tsx`, custom roles, token scoping, teams — a grant subject kind, D24 —
@@ -121,10 +127,12 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   base64 decode for MCP uploads), `markdown/` (micromark, sanitized), `def-helpers.ts`
   (titleFieldOf/titleOf/publicUrlOf/excerptFrom — shared title/URL/excerpt heuristics, D35),
   `feeds.ts` (pure RSS/sitemap/robots builders, D35), `ndjson.ts` (import/export, D37), `diff.ts`
-  (LCS line diff for revision compare view, D39); **`src/components/`** Hono JSX with `field-view.tsx`
-  (ViewComponent), `document-view.tsx`, `layouts/public-shell.tsx` (read-only render); **`src/client/`**
-  browser islands: `init.ts` (global loader), `markdown-editor.ts` (CodeMirror 6, D38),
-  `media-picker.ts` (dialog picker, D38).
+  (LCS line diff for revision compare view, D39), `reading-time.ts` (word-count estimate, D41);
+  **`src/components/`** Hono JSX with `field-view.tsx` (ViewComponent), `document-view.tsx`,
+  `layouts/public-shell.tsx` (read-only render), `share-bar.tsx` (reader share UI — copy-link +
+  Web Share, D41), `backlinks.tsx` (relation backlinks list); **`src/client/`** browser islands:
+  `init.ts` (global loader), `markdown-editor.ts` (CodeMirror 6, D38), `media-picker.ts` (dialog
+  picker, D38), `share.ts` (reader share Web Share API, D41).
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
 operations go through services → queries. Cron jobs also call services only. All authorization goes through
@@ -186,6 +194,6 @@ When a rule here conflicts with existing code, flag it — the doc is usually ri
 
 Background context in `docs/`, read on demand: `docs/PROJECT_BRIEF.md` (the whole-system overview —
 scope, the six surfaces, the Blogmill lineage, current state & direction), `docs/TECH_DECISIONS.md`
-(the D1–D39 decision log), and `docs/DEPLOYMENT.md` (Actions-based runbook). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
+(the D1–D41 decision log), and `docs/DEPLOYMENT.md` (Actions-based runbook). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
 Tracks A–C roadmap in `plans/2026-07-05-platform_knowledge_publishing_roadmap/`; the tiered completion
 roadmap in `plans/2026-07-07-platform_completion_tiered_roadmap/`.

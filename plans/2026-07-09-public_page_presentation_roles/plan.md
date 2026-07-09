@@ -324,3 +324,8 @@ live `articles` collection `template:'article'`, publish an article with a hero,
   (article template + collection scaffold); reading time at the template/context layer, not a field hook.
   Cost delta: one additive `template` column migration (roles needed none), for a far smaller blast radius
   and clean separation of presentation from schema.
+- 2026-07-09: **SHIPPED** — all 5 phases merged to main via PR #13, released as **v1.1.0** (CI applied
+  remote D1 migration 0012 + deployed to remill.org), and rolled out live (the `articles` collection
+  set to `template:'article'` over MCP). Verified on production: hero-first (was bottom), no slug row,
+  excerpt→standfirst, reading time, share bar, home link. Deferred (not built): admin template picker,
+  a second template/pack, `beforeRender`-into-public, slot-mapping.
