@@ -8,9 +8,8 @@ import { nowIso } from '@/lib/now';
 import { MarketingShell } from '@/components/layouts/marketing-shell';
 import {
   MarketingHero,
-  CalmAdminSplit,
-  OutcomesLedger,
-  SixSurfaces,
+  EverySurface,
+  TrustBento,
   AgentQuickstart,
   PublishedIndex,
 } from '@/components/marketing';
@@ -34,9 +33,8 @@ export const onRequestGet = factory.createHandlers(async (c) => {
   return c.render(
     <MarketingShell>
       <MarketingHero />
-      <CalmAdminSplit />
-      <OutcomesLedger />
-      <SixSurfaces />
+      <EverySurface />
+      <TrustBento />
       <AgentQuickstart baseUrl={baseUrl} />
       <PublishedIndex sections={sections} settings={settings} />
     </MarketingShell>,

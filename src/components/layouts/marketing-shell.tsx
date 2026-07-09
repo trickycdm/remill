@@ -6,7 +6,8 @@
  *
  * Accessibility contract mirrors the other shells (A11Y_STANDARDS.md): skip
  * link first → #main-content, exactly one <main>, header/footer landmarks.
- * The top iris hairline is the brand's one flourish (as on AuthShell).
+ * The iris accent statement is the hero band itself (MarketingHero), so the
+ * shell chrome stays quiet — no top hairline competing with it.
  */
 
 import { Wordmark } from '@/components/auth-shell';
@@ -24,12 +25,16 @@ export function MarketingShell({ children }: { children?: unknown }) {
         Skip to content
       </a>
 
-      {/* A very quiet accent hairline at the top — the one flourish. */}
-      <div aria-hidden="true" class="h-0.5 w-full bg-accent/70" />
-
       <header class="border-b border-border">
-        <nav aria-label="Main" class="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-6">
-          <a href="/" aria-label="remill home" class="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <nav
+          aria-label="Main"
+          class="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-6"
+        >
+          <a
+            href="/"
+            aria-label="remill home"
+            class="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             <Wordmark />
           </a>
           <div class="flex items-center gap-6">

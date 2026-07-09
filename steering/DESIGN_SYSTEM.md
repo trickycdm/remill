@@ -21,7 +21,9 @@ precise — memorable through restraint, not decoration. The signatures:
   Eyebrows, metadata, IDs, and timestamps are mono-caps — the "content tool" tell.
 - **One quiet accent: iris ink.** A muted blue-violet, like fountain-pen ink,
   deliberately distinct in hue from all four status colours so "brand" never reads
-  as "status". Used sparingly: primary actions, active nav, focus, selection.
+  as "status". Used sparingly in the admin: primary actions, active nav, focus,
+  selection. The **marketing homepage** is the one surface that uses it as a
+  full-bleed colour field (the hero band) — see Contrast for the rules that keep it AA.
 - **Hairlines over boxes.** Structure comes from generous whitespace and 1px rules,
   not heavy shadows or fills. Radii are restrained; motion is subtle and always
   reduced-motion-safe.
@@ -56,6 +58,16 @@ never raw hex. Need a colour? Reference the token name below.
 **Contrast:** every text/background pairing meets WCAG 2.1 AA in both themes; base
 status tokens are text-safe, solids (`accent`, `danger-solid`) are tuned for AA
 white text. Non-obvious ratios are noted inline in `tailwind.css`.
+
+**Contrast on tinted / accent-fill backgrounds.** The AA guarantee above is tuned for
+text on `canvas`/`surface`. On a **tinted `-soft` wash** (`accent-soft`, the semantic
+`-soft`s), `text-ink-subtle` drops below 4.5:1 in dark mode — it is AA only on
+canvas/surface, so use `text-ink-muted` for meta text on tinted bands. On a **solid
+`accent` fill**, all text is `accent-fg` (white); build hierarchy with size/weight,
+never opacity, so nothing dips below AA. The accent-fill `Button` is invisible there —
+invert the primary CTA to a paper button (`bg-surface-raised` + `text-accent-text`) and
+force the focus ring white (`focus-visible:outline-accent-fg`), since the default iris
+ring vanishes on iris. Always axe any accent surface in **both** themes.
 
 ### Theming mechanism
 

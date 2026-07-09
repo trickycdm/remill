@@ -22,7 +22,10 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
 
     // Create the collection only if a prior run didn't already.
     const existing = await page.goto('/admin/collections/stories');
-    if (existing?.status() !== 200 || !(await page.getByRole('heading', { name: /stories/i }).count())) {
+    if (
+      existing?.status() !== 200 ||
+      !(await page.getByRole('heading', { name: /stories/i }).count())
+    ) {
       await page.goto('/admin/collections/new');
       await page.getByLabel(/^Name/).fill('Stories');
       await page.getByLabel(/^Slug/).fill('stories');
@@ -61,7 +64,9 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     await page.waitForURL(/\/admin\/c\/stories\/doc_/);
   });
 
-  test('rss.xml serves the published doc, never the draft; ?collection narrows', async ({ browser }) => {
+  test('rss.xml serves the published doc, never the draft; ?collection narrows', async ({
+    browser,
+  }) => {
     const anon = await browser.newContext();
     const anonPage = await anon.newPage();
 
@@ -81,7 +86,9 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     await anon.close();
   });
 
-  test('sitemap.xml lists the published URL; robots.txt shields protected surfaces', async ({ browser }) => {
+  test('sitemap.xml lists the published URL; robots.txt shields protected surfaces', async ({
+    browser,
+  }) => {
     const anon = await browser.newContext();
     const anonPage = await anon.newPage();
 
@@ -98,7 +105,9 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     await anon.close();
   });
 
-  test('homepage renders published docs for anonymous, never drafts; axe-clean', async ({ browser }) => {
+  test('homepage renders published docs for anonymous, never drafts; axe-clean', async ({
+    browser,
+  }) => {
     // Manual contexts don't inherit the config's `use` options — re-state
     // reducedMotion so axe reads resting colors, not mid-entrance frames.
     const anon = await browser.newContext({ reducedMotion: 'reduce' });
@@ -115,7 +124,9 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     await anon.close();
   });
 
-  test('homepage marketing chrome: one h1, working CTAs, quickstart; axe-clean in dark', async ({ browser }) => {
+  test('homepage marketing chrome: one h1, working CTAs, quickstart; axe-clean in dark', async ({
+    browser,
+  }) => {
     const anon = await browser.newContext({ reducedMotion: 'reduce' });
     const anonPage = await anon.newPage();
 
@@ -141,12 +152,53 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     // The light-dark() token pairings must stay AA in the dark theme too.
     await anonPage.emulateMedia({ colorScheme: 'dark' });
     const axe = await new AxeBuilder({ page: anonPage }).withTags(WCAG).analyze();
-    expect(axe.violations, `axe on / (dark): ${axe.violations.map((v) => v.id).join(',')}`).toEqual([]);
+    expect(axe.violations, `axe on / (dark): ${axe.violations.map((v) => v.id).join(',')}`).toEqual(
+      [],
+    );
 
     await anon.close();
   });
 
-  test('the public doc page carries composed title, canonical, and OG meta', async ({ browser }) => {
+  test('the surface demo: the Datastar segmented control swaps admin / REST / agents', async ({
+    browser,
+  }) => {
+    const anon = await browser.newContext({ reducedMotion: 'reduce' });
+    const anonPage = await anon.newPage();
+    await anonPage.goto('/');
+
+    const adminPanel = anonPage.locator('#surface-panel-admin');
+    const restPanel = anonPage.locator('#surface-panel-rest');
+    const agentsPanel = anonPage.locator('#surface-panel-agents');
+
+    // Default: the admin list view is shown, the others are display:none.
+    await expect(adminPanel).toBeVisible();
+    await expect(restPanel).toBeHidden();
+    await expect(anonPage.getByRole('tab', { name: 'Admin' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    // REST tab reveals the JSON endpoint and hides the admin panel.
+    await anonPage.getByRole('tab', { name: 'REST API' }).click();
+    await expect(restPanel).toBeVisible();
+    await expect(adminPanel).toBeHidden();
+    await expect(restPanel).toContainText('/api/c/essays');
+    await expect(anonPage.getByRole('tab', { name: 'REST API' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    // Agents tab reveals the MCP tool call.
+    await anonPage.getByRole('tab', { name: 'Agents' }).click();
+    await expect(agentsPanel).toBeVisible();
+    await expect(agentsPanel).toContainText('create_essays');
+
+    await anon.close();
+  });
+
+  test('the public doc page carries composed title, canonical, and OG meta', async ({
+    browser,
+  }) => {
     const anon = await browser.newContext();
     const anonPage = await anon.newPage();
 
