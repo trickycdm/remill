@@ -120,10 +120,12 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Guard — real resource IDs must be committed
+      # Only the TOP-LEVEL (production) section may not contain placeholders — env.preview
+      # keeps a placeholder D1 id by design (the per-PR preview job seds in a real one).
+      - name: Guard — real production resource IDs must be committed
         run: |
-          if grep -q '00000000-0000-0000-0000-000000000000\|"id": "00000000000000000000000000000000"' wrangler.jsonc; then
-            echo "wrangler.jsonc still has placeholder resource IDs — run the provision phase and commit the real IDs first." >&2
+          if awk '/"env":/{exit} {print}' wrangler.jsonc | grep -qE '00000000-0000-0000-0000-000000000000|00000000000000000000000000000000'; then
+            echo "wrangler.jsonc still has placeholder PRODUCTION resource IDs — run the provision phase and commit the real IDs first." >&2
             exit 1
           fi
 
