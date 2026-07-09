@@ -29,6 +29,11 @@ on:
         description: 'Email for the bootstrapped first admin (finalize only)'
         required: false
         default: 'colimack@icloud.com'
+      recreate_empty_d1:
+        description: 'provision only: delete + recreate the remill D1 in WEUR (refuses if it has any tables)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: remill-production
@@ -53,8 +58,30 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Create D1 database (remill)
-        run: bunx wrangler d1 create remill || echo "D1 'remill' already exists (ok)"
+      # D1 pins its primary to the region it was created from; GitHub runners are US-based,
+      # so an unhinted create lands in WNAM. This deployment is operated from the UK — hint
+      # WEUR. The recreate path exists to fix a mis-located EMPTY database and refuses to
+      # touch one that has any user tables.
+      # NOTE: `d1 execute <name>` resolves the name through wrangler.jsonc first, and the
+      # committed placeholder/stale database_id would break it — move the config aside so
+      # wrangler resolves the name via the account API instead.
+      - name: Recreate empty D1 in WEUR (guarded, opt-in)
+        if: inputs.recreate_empty_d1
+        run: |
+          mv wrangler.jsonc /tmp/wrangler.jsonc.aside
+          N=$(bunx wrangler d1 execute remill --remote --json \
+              --command "SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE '\_cf\_%' ESCAPE '\' AND name NOT LIKE 'sqlite\_%' ESCAPE '\'" \
+              | jq -r '.[0].results[0].n')
+          if [ "$N" != "0" ]; then
+            echo "Refusing to delete D1 'remill': it has $N table(s)." >&2
+            exit 1
+          fi
+          bunx wrangler d1 delete remill -y
+          mv /tmp/wrangler.jsonc.aside wrangler.jsonc
+          echo "Empty D1 'remill' deleted; the next step recreates it in WEUR."
+
+      - name: Create D1 database (remill, WEUR)
+        run: bunx wrangler d1 create remill --location weur || echo "D1 'remill' already exists (ok)"
 
       - name: Create KV namespaces (rate limiter, prod + preview)
         run: |
@@ -68,10 +95,12 @@ jobs:
 
       # The IDs printed here get committed into wrangler.jsonc (d1_databases[].database_id
       # and kv_namespaces[].id for both top-level and env.preview) before running finalize.
+      # `d1 list` is config-independent (unlike `d1 info <name>`, which resolves the name
+      # through the possibly-placeholder database_id in wrangler.jsonc).
       - name: Print resource IDs (copy into wrangler.jsonc)
         run: |
-          echo "=== D1 remill ==="
-          bunx wrangler d1 info remill --json | jq '{name: .name, uuid: .uuid}'
+          echo "=== D1 databases ==="
+          bunx wrangler d1 list --json | jq 'map({name, uuid, created_at})'
           echo "=== KV namespaces ==="
           bunx wrangler kv namespace list
           echo "=== R2 buckets ==="
