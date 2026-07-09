@@ -40,3 +40,6 @@ test-results/
 
 # Generated (routes are generated from src/routes/**; commit or ignore per Phase 1 decision)
 # src/router.ts
+
+# plan-mode scratch drafts (canonical plans live in dated folders)
+plans/.tmp/
