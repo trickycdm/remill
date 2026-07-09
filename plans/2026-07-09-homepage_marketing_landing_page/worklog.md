@@ -9,4 +9,9 @@
 | 2026-07-09 08:48 | icons | DatabaseIcon/Braces/Bot added to icon.tsx (Lucide paste, sanctioned approach) |
 | 2026-07-09 08:49 | components | marketing-shell.tsx (full-bleed chrome) + marketing.tsx (6 sections); index.tsx rewritten, /admin redirect removed |
 | 2026-07-09 08:50 | tests | marketing.test.tsx (200 on empty install, head props); e2e homepage marketing test added (h1 count, CTA anchors, dark-mode axe) |
-| 2026-07-09 08:52 | verified | type-check 0, lint 0, 336/336 unit tests; tasteskill pre-flight: 0 em-dashes in copy, 2 eyebrows (budget), e2e running |
+| 2026-07-09 08:52 | verified | type-check 0, lint 0, 336/336 unit tests; tasteskill pre-flight: 0 em-dashes in copy, 2 eyebrows (budget) |
+| 2026-07-09 09:00 | e2e fix | code panels need tabindex/role=region/aria-label (WCAG 2.1.1, axe); manual browser contexts need explicit reducedMotion:'reduce' so axe reads resting colors |
+| 2026-07-09 09:05 | e2e green | full suite 60 passed from clean D1 (stale .wrangler/state caused the earlier admin-schema flake) |
+| 2026-07-09 09:04 | screenshots | light + dark full-page verified; both axe sweeps clean; head props confirmed via curl |
+| 2026-07-09 09:10 | PR | #8 opened; CI (Build/Lint/Type-check/Test) pass, Deploy PR preview pass, prod deploy skipped (tag-driven) |
+| 2026-07-09 09:15 | preview verified | https://remill-pr-8.soft-frost-24fb.workers.dev on real CF: favicon 200, MCP URL resolves to preview origin, strict public CSP |
