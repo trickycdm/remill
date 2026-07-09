@@ -99,7 +99,9 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
   });
 
   test('homepage renders published docs for anonymous, never drafts; axe-clean', async ({ browser }) => {
-    const anon = await browser.newContext();
+    // Manual contexts don't inherit the config's `use` options — re-state
+    // reducedMotion so axe reads resting colors, not mid-entrance frames.
+    const anon = await browser.newContext({ reducedMotion: 'reduce' });
     const anonPage = await anon.newPage();
 
     await anonPage.goto('/');
@@ -109,6 +111,37 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
 
     const axe = await new AxeBuilder({ page: anonPage }).withTags(WCAG).analyze();
     expect(axe.violations, `axe on /: ${axe.violations.map((v) => v.id).join(',')}`).toEqual([]);
+
+    await anon.close();
+  });
+
+  test('homepage marketing chrome: one h1, working CTAs, quickstart; axe-clean in dark', async ({ browser }) => {
+    const anon = await browser.newContext({ reducedMotion: 'reduce' });
+    const anonPage = await anon.newPage();
+
+    await anonPage.goto('/');
+
+    // Exactly one h1 (the hero); the writing index is demoted below it.
+    await expect(anonPage.getByRole('heading', { level: 1 })).toHaveCount(1);
+
+    // Primary CTA anchors to the agent quickstart, which shows the MCP endpoint.
+    const cta = anonPage.getByRole('link', { name: 'Connect an agent' });
+    await expect(cta).toHaveAttribute('href', '#connect');
+    await cta.click();
+    await expect(anonPage.getByRole('heading', { name: 'Connect an agent' })).toBeInViewport();
+    await expect(anonPage.locator('#connect')).toContainText('/mcp');
+
+    // Secondary CTA anchors to the published writing index.
+    await expect(anonPage.getByRole('link', { name: 'Browse the writing' })).toHaveAttribute(
+      'href',
+      '#writing',
+    );
+    await expect(anonPage.locator('#writing')).toBeVisible();
+
+    // The light-dark() token pairings must stay AA in the dark theme too.
+    await anonPage.emulateMedia({ colorScheme: 'dark' });
+    const axe = await new AxeBuilder({ page: anonPage }).withTags(WCAG).analyze();
+    expect(axe.violations, `axe on / (dark): ${axe.violations.map((v) => v.id).join(',')}`).toEqual([]);
 
     await anon.close();
   });

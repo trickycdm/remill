@@ -337,6 +337,41 @@ export function Inbox(props: IconProps) {
   );
 }
 
+/** lucide database — storage (homepage six-surfaces list). */
+export function DatabaseIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M3 5V19A9 3 0 0 0 21 19V5" />
+      <path d="M3 12A9 3 0 0 0 21 12" />
+    </Svg>
+  );
+}
+
+/** lucide braces — the JSON REST API (homepage six-surfaces list). */
+export function Braces(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1" />
+      <path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1" />
+    </Svg>
+  );
+}
+
+/** lucide bot — MCP / agent clients (homepage six-surfaces list). */
+export function Bot(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 8V4H8" />
+      <rect width="16" height="12" x="4" y="8" rx="2" />
+      <path d="M2 14h2" />
+      <path d="M20 14h2" />
+      <path d="M15 13v2" />
+      <path d="M9 13v2" />
+    </Svg>
+  );
+}
+
 /** lucide pen-tool — the wordmark accent glyph (writing / milling). */
 export function PenNib(props: IconProps) {
   return (

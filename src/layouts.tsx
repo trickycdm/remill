@@ -61,6 +61,10 @@ export const RootLayout = jsxRenderer(({ children, title, description, canonical
         {canonical ? <link rel="canonical" href={canonical} /> : null}
         {feedUrl ? <link rel="alternate" type="application/rss+xml" title={pageTitle} href={feedUrl} /> : null}
 
+        {/* The pen-nib wordmark glyph in iris ink (dark-aware inside the SVG).
+            Served from public/ — self-hosted, CSP-clean. */}
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SNIPPET }} />
 
         <ViteClient />

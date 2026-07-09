@@ -55,6 +55,9 @@
   --text-display-sm: 1.5rem;
   --text-display-sm--line-height: 1.15;
   --text-display-sm--letter-spacing: -0.015em;
+  --text-display-lg: 3.25rem; /* marketing hero headline */
+  --text-display-lg--line-height: 1.05;
+  --text-display-lg--letter-spacing: -0.025em;
 
   /* ── Neutrals — warm paper & ink ───────────────────────────────────────────
      The editorial signature: warm (not cold-grey) paper in light, a warm
@@ -262,6 +265,10 @@
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes rm-scroll-rise-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 .rm-anim-fade { animation: rm-fade-in 0.18s ease-out; }
 .rm-anim-rise { animation: rm-rise-in 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
@@ -272,6 +279,21 @@
 
 @keyframes rm-spin {
   to { transform: rotate(360deg); }
+}
+
+/* Scroll-driven reveal (marketing page). Progressive on two axes: browsers
+   without animation-timeline render static, and the definition only exists
+   under no-preference so reduced motion stays static (the blanket block below
+   is belt-and-braces). JS-free — the sanctioned alternative to scroll
+   listeners. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .rm-scroll-rise {
+      animation: rm-scroll-rise-in linear both;
+      animation-timeline: view();
+      animation-range: entry 10% entry 45%;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
