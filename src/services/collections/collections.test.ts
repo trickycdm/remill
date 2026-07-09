@@ -41,6 +41,21 @@ describe('collections service — definition validation', () => {
     expect(await svc.getCollection(db, 'articles')).not.toBeNull();
   });
 
+  it('defaults a slug field to indexed (its purpose is the URL), but respects an explicit opt-out', () => {
+    // Regression guard: an un-indexed slug silently 404s on the public route and
+    // drops out of RSS/sitemap/canonical (getDocumentBySlug + publicUrlOf both
+    // resolve via the index). Normalization defaults slug fields to index:true.
+    const def = svc.validateDefinition(
+      bad({ slug: 'posts', fields: [{ key: 'slug', type: 'slug' }, { key: 'body', type: 'markdown' }] }),
+    );
+    expect(def.fields.find((f) => f.key === 'slug')?.index).toBe(true);
+    // A deliberate opt-out (slug used as a plain normalized string, not a URL) survives.
+    const optOut = svc.validateDefinition(
+      bad({ slug: 'posts2', fields: [{ key: 'slug', type: 'slug', index: false }, { key: 'body', type: 'markdown' }] }),
+    );
+    expect(optOut.fields.find((f) => f.key === 'slug')?.index).toBe(false);
+  });
+
   it('accepts publicRead but rejects an inline role→action access map (dead config removed)', async () => {
     // publicRead is the only collection access knob — accepted.
     await svc.createCollection(db, admin, bad({ slug: 'pub', access: { publicRead: true } }), NOW);
