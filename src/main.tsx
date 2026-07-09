@@ -4,7 +4,6 @@ import { securityHeaders } from '@/middleware/security-headers';
 import type { Env } from '@/types';
 import { RootLayout } from '@/layouts';
 import { sessionSetup } from '@/middleware/session';
-import { rateLimit, GLOBAL_RATE_LIMIT } from '@/middleware/rate-limit';
 import { AppError, ForbiddenError } from '@/lib/errors';
 import { dsRedirect, dsError } from '@/lib/datastar-response';
 import { getDb } from '@/db/client';
@@ -33,8 +32,11 @@ app.use(logger());
 // The policies and the surface classifier live in src/middleware/security-headers.
 app.use('*', securityHeaders());
 
-// Soft site-wide rate limit (SEC-2). No-ops without the KV binding (tests).
-app.use('*', rateLimit('global', GLOBAL_RATE_LIMIT));
+// No site-wide rate limiter here by design (D40): a global `app.use('*')` tier
+// did one KV write per dynamic request, which exhausts the Cloudflare free-tier
+// 1,000-writes/day budget under ordinary crawler traffic. Abuse-prone endpoints
+// carry their own tight limiters (login/token/upload/import/join via
+// `rateLimit()`); volumetric abuse is absorbed by Cloudflare's edge DDoS + WAF.
 
 app.use('*', sessionSetup()); // must run before any auth-reading route
 app.use('*', RootLayout);

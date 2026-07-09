@@ -102,10 +102,11 @@ export function listQuery(c: Context): {
 }
 
 /**
- * A JSON response stamped with the REAL rate-limit headers (SEC-2). The limiter
- * middleware records its decision on the context; if it did not run (e.g. the KV
- * binding is absent in tests), fall back to the global tier so REST clients always
- * see a coherent quota.
+ * A JSON response stamped with rate-limit headers (SEC-2). A per-endpoint limiter
+ * (import, media upload) records its decision on the context; if no such limiter
+ * ran on this route, fall back to the nominal global tier so REST clients always
+ * see a coherent quota. There is no site-wide limiter (D40), so read endpoints
+ * report the nominal value rather than a decrementing one.
  */
 export function apiJson(c: Context, body: unknown, status = 200): Response {
   const info = c.get(RATE_LIMIT_INFO_KEY) as RateLimitInfo | undefined;

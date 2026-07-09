@@ -25,8 +25,11 @@ export interface RateLimitTier {
 }
 
 /**
- * Tiers. The global ceiling is a soft site-wide guard; the abuse-prone endpoints
- * (login, token issuance, upload) are far tighter per SECURITY_STANDARDS §8.
+ * Tiers. `GLOBAL_RATE_LIMIT` is NOT applied as a site-wide middleware (D40 —
+ * a per-request `kv.put` exhausted the free-tier KV write budget); it survives
+ * only as the nominal default `apiJson` stamps into `X-RateLimit-*` when a route
+ * carries no per-endpoint limiter. The abuse-prone endpoints (login, token
+ * issuance, upload) enforce their own tight tiers per SECURITY_STANDARDS §8.
  */
 export const GLOBAL_RATE_LIMIT: RateLimitTier = { limit: 1000, windowSeconds: 60 };
 export const LOGIN_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
