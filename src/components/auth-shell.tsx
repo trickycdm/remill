@@ -9,17 +9,11 @@
  * with the admin shell.
  */
 
-import { PenNib } from '@/components/ui/icon';
-
-/** The remill wordmark: a serif logotype with an iris-ink nib accent. */
-export function Wordmark({ class: cls }: { class?: string }) {
-  return (
-    <span class={`inline-flex items-center gap-2 font-serif text-2xl font-semibold tracking-tight text-ink${cls ? ` ${cls}` : ''}`}>
-      <PenNib class="size-5 text-accent-text" />
-      remill
-    </span>
-  );
-}
+// The wordmark now lives in ui/wordmark.tsx (shared with the public masthead);
+// imported for local use and re-exported so existing importers (admin-shell,
+// marketing-shell) keep working against `@/components/auth-shell`.
+import { Wordmark } from '@/components/ui/wordmark';
+export { Wordmark };
 
 export function AuthShell({ children }: { children: unknown }) {
   return (

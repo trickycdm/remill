@@ -171,6 +171,14 @@
    view. Kept deliberately small: readable rhythm, not a theme engine.
 ──────────────────────────────────────────────────────────────────────────── */
 @layer components {
+  /* The standfirst / dek: a larger, muted lead paragraph under an article H1
+     (the `article` reading template). Aligned to the prose measure. */
+  .rm-standfirst {
+    max-width: 65ch;
+    font-size: 1.2rem;
+    line-height: 1.6;
+    color: var(--color-ink-muted);
+  }
   .rm-prose {
     max-width: 65ch;
     line-height: 1.65;

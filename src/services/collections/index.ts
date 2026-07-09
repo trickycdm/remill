@@ -18,6 +18,7 @@ import { authorize, type Principal } from '@/access';
 import { getPrincipalPermissions } from '@/db/queries/roles';
 import { InputValidationError, NotFoundError, ConflictError, ForbiddenError } from '@/lib/errors';
 import { RESERVED_FIELD_KEYS, RESERVED_COLLECTION_SLUGS } from '@/config/constants';
+import { TEMPLATE_KEYS, isTemplateKey } from '@/templates/keys';
 import type { ErrorDetails } from '@/lib/errors';
 
 const SLUG_RE = /^[a-z][a-z0-9-]*$/;
@@ -153,6 +154,12 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
       issues.push({ path: 'renderMode', message: "renderMode 'raw' requires at least one 'html' field." });
     }
   }
+  // The `template` selector must name a REGISTERED reading template (src/templates/).
+  // Closed set, rejected on write (SEC-6) — an unknown key would silently fall back
+  // to the shell, so fail loudly instead.
+  if (input.template !== undefined && input.template !== null && !isTemplateKey(input.template)) {
+    issues.push({ path: 'template', message: `template must be one of: ${TEMPLATE_KEYS.join(', ')}.` });
+  }
 
   if (issues.length) throw new InputValidationError(issues, 'Invalid collection definition');
 
@@ -164,6 +171,7 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     workflow: input.workflow,
     access: input.access,
     renderMode: input.renderMode,
+    template: input.template ?? undefined,
     protected: input.protected ?? false,
   };
 }

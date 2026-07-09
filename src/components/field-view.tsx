@@ -7,17 +7,19 @@
 
 import type { FC } from 'hono/jsx';
 import { resolveField } from '@/fields/registry';
-import type { FieldDescriptor, ExpandedReference } from '@/fields/types';
+import type { FieldDescriptor, ExpandedReference, MediaMeta } from '@/fields/types';
 
 export function FieldView({
   field,
   value,
   expanded,
+  media,
   surface,
 }: {
   field: FieldDescriptor;
   value: unknown;
   expanded?: ExpandedReference | ExpandedReference[];
+  media?: MediaMeta;
   surface: 'admin' | 'public';
 }) {
   const { ft, config } = resolveField(field);
@@ -27,9 +29,12 @@ export function FieldView({
       config: unknown;
       value: unknown;
       expanded?: unknown;
+      media?: unknown;
       surface: 'admin' | 'public';
     }>;
-    return <View field={field} config={config} value={value} expanded={expanded} surface={surface} />;
+    return (
+      <View field={field} config={config} value={value} expanded={expanded} media={media} surface={surface} />
+    );
   }
   if (value == null) return null;
   // Default: escaped text (JSX escapes interpolated strings — no raw HTML path).

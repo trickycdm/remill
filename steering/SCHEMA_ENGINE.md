@@ -48,6 +48,14 @@ FieldType contract against all six surfaces before merging.
   field's value verbatim as the whole page (`rawPageHtml(def, doc)`, bypassing the layout) on
   `/:collection/:slug` and `/s/:token` alike. Validated on write — `raw` requires at least one
   `html` field — and an empty value falls back to shell rendering.
+- **Render template (D41).** Beside `renderMode`, an optional `template` key selects a purpose-built
+  READING layout from the registry (`src/templates/`) for the shell-rendered public page — the code
+  side of the render surface (templates are CODE; the key is DATA — the field-registry grain applied
+  to rendering). Resolved BEFORE the generic `DocumentView` fallback (`renderMode: 'raw'` still wins),
+  rendered inside PublicShell. Validated against the registry on write (unknown key rejected — SEC-6).
+  The shipped `article` template binds fields by CONVENTION (`resolveConventionLayout`: first media =
+  hero, first non-title text = dek, markdown = body, tags/relations = meta, slug never rendered) —
+  presentation lives in code, NEVER as a per-field role in the schema data. See TECH_DECISIONS D41.
 
 ## The FieldType contract
 

@@ -3,9 +3,12 @@ import type { Env } from '@/types';
 import { pathParam } from '@/lib/http';
 import { getDb } from '@/db/client';
 import { resolveShareLink } from '@/services/access';
-import { getSharedDocument, getBacklinks } from '@/services/documents';
+import { getSharedDocument, getBacklinks, buildSearchText } from '@/services/documents';
 import { anonymousPrincipal } from '@/access';
 import { getSettings } from '@/services/settings';
+import { resolveBaseUrl } from '@/lib/base-url';
+import { readingTimeMinutes } from '@/lib/reading-time';
+import { resolveTemplate } from '@/templates/registry';
 import { NotFoundError, ForbiddenError } from '@/lib/errors';
 import { nowIso } from '@/lib/now';
 import { PublicShell, PublicNotFound } from '@/components/layouts/public-shell';
@@ -55,11 +58,21 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       doc.id,
       now,
     );
-    return c.render(
-      <PublicShell settings={settings}>
-        <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" />
-      </PublicShell>,
+    // A shared item renders through the same template as its public page — but
+    // with NO shareUrl (a private link never advertises a public share).
+    const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
+    const tpl = resolveTemplate(def.template);
+    const content = tpl ? (
+      <tpl.Component
+        def={def}
+        doc={doc}
+        backlinks={backlinks}
+        ctx={{ settings, baseUrl, readingMinutes: readingTimeMinutes(buildSearchText(def, doc.data)?.body ?? '') }}
+      />
+    ) : (
+      <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" />
     );
+    return c.render(<PublicShell settings={settings}>{content}</PublicShell>);
   } catch (e) {
     if (e instanceof NotFoundError || e instanceof ForbiddenError) return notFound();
     throw e;
