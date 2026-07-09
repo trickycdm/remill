@@ -3,6 +3,12 @@ name: Preview cleanup
 on:
   pull_request:
     types: [closed]
+  # Manual teardown for a preview the automatic pass missed (see the race note below).
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number whose remill-pr-<N> preview to tear down'
+        required: true
 
 jobs:
   cleanup:
@@ -11,7 +17,7 @@ jobs:
     # Same per-PR group as the preview job in ci.yml: starting teardown cancels any
     # in-flight preview run for this PR so it can't re-create resources after deletion.
     concurrency:
-      group: remill-preview-pr-${{ github.event.pull_request.number }}
+      group: remill-preview-pr-${{ github.event.pull_request.number || inputs.pr_number }}
       cancel-in-progress: true
     permissions:
       contents: read
@@ -34,19 +40,37 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Delete preview Worker and D1
+      # RACE: cancel-in-progress signals the preview run, but a wrangler deploy already in
+      # flight can finish AFTER our delete — "not found" here can mean "not created yet".
+      # So deletion retries over ~90s and only trusts "not found" once it repeats after the
+      # grace window. Real failures (auth, network) surface instead of being swallowed.
+      - name: Delete preview Worker and D1 (race-aware)
         if: steps.guard.outputs.ready == 'true'
         run: |
-          NAME="remill-pr-${{ github.event.pull_request.number }}"
-          # Best-effort: a missing resource (PR never deployed) must not fail the job.
-          bunx wrangler delete "$NAME" --force || echo "Worker $NAME not found (skipping)"
-          bunx wrangler d1 delete "$NAME" -y || echo "D1 $NAME not found (skipping)"
+          NAME="remill-pr-${{ github.event.pull_request.number || inputs.pr_number }}"
+          delete_with_retry() {
+            local what="$1"; shift
+            for attempt in 1 2 3 4; do
+              out=$("$@" 2>&1) && { echo "$what $NAME deleted."; return 0; }
+              if echo "$out" | grep -qiE "does not exist|not found|couldn't be found|could not be found"; then
+                if [ "$attempt" = 4 ]; then echo "$what $NAME not found (nothing to delete)."; return 0; fi
+                echo "$what $NAME not found yet (deploy may still be in flight) — retry $attempt/3 in 30s..."
+                sleep 30
+              else
+                echo "$out" >&2
+                echo "Deleting $what $NAME failed for a reason other than absence." >&2
+                return 1
+              fi
+            done
+          }
+          delete_with_retry "Worker" bunx wrangler delete "$NAME" --force
+          delete_with_retry "D1" bunx wrangler d1 delete "$NAME" -y
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Note teardown on the PR
-        if: steps.guard.outputs.ready == 'true'
+        if: steps.guard.outputs.ready == 'true' && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |

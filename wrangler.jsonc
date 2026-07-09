@@ -86,8 +86,11 @@
           "id": "1346fc21ef8d4fdca77f1c7c774a0bdd"
         }
       ],
+      // No crons on previews: the free plan caps cron triggers at 5 PER ACCOUNT, so
+      // per-PR schedules starve production's two (scheduled publishing + maintenance).
+      // An empty list must be explicit — omitting `triggers` would inherit production's.
       "triggers": {
-        "crons": ["* * * * *", "0 3 * * *"]
+        "crons": []
       }
     }
   }
