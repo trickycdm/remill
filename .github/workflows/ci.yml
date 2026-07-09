@@ -211,3 +211,18 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Re-push Worker secrets on every release so a rotated repo secret takes effect
+      # without a manual wrangler run (mirrors the preview job; RESEND is optional).
+      - name: Push Worker secrets
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          printf 'SESSION_SECRET=%s\n' "${{ secrets.SESSION_SECRET }}" > /tmp/prod-secrets.env
+          if [ -n "${{ secrets.RESEND_API_KEY }}" ]; then
+            printf 'RESEND_API_KEY=%s\n' "${{ secrets.RESEND_API_KEY }}" >> /tmp/prod-secrets.env
+          fi
+          bunx wrangler secret bulk /tmp/prod-secrets.env
+          rm -f /tmp/prod-secrets.env
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

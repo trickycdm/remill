@@ -4,7 +4,11 @@
   "main": "src/main.tsx",
   "compatibility_date": "2025-10-11",
   "compatibility_flags": ["nodejs_compat"],
-  "logpush": true,
+  // Production serves ONLY on the remill.org custom domain (apex, no www) — no workers.dev
+  // host, so minted links (BASE_URL) are the single public origin. NOTE: `logpush` is a
+  // Workers-Paid feature; re-add it here if the account upgrades.
+  "workers_dev": false,
+  "routes": [{ "pattern": "remill.org", "custom_domain": true }],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
@@ -14,12 +18,13 @@
     }
   },
   // BASE_URL feeds resolveBaseUrl (share/join/email links + OpenAPI); it must
-  // match where the app is actually reachable. Local dev + the e2e preview both
-  // serve on 127.0.0.1:3100. EMAIL_FROM is the deploy-time default sender;
-  // settings.emailFrom (admin Settings) overrides it. The Resend key is a
-  // SECRET, never a var: `wrangler secret put RESEND_API_KEY` (local: .dev.vars).
+  // match where the app is actually reachable. This top-level value is PRODUCTION;
+  // local dev + e2e override it via .dev.vars (BASE_URL=http://127.0.0.1:3100).
+  // EMAIL_FROM is the deploy-time default sender; settings.emailFrom (admin
+  // Settings) overrides it. The Resend key is a SECRET, never a var:
+  // `wrangler secret put RESEND_API_KEY` (local: .dev.vars).
   "vars": {
-    "BASE_URL": "http://127.0.0.1:3100"
+    "BASE_URL": "https://remill.org"
   },
   // Cron triggers (D31), dispatched on controller.cron in src/jobs:
   //  - per-minute: scheduled-publish drain (activates in the scheduled-publishing
@@ -56,9 +61,10 @@
   "env": {
     "preview": {
       "name": "remill-preview",
-      "vars": {
-        "BASE_URL": "https://remill-preview.workers.dev"
-      },
+      // Previews DO serve on workers.dev (per-PR hosts; the top-level opt-out is
+      // production-only). No BASE_URL var: each PR gets a different host, and
+      // resolveBaseUrl falls back to the request origin, which is always right.
+      "workers_dev": true,
       "d1_databases": [
         {
           "binding": "DB",
