@@ -75,7 +75,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
       <Card class="mb-6">
         <CardContent class="pt-4">
-          <form method="get" action="/admin/activity" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <form method="get" action="/admin/activity" class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
             <Input name="principal" size="sm" placeholder="Principal id" aria-label="Filter by principal id" value={q.principal ?? ''} />
             <Input name="collection" size="sm" placeholder="Collection" aria-label="Filter by collection" value={q.collection ?? ''} />
             <Select name="action" size="sm" aria-label="Filter by action">

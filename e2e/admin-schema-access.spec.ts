@@ -56,15 +56,19 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await expect(page.getByText('Service', { exact: true }).and(page.locator('span')).first()).toBeVisible();
     await expect(page.getByText('Agent', { exact: true }).and(page.locator('span')).first()).toBeVisible();
 
-    // Issue a token scoped to all collections, read-only → plaintext shown once.
+    // Issue a token. The ScopePicker defaults to the Read-only preset on All
+    // collections, so no scope tweaking is needed for a read-only token.
     const card = page.locator('div', { hasText: 'e2e-bot' });
     await card.getByLabel('New token').first().fill('ci-read');
-    await card.getByLabel('Scope: collection').first().selectOption('*');
-    await card.getByRole('checkbox', { name: 'read', exact: true }).first().check();
     await card.getByRole('button', { name: 'Issue token' }).first().click();
 
-    await expect(page.getByText('Token issued')).toBeVisible();
+    // Datastar morphs the plaintext in place — no navigation (the address bar
+    // stays on /admin/access, so a refresh can't re-mint the token) — with a copy
+    // affordance. The secret is shown exactly once.
+    await expect(page.getByText('New token — copy it now')).toBeVisible();
     await expect(page.getByText(/^rmk_/)).toBeVisible(); // the one-time plaintext
+    await expect(card.getByRole('button', { name: 'Copy' }).first()).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/access$/);
   });
 
   test('roles: create a custom role from the closed action vocabulary', async ({ page }) => {
@@ -76,7 +80,9 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await page.getByLabel('Slug').fill('moderator');
     await page.getByLabel('Name', { exact: true }).fill('Moderator');
     await page.getByLabel('Description').fill('Publish only');
-    await page.getByRole('checkbox', { name: 'publish', exact: true }).check();
+    // The ScopePicker renders the action grid open (advancedOpen) with capitalized
+    // labels; checking Publish flips the preset to Custom and submits action=publish.
+    await page.getByRole('checkbox', { name: 'Publish', exact: true }).check();
     await page.getByRole('button', { name: 'Create role' }).click();
 
     // The new custom role appears with its permission and is editable/deletable.

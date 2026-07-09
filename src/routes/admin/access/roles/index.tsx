@@ -8,9 +8,33 @@ import * as access from '@/services/access';
 import { ACTIONS, type Action } from '@/access';
 import type { PermissionSpec } from '@/access/policy';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, Card, CardContent, Badge, Input, Button, FormField, Breadcrumb } from '@/components/ui';
+import {
+  PageHeader,
+  Card,
+  CardContent,
+  Badge,
+  Input,
+  Button,
+  FormField,
+  Breadcrumb,
+  ScopePicker,
+  ACCESS_ACTION_GROUPS,
+  type ScopePreset,
+} from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
+
+/**
+ * Role permission presets. Unlike a token scope, role permissions are ADDITIVE —
+ * the role can do exactly the checked actions — so "Full" lists every action (an
+ * empty selection means the role can do nothing). `custom` just opens the grid.
+ */
+const ROLE_PRESETS: readonly ScopePreset[] = [
+  { key: 'reader', label: 'Reader', actions: ['read'] },
+  { key: 'editor', label: 'Editor', actions: ['read', 'create', 'update', 'delete', 'publish'] },
+  { key: 'full', label: 'Full', actions: [...ACTIONS] },
+  { key: 'custom', label: 'Custom', actions: null },
+];
 
 /** Actions a role holds on '*' (this UI edits install-wide role permissions; it does
  *  not surface per-collection or conditional grants, which the model still supports —
@@ -28,21 +52,6 @@ function asArray(v: string | string[] | undefined): string[] {
 /** Checked actions → install-wide permission specs. */
 function toPermissions(actions: string[]): PermissionSpec[] {
   return actions.map((a) => ({ collection: '*', action: a as Action }));
-}
-
-function ActionCheckboxes({ checked }: { checked: Set<string> }) {
-  return (
-    <fieldset class="flex flex-col gap-1">
-      <legend class="mb-1 text-xs font-medium text-ink-muted">Permissions (on all collections)</legend>
-      <div class="flex flex-wrap gap-x-3 gap-y-1">
-        {ACTIONS.map((a) => (
-          <label class="inline-flex items-center gap-1 text-sm text-ink-muted">
-            <input type="checkbox" name="action" value={a} checked={checked.has(a)} class="accent-accent" /> {a}
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -64,9 +73,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       <Card class="mb-8">
         <CardContent class="pt-6">
           <h2 class="mb-3 font-serif text-display-sm">New role</h2>
-          <form method="post" action="/admin/access/roles" class="flex flex-col gap-3">
+          <form method="post" action="/admin/access/roles" class="flex flex-col gap-4">
             <input type="hidden" name="op" value="create" />
-            <div class="flex flex-wrap gap-3">
+            <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <FormField fieldId="role-slug" label="Slug">
                 <Input id="role-slug" name="slug" type="text" placeholder="moderator" required />
               </FormField>
@@ -77,7 +86,16 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             <FormField fieldId="role-desc" label="Description">
               <Input id="role-desc" name="description" type="text" placeholder="What this role can do" />
             </FormField>
-            <ActionCheckboxes checked={new Set()} />
+            <ScopePicker
+              idPrefix="new-role"
+              name="action"
+              groups={ACCESS_ACTION_GROUPS}
+              checked={new Set()}
+              presets={ROLE_PRESETS}
+              defaultPreset="custom"
+              advancedOpen
+              help="Additive: the role can do exactly the checked actions, on all collections."
+            />
             <div>
               <Button type="submit">Create role</Button>
             </div>
@@ -114,20 +132,32 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
               {/* Custom roles are editable + deletable; system roles are not. */}
               {!r.system && (
-                <div class="flex flex-wrap items-end gap-4 border-t border-border pt-3">
-                  <form method="post" action="/admin/access/roles" class="flex flex-1 flex-wrap items-end gap-3">
+                <div class="flex flex-col gap-4 border-t border-border pt-3 sm:flex-row sm:items-start">
+                  <form method="post" action="/admin/access/roles" class="flex flex-1 flex-col gap-4">
                     <input type="hidden" name="op" value="update" />
                     <input type="hidden" name="slug" value={r.slug} />
-                    <FormField fieldId={`name-${r.slug}`} label="Name">
-                      <Input id={`name-${r.slug}`} name="name" type="text" value={r.name} required />
-                    </FormField>
-                    <FormField fieldId={`desc-${r.slug}`} label="Description">
-                      <Input id={`desc-${r.slug}`} name="description" type="text" value={r.description ?? ''} />
-                    </FormField>
-                    <ActionCheckboxes checked={starActions(r.permissions)} />
-                    <Button type="submit" variant="secondary">
-                      Save
-                    </Button>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                      <FormField fieldId={`name-${r.slug}`} label="Name">
+                        <Input id={`name-${r.slug}`} name="name" type="text" value={r.name} required />
+                      </FormField>
+                      <FormField fieldId={`desc-${r.slug}`} label="Description">
+                        <Input id={`desc-${r.slug}`} name="description" type="text" value={r.description ?? ''} />
+                      </FormField>
+                    </div>
+                    <ScopePicker
+                      idPrefix={`role-${r.slug}`}
+                      name="action"
+                      groups={ACCESS_ACTION_GROUPS}
+                      checked={starActions(r.permissions)}
+                      presets={ROLE_PRESETS}
+                      defaultPreset="custom"
+                      advancedOpen
+                    />
+                    <div>
+                      <Button type="submit" variant="secondary">
+                        Save
+                      </Button>
+                    </div>
                   </form>
                   <form method="post" action="/admin/access/roles">
                     <input type="hidden" name="op" value="delete" />
