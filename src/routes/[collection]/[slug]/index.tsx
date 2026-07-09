@@ -8,10 +8,13 @@ import { getCollectionOrThrow } from '@/services/collections';
 import { getSettings } from '@/services/settings';
 import { titleOf, publicUrlOf, excerptFrom } from '@/lib/def-helpers';
 import { resolveBaseUrl } from '@/lib/base-url';
+import { readingTimeMinutes } from '@/lib/reading-time';
+import { resolveTemplate } from '@/templates/registry';
 import { NotFoundError, ForbiddenError } from '@/lib/errors';
 import { nowIso } from '@/lib/now';
 import { PublicShell, PublicNotFound } from '@/components/layouts/public-shell';
 import { DocumentView, rawPageHtml } from '@/components/document-view';
+import { Script } from 'vite-ssr-components/hono';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -50,21 +53,38 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
     const siteName = settings.siteName?.trim() || 'remill';
     const body = buildSearchText(def, doc.data)?.body ?? '';
+    const canonical = publicUrlOf(def, doc, baseUrl);
     const mediaField = def.fields.find((f) => f.type === 'media');
     const mediaId = mediaField ? doc.data[mediaField.key] : undefined;
+
+    // A registered template renders the reading layout; otherwise the generic
+    // shell (DocumentView). `renderMode: 'raw'` already short-circuited above.
+    const tpl = resolveTemplate(def.template);
+    const content = tpl ? (
+      <tpl.Component
+        def={def}
+        doc={doc}
+        backlinks={backlinks}
+        ctx={{ settings, baseUrl, readingMinutes: readingTimeMinutes(body), shareUrl: canonical }}
+      />
+    ) : (
+      <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" />
+    );
+
     return c.render(
       <PublicShell settings={settings}>
-        <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" />
+        {content}
+        {/* Reader-share island — a no-op on pages without a share bar (§g). */}
+        {tpl ? <Script src="/src/client/share.ts" /> : null}
       </PublicShell>,
       {
-        title: `${titleOf(def, doc)} — ${siteName}`,
-        description: excerptFrom(body) || undefined,
-        canonical: publicUrlOf(def, doc, baseUrl),
-        ogType: 'article',
-        ogImage: typeof mediaId === 'string' && mediaId.length ? `${baseUrl}/media/${mediaId}` : undefined,
-        feedUrl: '/rss.xml',
-      },
-    );
+      title: `${titleOf(def, doc)} — ${siteName}`,
+      description: excerptFrom(body) || undefined,
+      canonical,
+      ogType: 'article',
+      ogImage: typeof mediaId === 'string' && mediaId.length ? `${baseUrl}/media/${mediaId}` : undefined,
+      feedUrl: '/rss.xml',
+    });
   } catch (e) {
     if (e instanceof NotFoundError || e instanceof ForbiddenError) {
       c.status(404);

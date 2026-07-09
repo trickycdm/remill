@@ -4,7 +4,7 @@
  * documents pipeline, so media has a dedicated store (see MEDIA_STANDARDS.md).
  */
 
-import { eq, desc, like, count, and, or, lt } from 'drizzle-orm';
+import { eq, desc, like, count, and, or, lt, inArray } from 'drizzle-orm';
 import type { Database } from '@/db/client';
 import { media, documents } from '@/db/schema';
 import { eventInsert, type EventInput } from '@/db/queries/events';
@@ -65,6 +65,17 @@ export async function insertMedia(
 export async function getMedia(db: Database, id: string): Promise<MediaRecord | null> {
   const rows = await db.select().from(media).where(eq(media.id, id)).limit(1);
   return rows[0] ? toDomain(rows[0]) : null;
+}
+
+/** Batch-load media records by id (read-path expansion — the relation-expansion
+ *  pattern, no N+1). Returns a Map keyed by id; missing/deleted ids are simply
+ *  absent. Empty input short-circuits. */
+export async function getMediaByIds(db: Database, ids: string[]): Promise<Map<string, MediaRecord>> {
+  const out = new Map<string, MediaRecord>();
+  if (!ids.length) return out;
+  const rows = await db.select().from(media).where(inArray(media.id, ids));
+  for (const r of rows) out.set(r.id, toDomain(r));
+  return out;
 }
 
 /** An opaque forward cursor: the (createdAt, id) of the last row of a page. `id`

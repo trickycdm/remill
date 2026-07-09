@@ -6,15 +6,13 @@
  * public vs admin URLs. No admin imports — this must stay public-safe.
  */
 
-import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
+import type { CollectionDefinition } from '@/fields/types';
 import type { ExpandedDocument, Backlink } from '@/services/documents';
 import { FieldView } from '@/components/field-view';
+import { Backlinks } from '@/components/backlinks';
 import { fieldLabel } from '@/lib/humanize';
 import { hasLifecycle } from '@/lib/lifecycle';
-
-function displayTitleField(def: CollectionDefinition): FieldDescriptor | undefined {
-  return def.fields.find((f) => f.admin?.showInList) ?? def.fields[0];
-}
+import { titleFieldOf } from '@/lib/def-helpers';
 
 /**
  * Raw-mode page body (D27): when the collection opted into `renderMode: 'raw'`,
@@ -41,15 +39,13 @@ export function DocumentView({
   backlinks: Backlink[];
   surface: 'admin' | 'public';
 }) {
-  const titleField = displayTitleField(def);
+  const titleKey = titleFieldOf(def);
+  const titleField = titleKey ? def.fields.find((f) => f.key === titleKey) : undefined;
   const rawTitle = titleField ? doc.data[titleField.key] : undefined;
   const title = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle : def.name;
   const rest = def.fields.filter(
     (f) => f !== titleField && doc.data[f.key] !== undefined && doc.data[f.key] !== null,
   );
-  const backHref = (b: Backlink) =>
-    surface === 'public' ? `/${b.collection}/${b.id}` : `/admin/c/${b.collection}/${b.id}`;
-
   return (
     <article class="flex flex-col gap-6">
       <header>
@@ -75,29 +71,14 @@ export function DocumentView({
               field={field}
               value={doc.data[field.key]}
               expanded={doc.relations?.[field.key]}
+              media={doc.media?.[field.key]}
               surface={surface}
             />
           </div>
         ),
       )}
 
-      {backlinks.length ? (
-        <section aria-labelledby="rm-backlinks-h" class="mt-4 border-t border-border pt-6">
-          <h2 id="rm-backlinks-h" class="font-serif text-lg font-semibold tracking-tight text-ink">
-            Referenced by
-          </h2>
-          <ul class="mt-3 flex flex-col gap-2">
-            {backlinks.map((b) => (
-              <li class="flex flex-wrap items-center gap-2">
-                <a href={backHref(b)} class="text-accent-text hover:underline">
-                  {b.title ?? b.id}
-                </a>
-                <span class="text-xs text-ink-subtle">{b.collection}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <Backlinks backlinks={backlinks} surface={surface} />
     </article>
   );
 }

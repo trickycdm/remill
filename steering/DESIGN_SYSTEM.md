@@ -140,10 +140,14 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
 - **AuthShell** (`components/auth-shell.tsx`) — centered editorial "title page" for
   `/admin/login`: wordmark over a hairline, mono colophon, single card.
 - **PublicShell** (`layouts/public-shell.tsx`, C2) — the anonymous read surface:
-  settings-driven masthead (siteName/siteDescription), centered `max-w-3xl` main,
-  quiet footer. Same a11y contract as AdminShell (skip link → `#main-content`,
-  landmarks); **no admin imports**. Document bodies render via `DocumentView` +
-  the `FieldView` seam; markdown prose styles live in `.rm-prose`
+  the masthead brand is a **home link** (`settings.logo` image, else the shared
+  `Wordmark`), centered `max-w-3xl` main, quiet footer. Same a11y contract as
+  AdminShell (skip link → `#main-content`, landmarks); **no admin imports**.
+  Generic document bodies render via `DocumentView` + the `FieldView` seam; a
+  publicRead collection can instead select a **reading template** (D41,
+  `src/templates/`) — the shipped `article` template composes hero → title →
+  meta (date · reading time) → **standfirst** (`.rm-standfirst`) → body → share →
+  backlinks. Markdown prose styles live in `.rm-prose`; the dek in `.rm-standfirst`
   (`tailwind.css` `@layer components`) — token-driven, not a theme engine.
 - **PageHeader** — the masthead of a content region (optional breadcrumb + eyebrow
   + serif `<h1>` + lede + actions slot). It **owns the space below its hairline**

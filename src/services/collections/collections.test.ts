@@ -91,6 +91,17 @@ describe('collections service — definition validation', () => {
     expect((await svc.getCollection(db, 'shelled'))?.renderMode).toBe('shell');
   });
 
+  it('template must name a registered reading template; round-trips through storage', async () => {
+    // A registered key → accepted and survives the DB round-trip.
+    await svc.createCollection(db, admin, bad({ slug: 'blog', template: 'article' }), NOW);
+    expect((await svc.getCollection(db, 'blog'))?.template).toBe('article');
+
+    // An unknown key → rejected (it would silently fall back to the shell otherwise).
+    await expect(
+      svc.createCollection(db, admin, bad({ slug: 'ghost', template: 'nope' }), NOW),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
   it("B4: accepts lifecycle 'none'; rejects the contradictory none+draftPublish combo", async () => {
     await svc.createCollection(db, admin, bad({ slug: 'records', workflow: { lifecycle: 'none' } }), NOW);
     await expect(

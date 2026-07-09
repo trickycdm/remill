@@ -9,6 +9,7 @@
  */
 
 import type { SiteSettings } from '@/services/settings';
+import { Wordmark } from '@/components/ui/wordmark';
 
 export function PublicShell({ settings, children }: { settings: SiteSettings; children?: unknown }) {
   const siteName = settings.siteName?.trim() || 'remill';
@@ -21,7 +22,17 @@ export function PublicShell({ settings, children }: { settings: SiteSettings; ch
         Skip to content
       </a>
       <header class="border-b border-border py-6">
-        <p class="font-serif text-xl font-semibold tracking-tight text-ink">{siteName}</p>
+        <a
+          href="/"
+          aria-label={`${siteName} home`}
+          class="inline-flex rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+        >
+          {settings.logo ? (
+            <img src={`/media/${settings.logo}`} alt="" class="h-8 w-auto" />
+          ) : (
+            <Wordmark label={siteName} />
+          )}
+        </a>
         {settings.siteDescription ? (
           <p class="mt-1 text-sm text-ink-muted">{settings.siteDescription}</p>
         ) : null}

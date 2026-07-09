@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { FieldView } from '@/components/field-view';
-import type { FieldDescriptor } from '@/fields/types';
+import type { FieldDescriptor, MediaMeta } from '@/fields/types';
 
 /** Render the read-only view seam to an HTML string (Hono JSX). */
 function renderView(
   field: FieldDescriptor,
   value: unknown,
-  opts?: { expanded?: never[] | object; surface?: 'admin' | 'public' },
+  opts?: { expanded?: never[] | object; media?: MediaMeta; surface?: 'admin' | 'public' },
 ): string {
   return String(
     (
@@ -14,6 +14,7 @@ function renderView(
         field={field}
         value={value}
         expanded={opts?.expanded as never}
+        media={opts?.media}
         surface={opts?.surface ?? 'public'}
       />
     ).toString(),
@@ -56,8 +57,16 @@ describe('FieldView — the read-only render seam (C1)', () => {
     expect(renderView(field, 'doc_a')).toContain('doc_a');
   });
 
-  it('media: renders an <img> for the referenced asset', () => {
-    expect(renderView({ key: 'f', type: 'media' }, 'med_x')).toContain('src="/media/med_x"');
+  it('media: renders an <img>, blank alt without expansion, real alt + dims with it', () => {
+    const bare = renderView({ key: 'f', type: 'media' }, 'med_x');
+    expect(bare).toContain('src="/media/med_x"');
+    expect(bare).toContain('alt=""'); // decorative fallback when the record didn't resolve
+    const withMeta = renderView({ key: 'f', type: 'media' }, 'med_x', {
+      media: { id: 'med_x', alt: 'A hero photo', width: 1200, height: 630 },
+    });
+    expect(withMeta).toContain('alt="A hero photo"');
+    expect(withMeta).toContain('width="1200"');
+    expect(withMeta).toContain('height="630"');
   });
 
   it('select: renders the human label; datetime: a semantic <time>', () => {

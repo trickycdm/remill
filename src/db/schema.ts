@@ -116,6 +116,7 @@ export const collections = sqliteTable('collections', {
   accessJson: text('access_json'), // { publicRead?: boolean } | role→action map
   protected: integer('protected').notNull().default(0), // seeded/system collections (0/1)
   renderMode: text('render_mode'), // null/'shell' = branded PublicShell | 'raw' = html field is the page (D27)
+  template: text('template'), // null = generic shell | a registered reading-template key (src/templates/)
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });

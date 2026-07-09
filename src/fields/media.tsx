@@ -70,6 +70,14 @@ export const mediaField: FieldType<MediaConfig, string> = {
   ),
   CellComponent: ({ value }) =>
     value ? <img src={`/media/${value}`} alt="" class="size-8 rounded object-cover" /> : <span class="text-ink-subtle">—</span>,
-  ViewComponent: ({ value }) =>
-    value ? <img src={`/media/${value}`} alt="" class="max-w-full rounded-lg" /> : null,
+  ViewComponent: ({ value, media }) =>
+    value ? (
+      <img
+        src={`/media/${value}`}
+        alt={media?.alt ?? ''}
+        width={media?.width ?? undefined}
+        height={media?.height ?? undefined}
+        class="h-auto max-w-full rounded-lg"
+      />
+    ) : null,
 };

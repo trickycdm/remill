@@ -64,6 +64,11 @@ export interface CollectionDefinition {
    *  CSS); requires at least one html field; an empty value falls back to the
    *  shell so a published page is never blank. */
   readonly renderMode?: 'shell' | 'raw';
+  /** Selects a reading TEMPLATE from the registry (src/templates/) for the public
+   *  page — the code side of the render surface (templates are code; this key is
+   *  data). Absent ⇒ the generic DocumentView shell; `renderMode: 'raw'` still
+   *  wins over any template. Validated against the registry on write. */
+  readonly template?: string;
   readonly protected?: boolean;
 }
 
@@ -104,6 +109,17 @@ export interface ExpandedReference {
   readonly collection: string;
 }
 
+/** Display metadata for a `media` field value, resolved on the read path from the
+ *  `media` table and attached BESIDE data (the relation-expansion posture, B2).
+ *  Lets the media ViewComponent render real alt text + intrinsic dimensions
+ *  instead of a blank alt (C1). */
+export interface MediaMeta {
+  readonly id: string;
+  readonly alt: string | null;
+  readonly width: number | null;
+  readonly height: number | null;
+}
+
 export interface FieldCellProps<Config = unknown, Value = unknown> {
   readonly value: Value | undefined;
   /** The field's validated config — lets a cell render human labels (e.g. a
@@ -122,6 +138,9 @@ export interface FieldViewProps<Config = unknown, Value = unknown> {
   readonly config: Config;
   readonly value: Value | undefined;
   readonly expanded?: ExpandedReference | readonly ExpandedReference[];
+  /** The read path's media-table expansion for THIS field's value, when the field
+   *  is a `media` type and the record resolved (else undefined). */
+  readonly media?: MediaMeta;
   readonly surface: 'admin' | 'public';
 }
 

@@ -12,9 +12,10 @@
 
 import { z } from 'zod';
 import type { Database } from '@/db/client';
-import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference } from '@/fields/types';
+import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference, MediaMeta } from '@/fields/types';
 import { resolveField, isMultiValued, referencesOf } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
+import { getMediaByIds } from '@/db/queries/media';
 import { trashDocument as trashDocumentRow } from '@/db/queries/trash';
 import { TRASH_MAX_REVISIONS } from '@/config/retention';
 import { getCollection, listCollections as listCollectionDefs } from '@/db/queries/collections';
@@ -47,6 +48,9 @@ export type { FilterOp } from '@/db/queries/documents';
  *  writes are unaffected (B2). */
 export type ExpandedDocument = DocumentRecord & {
   readonly relations?: Readonly<Record<string, ExpandedReference | ExpandedReference[]>>;
+  /** Media-table display metadata per `media` field (alt + intrinsic dims),
+   *  attached beside data (C1). Present only for fields whose value resolved. */
+  readonly media?: Readonly<Record<string, MediaMeta>>;
 };
 
 async function loadCollection(db: Database, slug: string): Promise<CollectionDefinition> {
@@ -323,6 +327,54 @@ async function expandRelations(
   });
 }
 
+/**
+ * Attach display metadata (alt text, intrinsic dimensions) for every `media`
+ * field value, batch-loading the `media` table ONCE (the relation-expansion
+ * pattern, no N+1). A SIBLING of data — data keeps the raw media id. Gated once
+ * on `read` of the `media` collection (publicRead, so anonymous readers pass);
+ * a reader who cannot read media — or a deleted asset — simply gets no `media`
+ * sibling, never a throw, so a public page can't 500 over missing alt. Rows come
+ * back unchanged when the collection has no media fields.
+ */
+async function expandMedia(
+  db: Database,
+  principal: Principal,
+  def: CollectionDefinition,
+  rows: ExpandedDocument[],
+  now: string,
+): Promise<ExpandedDocument[]> {
+  const mediaFields = def.fields.filter((f) => f.type === 'media');
+  if (!mediaFields.length || !rows.length) return rows;
+
+  const ids = new Set<string>();
+  for (const field of mediaFields) {
+    for (const row of rows) {
+      const v = row.data[field.key];
+      if (typeof v === 'string' && v) ids.add(v);
+    }
+  }
+  if (!ids.size) return rows;
+
+  try {
+    const resolved = await resolveAccess(db, principal.id, 'media');
+    await authorize(db, principal, 'read', { collection: 'media' }, now, resolved);
+  } catch (e) {
+    if (e instanceof ForbiddenError) return rows; // media unreadable → no expansion
+    throw e;
+  }
+  const loaded = await getMediaByIds(db, [...ids]);
+
+  return rows.map((row) => {
+    const media: Record<string, MediaMeta> = {};
+    for (const field of mediaFields) {
+      const v = row.data[field.key];
+      const rec = typeof v === 'string' ? loaded.get(v) : undefined;
+      if (rec) media[field.key] = { id: rec.id, alt: rec.alt, width: rec.width, height: rec.height };
+    }
+    return Object.keys(media).length ? { ...row, media } : row;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Backlinks — the reverse edges of the graph (B3)
 // ---------------------------------------------------------------------------
@@ -486,7 +538,8 @@ export async function getDocument(
   if (!doc) throw new NotFoundError('Document');
   const def = await loadCollection(db, collectionSlug);
   const [expanded] = await expandRelations(db, principal, def, [doc], now);
-  return expanded;
+  const [withMedia] = await expandMedia(db, principal, def, [expanded], now);
+  return withMedia;
 }
 
 export interface ListParams {
@@ -634,7 +687,8 @@ export async function listDocuments(
   const nextCursor =
     !sort && rows.length === pageSize ? encodeCursor(rows[rows.length - 1]) : undefined;
   const expanded = await expandRelations(db, principal, def, rows, now);
-  return { rows: expanded, total, page, pageSize, nextCursor };
+  const withMedia = await expandMedia(db, principal, def, expanded, now);
+  return { rows: withMedia, total, page, pageSize, nextCursor };
 }
 
 /** Resolve a document by its indexed slug-field value (the public URL path,
