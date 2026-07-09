@@ -65,6 +65,9 @@
       // production-only). No BASE_URL var: each PR gets a different host, and
       // resolveBaseUrl falls back to the request origin, which is always right.
       "workers_dev": true,
+      // `routes` is INHERITABLE: without this explicit empty override every per-PR
+      // preview would claim production's remill.org custom domain (this happened).
+      "routes": [],
       "d1_databases": [
         {
           "binding": "DB",
