@@ -48,12 +48,12 @@
       "bucket_name": "remill-media"
     }
   ],
-  // KV namespace backing the fixed-window rate limiter (SEC-2). Create with
-  // `wrangler kv namespace create RATE_LIMIT` and paste the returned id below.
+  // KV namespace backing the fixed-window rate limiter (SEC-2), provisioned by
+  // the setup-production workflow (title "RATE_LIMIT" on the remill.org account).
   "kv_namespaces": [
     {
       "binding": "RATE_LIMIT",
-      "id": "00000000000000000000000000000000"
+      "id": "d560b68edc67494aa6f45862554e0237"
     }
   ],
   // MCP server (Phase 7) binds an McpAgent Durable Object here.
@@ -82,7 +82,8 @@
       "kv_namespaces": [
         {
           "binding": "RATE_LIMIT",
-          "id": "00000000000000000000000000000000"
+          // Shared across all per-PR preview Workers (title "preview-RATE_LIMIT").
+          "id": "1346fc21ef8d4fdca77f1c7c774a0bdd"
         }
       ],
       "triggers": {
