@@ -11,7 +11,9 @@ rendered public pages + share links.)
 > [Required Reading](#required-reading) table maps each area to its doc. When in doubt, start in
 > steering — don't reinvent conventions from the code.
 
-> **Build status.** All 8 phases (0–7) of
+> **Build status.** **DEPLOYED — live at https://remill.org since 2026-07-09** on Cloudflare (all
+> deploy access GitHub-Actions-only via `.github/workflows/`; tag-driven `v*` releases, per-PR preview
+> Workers with race-aware cleanup). All 8 phases (0–7) of
 > [`plans/2026-07-04-cms-foundation/plan.md`](plans/2026-07-04-cms-foundation/plan.md) are **complete and
 > verified**, and **Track A of the platform roadmap has shipped** (access legibility: personas, invite
 > a person, custom-role CRUD, per-collection token scoping, item-grant Share surface, the access matrix
@@ -154,6 +156,8 @@ bun run db:generate  # Drizzle migration from fixed-table schema changes
 bun run db:migrate   # apply migrations locally
 ```
 
+**Deployment:** Runbook lives at `docs/DEPLOYMENT.md` (GitHub Actions-based two-phase bootstrap, v* tag releases, preview lifecycle, wrangler env inheritance).
+
 ## Required Reading
 
 Map of area → authoritative standard. Start in `steering/` before writing code in that area.
@@ -173,6 +177,7 @@ Map of area → authoritative standard. Start in `steering/` before writing code
 | Any new page/component/interaction (WCAG 2.1 AA)                          | `steering/A11Y_STANDARDS.md`            |
 | Writing unit tests, verifying a change                                    | `steering/TESTING_AND_VERIFICATION.md`  |
 | Playwright e2e, fixtures, auth state, axe sweeps                          | `steering/E2E_TESTING.md`               |
+| Deploys — wrangler.jsonc envs, CI workflows, CF resources, secrets        | `docs/DEPLOYMENT.md`                    |
 | How this repo is steered (the meta-rules)                                 | `AI_NATIVE_REPO_STANDARDS.md`           |
 
 When a rule here conflicts with existing code, flag it — the doc is usually right; the code may be stale.
@@ -180,7 +185,7 @@ When a rule here conflicts with existing code, flag it — the doc is usually ri
 ## Reference Documentation
 
 Background context in `docs/`, read on demand: `docs/PROJECT_BRIEF.md` (the whole-system overview —
-scope, the six surfaces, the Blogmill lineage, current state & direction) and `docs/TECH_DECISIONS.md`
-(the D1–D34 decision log). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
+scope, the six surfaces, the Blogmill lineage, current state & direction), `docs/TECH_DECISIONS.md`
+(the D1–D39 decision log), and `docs/DEPLOYMENT.md` (Actions-based runbook). The completed foundation plan lives in `plans/2026-07-04-cms-foundation/`;
 Tracks A–C roadmap in `plans/2026-07-05-platform_knowledge_publishing_roadmap/`; the tiered completion
 roadmap in `plans/2026-07-07-platform_completion_tiered_roadmap/`.

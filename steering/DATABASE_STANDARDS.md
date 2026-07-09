@@ -203,3 +203,15 @@ ERROR_HANDLING.md.
 **Never edit an applied migration** — create a new one. For destructive changes to the *fixed* schema,
 use expand-contract (add nullable → write both → backfill → switch reads → drop old in a later
 migration). Add `NOT NULL` to a populated column only with a `DEFAULT` in the same `ALTER TABLE`.
+
+## Remote D1 (production) — learned on first deploy (2026-07-09)
+
+- **Always pass `--location` on `wrangler d1 create`** (this deployment: `weur`). D1 pins its
+  primary region at creation from the *caller's* location — an unhinted create from a US-based CI
+  runner lands in WNAM and every UK/EU write pays a transatlantic round-trip forever. Region can
+  only be "fixed" by deleting and recreating while the DB is still empty (the guarded
+  `recreate_empty_d1` step in `setup-production.yml` exists for exactly this).
+- **`wrangler d1 info <name>` / `d1 execute <name>` resolve the name through wrangler.jsonc's
+  `database_id` first** — a placeholder or stale id makes them fail with "database not found" even
+  when the DB exists. For config-independent operations use `wrangler d1 list`, or move the config
+  aside for the command. Full deploy-pipeline gotchas: `docs/DEPLOYMENT.md`.
