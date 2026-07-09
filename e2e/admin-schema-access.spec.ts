@@ -154,10 +154,13 @@ test.describe('Phase 4 — schema builder + access UI', () => {
 
     await page.getByLabel('Add a person — name').fill('Dana Link');
     await page.getByLabel('Email', { exact: true }).fill('dana@remill.local');
-    // Leave the password blank → an invite link is issued and shown once.
+    // Leave the password blank → an invite link is issued and morphed in place
+    // (Datastar reveal, no navigation — the address bar stays on /admin/access).
     await page.getByRole('button', { name: 'Add person' }).click();
 
-    const link = (await page.locator('code').first().innerText()).trim();
+    await expect(page.getByText('Invitation created — copy the link now')).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/access$/);
+    const link = (await page.locator('#invite-link').innerText()).trim();
     expect(link).toContain('/auth/set-password/');
 
     // Visit the link in a fresh session and set a password.

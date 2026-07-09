@@ -131,9 +131,17 @@ jobs:
         id: deploy
         run: |
           bun run build
-          bunx wrangler deploy --env preview > /tmp/deploy.log 2>&1
+          # Stream the deploy output to the step log AND capture it for the URL grep.
+          # It used to be redirected to a file (`> /tmp/deploy.log`) and never printed,
+          # so a failed preview deploy showed 18s of silence then exit 1 — impossible
+          # to diagnose from CI. `tee` + PIPESTATUS keeps wrangler's exit code.
+          set +e
+          bunx wrangler deploy --env preview 2>&1 | tee /tmp/deploy.log
+          status=${PIPESTATUS[0]}
+          set -e
           url="$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' /tmp/deploy.log | head -1)"
           echo "url=${url}" >> "$GITHUB_OUTPUT"
+          exit "$status"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
