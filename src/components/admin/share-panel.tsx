@@ -7,7 +7,7 @@
 
 import type { ItemGrantRecord } from '@/db/queries/grants';
 import { personaOf, PERSONA_LABEL } from '@/lib/persona';
-import { Card, CardContent, Badge, Button, FormField, Select, Input } from '@/components/ui';
+import { Card, CardContent, Badge, Button, FormField, Select, Input, ScopePicker, ACCESS_ACTION_LABELS } from '@/components/ui';
 
 /** Actions meaningful to grant on a single document. */
 const SHARE_ACTIONS = ['read', 'update', 'delete', 'publish'] as const;
@@ -97,7 +97,11 @@ export function SharePanel({
         </div>
 
         {/* Grant form */}
-        <form method="post" action={action} class="flex flex-wrap items-end gap-3 border-t border-border pt-4">
+        <form
+          method="post"
+          action={action}
+          class="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-end"
+        >
           <input type="hidden" name="op" value="grant" />
           <FormField fieldId={`share-subject-${id}`} label="Grant to">
             <Select id={`share-subject-${id}`} name="subject">
@@ -122,16 +126,12 @@ export function SharePanel({
               </optgroup>
             </Select>
           </FormField>
-          <fieldset class="flex flex-col gap-1">
-            <legend class="mb-1 text-xs font-medium text-ink-muted">Actions</legend>
-            <div class="flex flex-wrap gap-x-3 gap-y-1">
-              {SHARE_ACTIONS.map((a) => (
-                <label class="inline-flex items-center gap-1 text-sm text-ink-muted">
-                  <input type="checkbox" name="action" value={a} checked={a === 'read'} class="accent-accent" /> {a}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <ScopePicker
+            idPrefix={`share-${id}`}
+            name="action"
+            groups={[{ label: 'Actions', actions: SHARE_ACTIONS.map((a) => ({ value: a, label: ACCESS_ACTION_LABELS[a] })) }]}
+            checked={new Set(['read'])}
+          />
           <FormField fieldId={`share-expiry-${id}`} label="Expires (optional)">
             <Input id={`share-expiry-${id}`} name="expiresAt" type="datetime-local" />
           </FormField>
@@ -142,7 +142,11 @@ export function SharePanel({
 
         {/* Share link (C3): grants READ to whoever holds the link — an outsider
             needs no account. Plaintext shown once on the next page. */}
-        <form method="post" action={action} class="mt-5 flex flex-wrap items-end gap-3 border-t border-border pt-4">
+        <form
+          method="post"
+          action={action}
+          class="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-end"
+        >
           <input type="hidden" name="op" value="link" />
           <FormField
             fieldId={`share-link-email-${id}`}

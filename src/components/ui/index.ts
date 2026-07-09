@@ -19,6 +19,7 @@ export * from '@/components/ui/select';
 export * from '@/components/ui/textarea';
 export * from '@/components/ui/checkbox';
 export * from '@/components/ui/toggle';
+export * from '@/components/ui/scope-picker';
 export * from '@/components/ui/breadcrumb';
 export * from '@/components/ui/field';
 export * from '@/components/ui/table';

@@ -182,7 +182,6 @@ export function AdminShell({
               type="search"
               id="admin-search-input"
               name="q"
-              size="sm"
               aria-label="Search documents"
               placeholder="Search…  ( / )"
               autocomplete="off"
@@ -225,7 +224,9 @@ export function AdminShell({
               data-on:click="$userMenuOpen = !$userMenuOpen"
               class="flex h-9 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-ink-muted transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
-              <span class="max-w-[10rem] truncate text-ink">{name}</span>
+              {/* Hidden below sm so the header search keeps real width on phones —
+                  the full name still shows in the open menu panel below. */}
+              <span class="hidden max-w-[10rem] truncate text-ink sm:inline">{name}</span>
               <ChevronDown class="size-4 shrink-0 transition-transform" data-class:rotate-180="$userMenuOpen" />
             </button>
 

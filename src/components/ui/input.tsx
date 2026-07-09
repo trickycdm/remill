@@ -37,8 +37,10 @@ interface InputProps {
   readonly [dataAttr: `data-${string}`]: string | number | boolean | undefined;
 }
 
+// `text-base sm:text-sm`: 16px on phones (below 16px, iOS Safari auto-zooms on
+// focus), 14px from the `sm` breakpoint up. Shared by Input, Select, and Textarea.
 export const INPUT_BASE =
-  'w-full rounded-md border bg-surface px-3 text-sm text-ink shadow-xs transition-colors placeholder:text-ink-subtle focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
+  'w-full rounded-md border bg-surface px-3 text-base text-ink shadow-xs transition-colors placeholder:text-ink-subtle focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm';
 
 export function Input({ invalid, size = 'md', class: cls, ...rest }: InputProps): JSX.Element {
   const stateClass = invalid

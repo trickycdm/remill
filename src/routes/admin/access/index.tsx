@@ -6,7 +6,6 @@ import { requirePrincipal } from '@/lib/principal';
 import { nowIso } from '@/lib/now';
 import * as access from '@/services/access';
 import { listCollections } from '@/services/collections';
-import { ACTIONS } from '@/access';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
 import { personaOf, PERSONA_LABEL, PERSONA_TONE, type Persona } from '@/lib/persona';
 import type { PrincipalRecord, TokenRecord } from '@/db/queries/principals';
@@ -29,7 +28,22 @@ import {
   Select,
   Button,
   FormField,
+  ScopePicker,
+  ACCESS_ACTION_GROUPS,
+  type ScopePreset,
 } from '@/components/ui';
+
+/**
+ * Token scope presets. A token scope is a NARROWING mask over the agent's own
+ * permissions, so "Full access" = an empty selection (no narrowing / inherit);
+ * the other presets restrict to the actions they list. `custom` opens the grid.
+ */
+const TOKEN_SCOPE_PRESETS: readonly ScopePreset[] = [
+  { key: 'readonly', label: 'Read-only', actions: ['read'] },
+  { key: 'editor', label: 'Editor', actions: ['read', 'create', 'update', 'delete', 'publish'] },
+  { key: 'full', label: 'Full access', actions: [] },
+  { key: 'custom', label: 'Custom', actions: null },
+];
 
 /** One principal card — role badges, inline assign, and (machine principals) tokens. */
 function PrincipalCard({
@@ -78,7 +92,7 @@ function PrincipalCard({
         </div>
 
         {/* Assign a role */}
-        <form method="post" action="/admin/access/assign" class="mt-3 flex flex-wrap items-end gap-2">
+        <form method="post" action="/admin/access/assign" class="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
           <input type="hidden" name="op" value="assign" />
           <input type="hidden" name="principalId" value={p.id} />
           <FormField fieldId={`role-${p.id}`} label="Assign role">
@@ -122,34 +136,34 @@ function PrincipalCard({
                 ))
               )}
             </div>
-            <form method="post" action="/admin/access/tokens" class="flex flex-wrap items-end gap-2">
+            <form
+              data-indicator:tokbusy=""
+              data-on:submit="!$tokbusy && @post('/admin/access/tokens', {contentType: 'form'})"
+              class="flex flex-col gap-4 rounded-md border border-border bg-canvas p-3"
+            >
               <input type="hidden" name="op" value="issue" />
               <input type="hidden" name="principalId" value={p.id} />
-              <FormField fieldId={`tok-${p.id}`} label="New token">
-                <Input id={`tok-${p.id}`} name="name" type="text" placeholder="prod read-only" required />
-              </FormField>
-              <FormField fieldId={`tokc-${p.id}`} label="Scope: collection">
-                <Select id={`tokc-${p.id}`} name="scopeCollection">
-                  <option value="*">All collections</option>
-                  {collectionSlugs.map((s) => (
-                    <option value={s}>{s}</option>
-                  ))}
-                </Select>
-              </FormField>
-              <fieldset class="flex flex-col gap-1">
-                <legend class="mb-1 text-xs font-medium text-ink-muted">Scope: actions (none = full)</legend>
-                <div class="flex flex-wrap gap-x-3 gap-y-1">
-                  {ACTIONS.map((a) => (
-                    <label class="inline-flex items-center gap-1 text-sm text-ink-muted">
-                      <input type="checkbox" name="scopeAction" value={a} class="accent-accent" /> {a}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <Button type="submit" variant="secondary">
-                Issue token
-              </Button>
+              <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                <FormField fieldId={`tok-${p.id}`} label="New token" class="sm:w-64">
+                  <Input id={`tok-${p.id}`} name="name" type="text" placeholder="prod read-only" required />
+                </FormField>
+                <Button type="submit" variant="secondary" busy="$tokbusy">
+                  Issue token
+                </Button>
+              </div>
+              <ScopePicker
+                idPrefix={`tok-${p.id}`}
+                name="scopeAction"
+                groups={ACCESS_ACTION_GROUPS}
+                checked={new Set(['read'])}
+                presets={TOKEN_SCOPE_PRESETS}
+                defaultPreset="readonly"
+                collection={{ name: 'scopeCollection', options: collectionSlugs }}
+                help="Full access = no narrowing: the token inherits this agent's own permissions. Any other choice limits it to the checked actions."
+              />
             </form>
+            {/* Datastar morphs the issued token (+ copy button) into this slot in place. */}
+            <div id={`token-reveal-${p.id}`} />
           </div>
         )}
       </CardContent>
@@ -284,7 +298,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
               Services and agents authenticate with scoped bearer tokens.
             </p>
           </div>
-          <form method="post" action="/admin/access/agents" class="flex items-end gap-2">
+          <form method="post" action="/admin/access/agents" class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
             <FormField fieldId="agent-name" label="New machine identity">
               <Input id="agent-name" name="name" type="text" placeholder="researcher-bot" required />
             </FormField>
@@ -302,7 +316,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         <form
           method="post"
           action="/admin/access/users"
-          class="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface p-4"
+          class="mb-4 flex flex-col gap-2 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:flex-wrap sm:items-end"
         >
           <FormField fieldId="invite-name" label="Add a person — name">
             <Input id="invite-name" name="name" type="text" placeholder="Jane Doe" required />
