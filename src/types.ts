@@ -6,9 +6,11 @@ export type Env = {
   DB: D1Database;
   MEDIA: R2Bucket;
 
-  // KV namespace backing the fixed-window rate limiter (SEC-2). OPTIONAL by design:
-  // it is bound in production/preview (wrangler.jsonc) but absent in unit tests, and
-  // the limiter degrades to a no-op when it is missing (src/middleware/rate-limit.ts).
+  // KV namespace backing the per-endpoint fixed-window rate limiters (SEC-2): login,
+  // token, upload, import, join. NOT written per-request — there is no site-wide tier
+  // (D40), so read traffic touches KV zero times. OPTIONAL by design: bound in
+  // production/preview (wrangler.jsonc), absent in unit tests, and the limiter degrades
+  // to a no-op when it is missing (src/middleware/rate-limit.ts).
   RATE_LIMIT?: KVNamespace;
 
   // Durable Objects (MCP server — bound in Phase 7)

@@ -183,10 +183,13 @@ onto the record — any field an attacker named got written. remill's fix, from 
 - **CSRF**: `SameSite=Lax` session cookies + same-origin form/Datastar posts cover the admin. For
   state-changing non-form JS calls, require the `Datastar-Request` header or an explicit CSRF check.
   Token-authenticated REST/MCP is not cookie-authenticated, so it is not CSRF-exposed.
-- **Rate-limit** abuse-prone endpoints (login, token issuance, upload) keyed on `CF-Connecting-IP`
-  (edge-set, not spoofable) or principal ID. Never read `X-Forwarded-For` directly. The shared
-  core is `consumeRateLimit` (src/middleware/rate-limit.ts) — the route middleware AND in-handler
-  consumers (the MCP `upload_media` tool) use the same buckets; never fork a second counter.
+- **Rate-limit** abuse-prone endpoints (login, token issuance, upload, import, join) keyed on
+  `CF-Connecting-IP` (edge-set, not spoofable) or principal ID. Never read `X-Forwarded-For` directly.
+  The shared core is `consumeRateLimit` (src/middleware/rate-limit.ts) — the route middleware AND
+  in-handler consumers (the MCP `upload_media` tool) use the same buckets; never fork a second counter.
+  There is intentionally **no in-app site-wide/global tier** (D40): a `kv.put` per request exhausts
+  the Cloudflare free-tier KV write budget, so volumetric abuse is left to Cloudflare's edge DDoS +
+  zone WAF, and only the abuse-prone endpoints above hold their own limiters.
 - **Per-surface body caps (SEC-4/D34)**: reject oversized bodies BEFORE parsing via
   `assertBodyWithinLimit`. REST JSON = 1 MiB (`MAX_JSON_BODY_BYTES`); `/mcp` = 8 MiB
   (`MAX_MCP_BODY_BYTES` — base64 upload payloads); multipart uploads = 25 MiB at the service.
