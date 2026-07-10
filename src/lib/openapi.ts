@@ -19,7 +19,12 @@ function documentSchema(def: CollectionDefinition): JSONSchema {
     properties[field.key] = jsonSchemaFor(field);
     if (field.required) required.push(field.key);
   }
-  return { type: 'object', properties, ...(required.length ? { required } : {}), additionalProperties: false };
+  return {
+    type: 'object',
+    properties,
+    ...(required.length ? { required } : {}),
+    additionalProperties: false,
+  };
 }
 
 function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
@@ -37,7 +42,15 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
         parameters: [
           { name: 'page', in: 'query', schema: { type: 'integer' } },
           { name: 'pageSize', in: 'query', schema: { type: 'integer' } },
-          ...(lifecycle ? [{ name: 'status', in: 'query', schema: { type: 'string', enum: ['draft', 'published'] } }] : []),
+          ...(lifecycle
+            ? [
+                {
+                  name: 'status',
+                  in: 'query',
+                  schema: { type: 'string', enum: ['draft', 'published'] },
+                },
+              ]
+            : []),
           { name: 'sort', in: 'query', schema: { type: 'string' } },
           {
             name: 'q',
@@ -58,26 +71,51 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
         ],
         responses: { '200': { description: 'A page of documents' } },
       },
-      post: { tags: [tag], summary: `Create a ${def.name}`, requestBody: body, responses: { '201': { description: 'Created', content: { 'application/json': { schema: listItem } } } } },
+      post: {
+        tags: [tag],
+        summary: `Create a ${def.name}`,
+        requestBody: body,
+        responses: {
+          '201': { description: 'Created', content: { 'application/json': { schema: listItem } } },
+        },
+      },
     },
     [`/api/c/${def.slug}/{id}`]: {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      get: { tags: [tag], summary: `Get a ${def.name}`, responses: { '200': { description: 'The document' } } },
-      patch: { tags: [tag], summary: `Update a ${def.name}`, requestBody: body, responses: { '200': { description: 'Updated' } } },
-      delete: { tags: [tag], summary: `Delete a ${def.name}`, responses: { '200': { description: 'Deleted' } } },
+      get: {
+        tags: [tag],
+        summary: `Get a ${def.name}`,
+        responses: { '200': { description: 'The document' } },
+      },
+      patch: {
+        tags: [tag],
+        summary: `Update a ${def.name}`,
+        requestBody: body,
+        responses: { '200': { description: 'Updated' } },
+      },
+      delete: {
+        tags: [tag],
+        summary: `Delete a ${def.name}`,
+        responses: { '200': { description: 'Deleted' } },
+      },
     },
     ...(lifecycle
       ? {
           [`/api/c/${def.slug}/{id}/publish`]: {
             parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-            post: { tags: [tag], summary: `Publish/unpublish a ${def.name}`, responses: { '200': { description: 'Updated' } } },
+            post: {
+              tags: [tag],
+              summary: `Publish/unpublish a ${def.name}`,
+              responses: { '200': { description: 'Updated' } },
+            },
           },
           [`/api/c/${def.slug}/{id}/schedule`]: {
             parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
             post: {
               tags: [tag],
               summary: `Schedule a draft ${def.name} to publish later (D32)`,
-              description: 'Body {publishAt: ISO-8601 | null}. null cancels. Drafts only; requires the publish action. The per-minute cron publishes due drafts as the system actor.',
+              description:
+                'Body {publishAt: ISO-8601 | null}. null cancels. Drafts only; requires the publish action. The per-minute cron publishes due drafts as the system actor.',
               requestBody: {
                 required: true,
                 content: {
@@ -90,14 +128,20 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
                   },
                 },
               },
-              responses: { '200': { description: 'Updated (returns the document with publishAt)' } },
+              responses: {
+                '200': { description: 'Updated (returns the document with publishAt)' },
+              },
             },
           },
         }
       : {}),
     [`/api/c/${def.slug}/{id}/revisions`]: {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      get: { tags: [tag], summary: `Revision history`, responses: { '200': { description: 'Revisions' } } },
+      get: {
+        tags: [tag],
+        summary: `Revision history`,
+        responses: { '200': { description: 'Revisions' } },
+      },
     },
     [`/api/c/${def.slug}/export`]: {
       get: {
@@ -115,7 +159,10 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
         description:
           'Upsert by preserved id through the full validated pipeline (per-item authorize; status "published" lines additionally require the publish action). Header def slug must match this collection. Body cap 10 MiB — split larger imports. ?dryRun=1 validates without writing. Response {created, updated, failed, errors:[{line, id?, error}]} — per-line errors, the run never aborts.',
         parameters: [{ name: 'dryRun', in: 'query', schema: { type: 'string', enum: ['1'] } }],
-        requestBody: { required: true, content: { 'application/x-ndjson': { schema: { type: 'string' } } } },
+        requestBody: {
+          required: true,
+          content: { 'application/x-ndjson': { schema: { type: 'string' } } },
+        },
         responses: { '200': { description: 'Import summary' } },
       },
     },
@@ -127,6 +174,45 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
 function staticPaths(): Record<string, unknown> {
   const trashTag = 'Trash';
   return {
+    '/api/templates': {
+      get: {
+        tags: ['Packs'],
+        summary: 'List the reading templates (D42)',
+        description:
+          "The render-template registry a collection's `template` key selects from. Ungated discovery.",
+        responses: { '200': { description: 'Template metadata (key, name, description)' } },
+      },
+    },
+    '/api/packs': {
+      get: {
+        tags: ['Packs'],
+        summary: 'List the installable content packs (D42)',
+        description:
+          'Each pack bundles a reading template with co-designed collection definition(s); includes installed status. Ungated discovery.',
+        responses: { '200': { description: 'Pack metadata + installed status' } },
+      },
+    },
+    '/api/packs/{key}/install': {
+      parameters: [{ name: 'key', in: 'path', required: true, schema: { type: 'string' } }],
+      post: {
+        tags: ['Packs'],
+        summary: 'Install a content pack (manage_schema)',
+        description:
+          "Creates the pack's collection(s) through the standard validated pipeline. Optional body { slug } renames a single-collection pack's scaffold.",
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: { type: 'object', properties: { slug: { type: 'string' } } },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'The created collection definition(s)' },
+          '409': { description: 'A target collection already exists' },
+        },
+      },
+    },
     '/api/trash': {
       get: {
         tags: [trashTag],
@@ -159,7 +245,11 @@ function staticPaths(): Record<string, unknown> {
           { name: 'action', in: 'query', schema: { type: 'string' } },
           { name: 'collection', in: 'query', schema: { type: 'string' } },
           { name: 'result', in: 'query', schema: { type: 'string', enum: ['allow', 'deny'] } },
-          { name: 'surface', in: 'query', schema: { type: 'string', enum: ['admin', 'rest', 'mcp', 'system'] } },
+          {
+            name: 'surface',
+            in: 'query',
+            schema: { type: 'string', enum: ['admin', 'rest', 'mcp', 'system'] },
+          },
           { name: 'cursor', in: 'query', schema: { type: 'string' } },
           { name: 'limit', in: 'query', schema: { type: 'integer' } },
         ],
@@ -194,7 +284,10 @@ function staticPaths(): Record<string, unknown> {
   };
 }
 
-export async function generateOpenApi(db: Database, baseUrl: string): Promise<Record<string, unknown>> {
+export async function generateOpenApi(
+  db: Database,
+  baseUrl: string,
+): Promise<Record<string, unknown>> {
   const defs = await listCollections(db);
   const paths: Record<string, unknown> = staticPaths();
   const schemas: Record<string, JSONSchema> = {};
@@ -204,7 +297,11 @@ export async function generateOpenApi(db: Database, baseUrl: string): Promise<Re
   }
   return {
     openapi: '3.1.0',
-    info: { title: 'remill CMS API', version: '1.0.0', description: 'Generated from live collection definitions.' },
+    info: {
+      title: 'remill CMS API',
+      version: '1.0.0',
+      description: 'Generated from live collection definitions.',
+    },
     servers: [{ url: baseUrl }],
     paths,
     components: {

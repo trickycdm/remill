@@ -39,6 +39,7 @@ import {
   Moon,
   LogOut,
   ChevronDown,
+  Store,
 } from '@/components/ui';
 import { Wordmark } from '@/components/auth-shell';
 
@@ -61,6 +62,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { key: 'media', label: 'Media', href: '/admin/media', icon: Image },
   { key: 'trash', label: 'Trash', href: '/admin/trash', icon: Trash },
   { key: 'collections', label: 'Collections', href: '/admin/collections', icon: Boxes },
+  { key: 'marketplace', label: 'Marketplace', href: '/admin/marketplace', icon: Store },
   { key: 'access', label: 'Access', href: '/admin/access', icon: ShieldCheck },
   { key: 'activity', label: 'Activity', href: '/admin/activity', icon: Activity },
   { key: 'settings', label: 'Settings', href: '/admin/settings', icon: Settings },
@@ -74,7 +76,19 @@ const NAV_ITEMS: readonly NavItem[] = [
  * reader set. (Per-user Account settings live off the top-bar menu, not the nav.)
  */
 const NAV_BY_ROLE: Record<string, readonly string[]> = {
-  admin: ['dashboard', 'content', 'shared', 'media', 'trash', 'collections', 'access', 'activity', 'settings'],
+  // Marketplace installs collections (manage_schema) — admin-only like Collections.
+  admin: [
+    'dashboard',
+    'content',
+    'shared',
+    'media',
+    'trash',
+    'collections',
+    'marketplace',
+    'access',
+    'activity',
+    'settings',
+  ],
   // Trash shows for the roles that hold `delete` (the page itself scopes rows
   // to what the caller can actually act on; the system author role cannot delete).
   editor: ['dashboard', 'content', 'shared', 'media', 'trash'],
@@ -134,7 +148,11 @@ export function AdminShell({
         class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-surface"
       >
         <div class="flex h-16 shrink-0 items-center border-b border-border px-5">
-          <a href="/admin" aria-label="remill home" class="rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <a
+            href="/admin"
+            aria-label="remill home"
+            class="rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             <Wordmark />
           </a>
         </div>
@@ -171,13 +189,22 @@ export function AdminShell({
             <Menu class="size-5" />
           </button>
 
-          <a href="/admin" aria-label="remill home" class="rounded-md md:hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <a
+            href="/admin"
+            aria-label="remill home"
+            class="rounded-md md:hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
             <Wordmark class="text-xl" />
           </a>
 
           {/* Site-wide search (D28) — a plain GET form; '/' or Cmd/Ctrl-K focuses
               it (src/client/init.ts). */}
-          <form role="search" action="/admin/search" method="get" class="mx-2 min-w-0 flex-1 sm:mx-4 sm:max-w-sm">
+          <form
+            role="search"
+            action="/admin/search"
+            method="get"
+            class="mx-2 min-w-0 flex-1 sm:mx-4 sm:max-w-sm"
+          >
             <Input
               type="search"
               id="admin-search-input"
@@ -227,7 +254,10 @@ export function AdminShell({
               {/* Hidden below sm so the header search keeps real width on phones —
                   the full name still shows in the open menu panel below. */}
               <span class="hidden max-w-[10rem] truncate text-ink sm:inline">{name}</span>
-              <ChevronDown class="size-4 shrink-0 transition-transform" data-class:rotate-180="$userMenuOpen" />
+              <ChevronDown
+                class="size-4 shrink-0 transition-transform"
+                data-class:rotate-180="$userMenuOpen"
+              />
             </button>
 
             {/* Click-outside catcher — transparent (a menu shouldn't dim the page). */}
@@ -279,7 +309,10 @@ export function AdminShell({
           </div>
         </header>
 
-        <main id="main-content" class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:py-10">
+        <main
+          id="main-content"
+          class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:py-10"
+        >
           {children}
         </main>
       </div>

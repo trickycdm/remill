@@ -22,6 +22,9 @@ import { formatDate } from '@/lib/format-date';
 export const articleTemplate: RenderTemplate = {
   key: 'article',
   name: 'Article',
+  description:
+    'Editorial reading page: hero image, serif title, date and reading time, standfirst, ' +
+    'markdown body, tags, share bar, backlinks. Binds best to title/hero/excerpt/body fields.',
   wants: { readingTime: true, shareBar: true },
   Component: ({ def, doc, backlinks, ctx }) => {
     const layout = resolveConventionLayout(def);

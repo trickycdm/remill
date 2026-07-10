@@ -98,11 +98,15 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   (graph edges and backlinks) and `html.tsx` (D25 trusted raw HTML; powers `renderMode: 'raw'`
   pages, D27). The most important interface in the codebase (SCHEMA_ENGINE.md).
 - **Templates** `src/templates/` — the render-template registry (the code side of the public
-  reading surface); a collection selects a template by name via its `template` key (D41).
-  Includes `article.tsx` (the shipped article reading template), `lib/conventions.ts` (pure
-  heuristics for hero/dek/body/meta field binding), `blog-pack.ts` (the blog-collection
-  scaffold: article template + co-designed collection definition). Templates are code; the
-  registry is closed (`keys.ts`).
+  reading surface); a collection selects a template by name via its `template` key (D41) and can
+  pin slots explicitly via `bind` ({title/hero/lead}→field key — the escape hatch convention falls
+  back from). Includes `article.tsx` (the shipped article reading template, `wants` capability
+  flags gate share-island/reading-time), `lib/conventions.ts` (parameterized hero/dek/body/meta
+  binding heuristics), and `packs.ts` — the content-PACK registry (D42): a pack bundles a template
+  with co-designed collection definition(s), installable from the admin **Marketplace**
+  (`/admin/marketplace`), MCP `install_pack`, or `POST /api/packs/:key/install` — all through one
+  `installPack` service. Templates and packs are code; both registries are closed (`keys.ts`,
+  `packs.ts`).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
   (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
   invite a person via `users.tsx`, custom roles, token scoping, teams — a grant subject kind, D24 —
@@ -119,7 +123,9 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   principal|role|team), `share_link_<slug>` (D26 agent-mintable links), `list_teams` (D24), `search_<slug>`
   + `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
   (D34 parity), `schedule_<slug>` (D32 per-collection scheduled publishing), `poll_events` (D33 outbox
-  change feed), and `list_audit` (audit log access).
+  change feed), `list_audit` (audit log access), and the D42 marketplace trio — `list_templates` +
+  `list_packs` (ungated discovery) and `install_pack` (manage_schema) — so the agent flow
+  `list_packs → install_pack('blog') → create_articles → publish_articles` needs no schema design.
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
   Person/Service/Agent display persona), `email/` (`EmailTransport` — Resend + styled templates,
   D20 realized; console stub fallback), `base-url.ts` (resolveBaseUrl for minted links),

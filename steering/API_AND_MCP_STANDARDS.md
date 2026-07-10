@@ -149,6 +149,13 @@ tokens** as REST.
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
   - Schema management: `list_collections`, `create_collection`, `update_collection`
     (require `manage_schema`).
+  - Packs/templates (D42): `list_templates` + `list_packs` (ungated discovery — registry metadata
+    is code; `installed` reveals nothing `list_collections` doesn't) and `install_pack`
+    (`manage_schema`; `{pack, slug?}` — slug renames a single-collection pack's scaffold). REST
+    parity: `GET /api/templates`, `GET /api/packs`, `POST /api/packs/:key/install` (201/403/409;
+    static routes, hand-listed in `staticPaths()`). All surfaces call the ONE `installPack`
+    service: authorize every target slug FIRST (no conflict-vs-forbidden existence oracle), then
+    pre-flight all slugs (all-or-nothing), then loop `createCollection`.
   - Teams: `list_teams` (visible only with `manage_access`).
   - Media: `list_media`, `get_media_url`, and `upload_media` (D34 — base64, create-gated,
     offered only when the route threads the R2 bucket via `McpToolContext`; reuses the REST

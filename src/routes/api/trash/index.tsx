@@ -13,6 +13,11 @@ export const onRequestGet = factory.createHandlers(async (c) => {
   const now = nowIso();
   const limit = Number(c.req.query('limit')) || undefined;
   const offset = Number(c.req.query('offset')) || undefined;
-  const result = await listTrash(getDb(c.env.DB), await apiPrincipal(c, now), { limit, offset }, now);
+  const result = await listTrash(
+    getDb(c.env.DB),
+    await apiPrincipal(c, now),
+    { limit, offset },
+    now,
+  );
   return apiJson(c, { data: result.rows, limit: result.limit, offset: result.offset });
 });

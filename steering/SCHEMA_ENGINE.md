@@ -56,6 +56,17 @@ FieldType contract against all six surfaces before merging.
   The shipped `article` template binds fields by CONVENTION (`resolveConventionLayout`: first media =
   hero, first non-title text = dek, markdown = body, tags/relations = meta, slug never rendered) —
   presentation lives in code, NEVER as a per-field role in the schema data. See TECH_DECISIONS D41.
+- **Explicit slot binding (`bind`, D42).** When convention would guess wrong (an `author` text field
+  winning the dek slot), the optional `bind` key pins the scalar slots explicitly:
+  `{ title?, hero?, lead? }` → field keys. CLOSED shape (strictObject, the workflow/access posture);
+  each slot must name an existing field of the slot-appropriate type (title/lead → text, hero →
+  media), distinct per slot — rejected loudly on write. `bind.title` flows through `titleFieldOf`,
+  so the H1, OG/feeds, search title, and relation titles stay ONE heuristic. Convention resolves
+  any slot left unbound. Stored in `collections.bind_json` (migration 0013).
+- **Content packs (D42).** A pack (`src/templates/packs.ts`, closed registry) bundles a template with
+  the collection definition(s) co-designed for it. Installing (admin Marketplace, MCP `install_pack`,
+  REST) runs each definition through the ordinary `createCollection` — packs add ZERO bypass surface:
+  same validation, same authorize, same outbox event.
 
 ## The FieldType contract
 

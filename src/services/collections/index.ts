@@ -19,6 +19,7 @@ import { getPrincipalPermissions } from '@/db/queries/roles';
 import { InputValidationError, NotFoundError, ConflictError, ForbiddenError } from '@/lib/errors';
 import { RESERVED_FIELD_KEYS, RESERVED_COLLECTION_SLUGS } from '@/config/constants';
 import { TEMPLATE_KEYS, isTemplateKey } from '@/templates/keys';
+import { PACKS, resolvePack, type PackKey } from '@/templates/packs';
 import type { ErrorDetails } from '@/lib/errors';
 
 const SLUG_RE = /^[a-z][a-z0-9-]*$/;
@@ -256,6 +257,80 @@ export async function createCollection(
     at: now,
   });
   return def;
+}
+
+/** A pack's discovery projection + whether its collections already exist. */
+export interface PackStatus {
+  readonly key: PackKey;
+  readonly name: string;
+  readonly description: string;
+  readonly template: string;
+  readonly collections: readonly { readonly slug: string; readonly name: string }[];
+  readonly installed: boolean;
+}
+
+/** Discovery view of the pack registry (ungated, SEC-5 posture: pack metadata
+ *  is code, and `installed` reveals nothing `list_collections` doesn't). */
+export async function listPackStatuses(db: Database): Promise<PackStatus[]> {
+  const existing = new Set((await q.listCollections(db)).map((c) => c.slug));
+  return Object.values(PACKS).map((p) => ({
+    key: p.key,
+    name: p.name,
+    description: p.description,
+    template: p.template,
+    collections: p.collections.map((c) => ({ slug: c.slug, name: c.name })),
+    installed: p.collections.every((c) => existing.has(c.slug)),
+  }));
+}
+
+/**
+ * Install a content pack: create its co-designed collection(s) through the
+ * standard pipeline. Nothing bespoke — each collection goes through
+ * `createCollection` (authorize + validateDefinition + `collection.created`
+ * outbox event), so every surface (admin Marketplace, MCP `install_pack`,
+ * REST) shares one behavior. `opts.slug` renames a SINGLE-collection pack's
+ * scaffold (the definition's display name is unchanged — editable later).
+ *
+ * All-or-nothing: authorization for every target slug is checked FIRST (an
+ * unauthorized caller must never probe collection existence via conflict-vs-
+ * forbidden), then all slugs are pre-flighted for conflicts before anything
+ * is created — D1 writes aren't transactional across collections.
+ */
+export async function installPack(
+  db: Database,
+  principal: Principal,
+  key: string,
+  now: string,
+  opts?: { readonly slug?: string },
+): Promise<CollectionDefinition[]> {
+  const pack = resolvePack(key);
+  if (!pack) throw new NotFoundError('Pack');
+
+  let defs = pack.collections;
+  if (opts?.slug !== undefined) {
+    if (pack.collections.length !== 1) {
+      throw new InputValidationError(
+        [{ path: 'slug', message: 'A slug override applies only to single-collection packs.' }],
+        'Invalid pack install',
+      );
+    }
+    defs = [{ ...pack.collections[0], slug: opts.slug }];
+  }
+
+  for (const def of defs) {
+    await authorize(db, principal, 'manage_schema', { collection: def.slug }, now);
+  }
+  for (const def of defs) {
+    if (await q.getCollection(db, def.slug)) {
+      throw new ConflictError(`A collection '${def.slug}' already exists.`);
+    }
+  }
+
+  const created: CollectionDefinition[] = [];
+  for (const def of defs) {
+    created.push(await createCollection(db, principal, def, now));
+  }
+  return created;
 }
 
 export async function updateCollection(

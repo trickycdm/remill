@@ -17,8 +17,17 @@ export const onRequestPost = factory.createHandlers(async (c) => {
   const body = await jsonBody(c);
   const raw = body.publishAt;
   if (raw !== null && typeof raw !== 'string') {
-    throw new InputValidationError([{ path: 'publishAt', message: 'Provide an ISO-8601 datetime, or null to cancel.' }]);
+    throw new InputValidationError([
+      { path: 'publishAt', message: 'Provide an ISO-8601 datetime, or null to cancel.' },
+    ]);
   }
-  const doc = await scheduleDocument(getDb(c.env.DB), await apiPrincipal(c, now), pathParam(c, 'collection'), pathParam(c, 'id'), raw, now);
+  const doc = await scheduleDocument(
+    getDb(c.env.DB),
+    await apiPrincipal(c, now),
+    pathParam(c, 'collection'),
+    pathParam(c, 'id'),
+    raw,
+    now,
+  );
   return apiJson(c, { data: doc });
 });

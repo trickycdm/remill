@@ -11,6 +11,12 @@ const factory = createFactory<{ Bindings: Env }>();
 /** GET /api/c/:collection/:id/revisions — revision history (newest first). */
 export const onRequestGet = factory.createHandlers(async (c) => {
   const now = nowIso();
-  const revs = await listRevisions(getDb(c.env.DB), await apiPrincipal(c, now), pathParam(c, 'collection'), pathParam(c, 'id'), now);
+  const revs = await listRevisions(
+    getDb(c.env.DB),
+    await apiPrincipal(c, now),
+    pathParam(c, 'collection'),
+    pathParam(c, 'id'),
+    now,
+  );
   return apiJson(c, { data: revs });
 });

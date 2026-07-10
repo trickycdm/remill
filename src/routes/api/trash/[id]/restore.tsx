@@ -12,6 +12,11 @@ const factory = createFactory<{ Bindings: Env }>();
  *  id (D29). 409 when the collection is gone or the id/unique value was retaken. */
 export const onRequestPost = factory.createHandlers(async (c) => {
   const now = nowIso();
-  const result = await restoreDocument(getDb(c.env.DB), await apiPrincipal(c, now), pathParam(c, 'id'), now);
+  const result = await restoreDocument(
+    getDb(c.env.DB),
+    await apiPrincipal(c, now),
+    pathParam(c, 'id'),
+    now,
+  );
   return apiJson(c, { data: result });
 });
