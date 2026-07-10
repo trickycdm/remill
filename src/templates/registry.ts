@@ -8,9 +8,15 @@
 import type { RenderTemplate } from '@/templates/types';
 import { isTemplateKey, type TemplateKey } from '@/templates/keys';
 import { articleTemplate } from '@/templates/article';
+import { changelogTemplate } from '@/templates/changelog';
+import { portfolioTemplate } from '@/templates/portfolio';
+import { docsTemplate } from '@/templates/docs';
 
 const TEMPLATES: Record<TemplateKey, RenderTemplate> = {
   article: articleTemplate,
+  changelog: changelogTemplate,
+  portfolio: portfolioTemplate,
+  docs: docsTemplate,
 };
 
 /** Resolve a collection's `template` key to its component, or undefined when the
