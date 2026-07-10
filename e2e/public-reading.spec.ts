@@ -56,6 +56,20 @@ test.describe.serial('Public reading experience — the article template', () =>
     // The slug is never shown as reader content.
     await expect(anonPage.getByText('Slug', { exact: true })).toHaveCount(0);
 
+    // ...and never leaks into the share-preview surface either: the meta/og
+    // description must start with real prose, not the slug (regression: the
+    // search-text body used to lead with the slug field's value).
+    const metaDescription = await anonPage
+      .locator('meta[name="description"]')
+      .getAttribute('content');
+    expect(metaDescription).toBeTruthy();
+    expect(metaDescription!.startsWith(EXCERPT.slice(0, 20))).toBe(true);
+    expect(metaDescription).not.toMatch(/^[a-z0-9-]+ /); // no leading slug token
+    const ogDescription = await anonPage
+      .locator('meta[property="og:description"]')
+      .getAttribute('content');
+    expect(ogDescription).toBe(metaDescription);
+
     // Reading time + a published date.
     await expect(anonPage.getByText(/\d+ min read/)).toBeVisible();
     await expect(anonPage.locator('time')).toBeVisible();
@@ -67,7 +81,10 @@ test.describe.serial('Public reading experience — the article template', () =>
     await expect(anonPage.getByRole('button', { name: 'Copy link' })).toBeVisible();
 
     const axe = await new AxeBuilder({ page: anonPage }).withTags(WCAG).analyze();
-    expect(axe.violations, `axe on /articles: ${axe.violations.map((v) => v.id).join(',')}`).toEqual([]);
+    expect(
+      axe.violations,
+      `axe on /articles: ${axe.violations.map((v) => v.id).join(',')}`,
+    ).toEqual([]);
 
     await anon.close();
   });

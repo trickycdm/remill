@@ -3,7 +3,12 @@ import type { Env } from '@/types';
 import { pathParam } from '@/lib/http';
 import { getDb } from '@/db/client';
 import { anonymousPrincipal } from '@/access';
-import { getDocument, getDocumentBySlug, getBacklinks, buildSearchText } from '@/services/documents';
+import {
+  getDocument,
+  getDocumentBySlug,
+  getBacklinks,
+  buildSearchText,
+} from '@/services/documents';
 import { getCollectionOrThrow } from '@/services/collections';
 import { getSettings } from '@/services/settings';
 import { titleOf, publicUrlOf, excerptFrom } from '@/lib/def-helpers';
@@ -78,13 +83,15 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         {tpl ? <Script src="/src/client/share.ts" /> : null}
       </PublicShell>,
       {
-      title: `${titleOf(def, doc)} — ${siteName}`,
-      description: excerptFrom(body) || undefined,
-      canonical,
-      ogType: 'article',
-      ogImage: typeof mediaId === 'string' && mediaId.length ? `${baseUrl}/media/${mediaId}` : undefined,
-      feedUrl: '/rss.xml',
-    });
+        title: `${titleOf(def, doc)} — ${siteName}`,
+        description: excerptFrom(body) || undefined,
+        canonical,
+        ogType: 'article',
+        ogImage:
+          typeof mediaId === 'string' && mediaId.length ? `${baseUrl}/media/${mediaId}` : undefined,
+        feedUrl: '/rss.xml',
+      },
+    );
   } catch (e) {
     if (e instanceof NotFoundError || e instanceof ForbiddenError) {
       c.status(404);

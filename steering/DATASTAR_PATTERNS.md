@@ -74,6 +74,19 @@ non-modal counterpart to Dialog: an `$open` signal + a transparent full-screen c
 `role="menu"` with real focusable `<a>`/`<button>` items in DOM order (see `admin-shell.tsx`). Do **not**
 reuse the native-`<dialog>` Dialog/Drawer (modal) for a menu.
 
+**Gotcha — `data-class:X` toggles a class; it does NOT guarantee X has CSS behind it, or that X wins.**
+Two ways this shipped broken on the homepage tabs (found only by computed-style assertion):
+(1) Tailwind emits a utility **only if the literal class appears somewhere as a class value** — a token
+that exists solely inside a `data-class:` attribute *name* generates **no rule** (`border-accent` had no
+CSS at all). (2) Even a real utility loses same-property conflicts by **stylesheet declaration order**,
+not class-string order — a toggled `text-ink` never beats an always-present `text-ink-muted` (declared
+later). For state-driven styling, prefer keying CSS off the state attribute you already bind — e.g. a
+scoped `<style>` on `[aria-selected=true]` (AdminShell `#rm-sidebar` precedent). Two traps there: Hono
+JSX **HTML-escapes quotes inside `<style>`** (use unquoted CSS idents: `[aria-selected=true]`), and when
+you must stack same-property utilities (focus rings on the accent band), check the **compiled** CSS
+order in `dist/` — never assume the last class in the string wins. E2E: assert `getComputedStyle`, not
+markup, for any state-styling that has shipped broken once.
+
 ---
 
 ## (b) Form posts with `data-on:submit` + `@post`

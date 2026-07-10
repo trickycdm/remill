@@ -193,6 +193,37 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     await expect(agentsPanel).toBeVisible();
     await expect(agentsPanel).toContainText('create_essays');
 
+    // APG keyboard support: arrow keys move focus AND selection (roving
+    // tabindex, automatic activation); Home jumps back to the first tab.
+    const adminTab = anonPage.getByRole('tab', { name: 'Admin' });
+    const restTab = anonPage.getByRole('tab', { name: 'REST API' });
+    const agentsTab = anonPage.getByRole('tab', { name: 'Agents' });
+
+    await agentsTab.focus();
+    await anonPage.keyboard.press('ArrowRight'); // wraps agents -> admin
+    await expect(adminTab).toBeFocused();
+    await expect(adminTab).toHaveAttribute('aria-selected', 'true');
+    await expect(adminPanel).toBeVisible();
+
+    await anonPage.keyboard.press('ArrowLeft'); // wraps admin -> agents
+    await expect(agentsTab).toBeFocused();
+    await expect(agentsPanel).toBeVisible();
+
+    await anonPage.keyboard.press('Home');
+    await expect(adminTab).toBeFocused();
+    await expect(adminPanel).toBeVisible();
+
+    // Roving tabindex: only the selected tab is in the tab order.
+    await expect(adminTab).toHaveAttribute('tabindex', '0');
+    await expect(restTab).toHaveAttribute('tabindex', '-1');
+
+    // The selected tab is visibly indicated beyond font weight: the scoped
+    // aria-selected rule must actually apply (this was shipped broken once —
+    // dead data-class toggles — so pin the computed style, not the markup).
+    const selectedColor = await adminTab.evaluate((el) => getComputedStyle(el).borderBottomColor);
+    const unselectedColor = await restTab.evaluate((el) => getComputedStyle(el).borderBottomColor);
+    expect(selectedColor).not.toBe(unselectedColor);
+
     await anon.close();
   });
 

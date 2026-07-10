@@ -26,6 +26,24 @@ describe('homepage (marketing)', () => {
     expect(html).toContain('https://example.org/mcp');
   });
 
+  it('surface previews mirror the real wire shapes, and tabs carry APG keyboard state', async () => {
+    const res = await app.request('/', {}, env);
+    const html = await res.text();
+    // REST snippet: the real flat list envelope + doc_-prefixed ids — never
+    // the fake nested page object the section once showed.
+    expect(html).toContain('&quot;pageSize&quot;: 20');
+    expect(html).not.toContain('&quot;size&quot;');
+    expect(html).toContain('doc_aF9x2qWn41Kd');
+    expect(html).toContain('doc_b7Kp0dXr93Fh');
+    // Tabs: selected-state styling keys off aria-selected (scoped rule must
+    // survive Hono's <style> escaping — unquoted CSS ident), and the roving
+    // tabindex starts 0 on the selected tab, -1 elsewhere.
+    expect(html).toContain('[data-rm-tab][aria-selected=true]');
+    expect(html).toContain('id="surface-tab-admin"');
+    expect(html).toMatch(/id="surface-tab-admin"[^>]*tabindex="0"/);
+    expect(html).toMatch(/id="surface-tab-rest"[^>]*tabindex="-1"/);
+  });
+
   it('emits the discovery head props (canonical, og, feed, favicon)', async () => {
     const res = await app.request('/', {}, env);
     const html = await res.text();
