@@ -30,16 +30,17 @@ rendered public pages + share links.)
 > (D29/D31), MCP parity (D34), audit surfacing, scheduled publishing + the system actor (D30/D32),
 > the public discovery pack — rss/sitemap/robots/OG head props + the `/` homepage (D35/D36), the
 > events outbox (D33), import/export + R2 snapshot (D37), the editor islands — CodeMirror markdown
-> + dialog media picker (D38, implements D13/supersedes D12), the revision diff viewer, bulk
-> list actions (D39), and public reading templates (D41). The plan's Deferred/Tier-4 list records what was consciously not built.
-> Each steering doc carries its own STATUS header; the worklogs have the step-by-step record.
+> and the dialog media picker (D38, implements D13/supersedes D12), the revision diff viewer, bulk
+> list actions (D39), and public reading templates (D41). The plan's Deferred/Tier-4 list records
+> what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
+> have the step-by-step record.
 
 ## The one idea
 
 **One collection definition generates six surfaces: (1) storage, (2) validation, (3) the admin list
 view, (4) the admin edit form, (5) the REST API, (6) the MCP tools.** That through-line is the
-product; everything else is supporting infrastructure. Field *types* are code (`src/fields/`);
-*collections* are data (rows in D1), so an agent can define a content type over MCP and then fill it —
+product; everything else is supporting infrastructure. Field _types_ are code (`src/fields/`);
+_collections_ are data (rows in D1), so an agent can define a content type over MCP and then fill it —
 no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHEMA_ENGINE.md).
 
 ## Tech Stack
@@ -100,13 +101,15 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **Templates** `src/templates/` — the render-template registry (the code side of the public
   reading surface); a collection selects a template by name via its `template` key (D41) and can
   pin slots explicitly via `bind` ({title/hero/lead}→field key — the escape hatch convention falls
-  back from). Includes `article.tsx` (the shipped article reading template, `wants` capability
-  flags gate share-island/reading-time), `lib/conventions.ts` (parameterized hero/dek/body/meta
-  binding heuristics), and `packs.ts` — the content-PACK registry (D42): a pack bundles a template
-  with co-designed collection definition(s), installable from the admin **Marketplace**
-  (`/admin/marketplace`), MCP `install_pack`, or `POST /api/packs/:key/install` — all through one
-  `installPack` service. Templates and packs are code; both registries are closed (`keys.ts`,
-  `packs.ts`).
+  back from). Four shipped templates — `article.tsx`, `changelog.tsx` (dated release entries,
+  opts out of all article furniture), `portfolio.tsx` (media-first with a link-out), `docs.tsx`
+  (graph-forward doc pages) — each declaring `wants` capability flags that gate the share
+  island/reading time; `lib/conventions.ts` (parameterized hero/dek/body/meta binding heuristics);
+  and `packs.ts` — the content-PACK registry (D42): a pack bundles a template with co-designed
+  collection definition(s), installable from the admin **Marketplace** (`/admin/marketplace`),
+  MCP `install_pack`, or `POST /api/packs/:key/install` — all through one `installPack` service.
+  Four packs ship: blog, changelog, portfolio, docs. Templates and packs are code; both
+  registries are closed (`keys.ts`, `packs.ts`).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
   (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
   invite a person via `users.tsx`, custom roles, token scoping, teams — a grant subject kind, D24 —
@@ -121,11 +124,11 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
   module owning the MCP protocol surface (decision D18). Tools include `share_<slug>` (subjectKind
   principal|role|team), `share_link_<slug>` (D26 agent-mintable links), `list_teams` (D24), `search_<slug>`
-  + `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
-  (D34 parity), `schedule_<slug>` (D32 per-collection scheduled publishing), `poll_events` (D33 outbox
-  change feed), `list_audit` (audit log access), and the D42 marketplace trio — `list_templates` +
-  `list_packs` (ungated discovery) and `install_pack` (manage_schema) — so the agent flow
-  `list_packs → install_pack('blog') → create_articles → publish_articles` needs no schema design.
+  - `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
+    (D34 parity), `schedule_<slug>` (D32 per-collection scheduled publishing), `poll_events` (D33 outbox
+    change feed), `list_audit` (audit log access), and the D42 marketplace trio — `list_templates` +
+    `list_packs` (ungated discovery) and `install_pack` (manage_schema) — so the agent flow
+    `list_packs → install_pack('blog') → create_articles → publish_articles` needs no schema design.
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
   Person/Service/Agent display persona), `email/` (`EmailTransport` — Resend + styled templates,
   D20 realized; console stub fallback), `base-url.ts` (resolveBaseUrl for minted links),
@@ -176,23 +179,23 @@ bun run db:migrate   # apply migrations locally
 
 Map of area → authoritative standard. Start in `steering/` before writing code in that area.
 
-| If you're touching…                                                       | Read first                              |
-| ------------------------------------------------------------------------- | --------------------------------------- |
-| **The schema engine** — field types, collection defs, the six surfaces    | `steering/SCHEMA_ENGINE.md`             |
-| **Authorization** — principals, roles, grants, `authorize()`, audit       | `steering/ACCESS_CONTROL.md`            |
-| Any TypeScript file (layering, FP, types, naming, dependency hygiene)     | `steering/CODING_CONVENTIONS.md`        |
-| Datastar attributes, @post/@get, dsRedirect, SSE patches                  | `steering/DATASTAR_PATTERNS.md`         |
-| Thrown errors, `onError`, Datastar error fragments, deny shape            | `steering/ERROR_HANDLING.md`            |
-| Auth, tokens, sessions, secrets, whitelist validation, no-RLS             | `steering/SECURITY_STANDARDS.md`        |
-| Migrations, fixed tables, `document_index` EAV, JSON columns, atomic sync | `steering/DATABASE_STANDARDS.md`        |
-| REST endpoints, MCP tool generation, token scope masks, OpenAPI           | `steering/API_AND_MCP_STANDARDS.md`     |
-| Media: upload, R2, MIME sniffing, range serving, alt-required, deletion   | `steering/MEDIA_STANDARDS.md`           |
-| UI tokens, typography, spacing, the component library                     | `steering/DESIGN_SYSTEM.md`             |
-| Any new page/component/interaction (WCAG 2.1 AA)                          | `steering/A11Y_STANDARDS.md`            |
-| Writing unit tests, verifying a change                                    | `steering/TESTING_AND_VERIFICATION.md`  |
-| Playwright e2e, fixtures, auth state, axe sweeps                          | `steering/E2E_TESTING.md`               |
-| Deploys — wrangler.jsonc envs, CI workflows, CF resources, secrets        | `docs/DEPLOYMENT.md`                    |
-| How this repo is steered (the meta-rules)                                 | `AI_NATIVE_REPO_STANDARDS.md`           |
+| If you're touching…                                                       | Read first                             |
+| ------------------------------------------------------------------------- | -------------------------------------- |
+| **The schema engine** — field types, collection defs, the six surfaces    | `steering/SCHEMA_ENGINE.md`            |
+| **Authorization** — principals, roles, grants, `authorize()`, audit       | `steering/ACCESS_CONTROL.md`           |
+| Any TypeScript file (layering, FP, types, naming, dependency hygiene)     | `steering/CODING_CONVENTIONS.md`       |
+| Datastar attributes, @post/@get, dsRedirect, SSE patches                  | `steering/DATASTAR_PATTERNS.md`        |
+| Thrown errors, `onError`, Datastar error fragments, deny shape            | `steering/ERROR_HANDLING.md`           |
+| Auth, tokens, sessions, secrets, whitelist validation, no-RLS             | `steering/SECURITY_STANDARDS.md`       |
+| Migrations, fixed tables, `document_index` EAV, JSON columns, atomic sync | `steering/DATABASE_STANDARDS.md`       |
+| REST endpoints, MCP tool generation, token scope masks, OpenAPI           | `steering/API_AND_MCP_STANDARDS.md`    |
+| Media: upload, R2, MIME sniffing, range serving, alt-required, deletion   | `steering/MEDIA_STANDARDS.md`          |
+| UI tokens, typography, spacing, the component library                     | `steering/DESIGN_SYSTEM.md`            |
+| Any new page/component/interaction (WCAG 2.1 AA)                          | `steering/A11Y_STANDARDS.md`           |
+| Writing unit tests, verifying a change                                    | `steering/TESTING_AND_VERIFICATION.md` |
+| Playwright e2e, fixtures, auth state, axe sweeps                          | `steering/E2E_TESTING.md`              |
+| Deploys — wrangler.jsonc envs, CI workflows, CF resources, secrets        | `docs/DEPLOYMENT.md`                   |
+| How this repo is steered (the meta-rules)                                 | `AI_NATIVE_REPO_STANDARDS.md`          |
 
 When a rule here conflicts with existing code, flag it — the doc is usually right; the code may be stale.
 
