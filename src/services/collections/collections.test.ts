@@ -5,7 +5,8 @@ import * as svc from '@/services/collections';
 import type { Principal } from '@/access';
 import { seedRoles, makePrincipal } from '@/test/access';
 import type { CollectionDefinition } from '@/fields/types';
-import { InputValidationError, ForbiddenError, ConflictError } from '@/lib/errors';
+import { InputValidationError, ForbiddenError, ConflictError, NotFoundError } from '@/lib/errors';
+import { pollEvents } from '@/services/events';
 
 const NOW = '2026-07-04T12:00:00Z';
 
@@ -183,6 +184,42 @@ describe('collections service — definition validation', () => {
         NOW,
       ),
     ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
+  it('D42 installPack: creates the blog scaffold through the standard pipeline + outbox event', async () => {
+    const created = await svc.installPack(db, admin, 'blog', NOW);
+    expect(created.map((d) => d.slug)).toEqual(['articles']);
+    expect((await svc.getCollection(db, 'articles'))?.template).toBe('article');
+
+    // Inherits the collection.created outbox event from createCollection.
+    const events = await pollEvents(db, admin, {});
+    expect(
+      events.data.some((e) => e.type === 'collection.created' && e.collection === 'articles'),
+    ).toBe(true);
+
+    // Installed status flips.
+    const statuses = await svc.listPackStatuses(db);
+    expect(statuses.find((p) => p.key === 'blog')?.installed).toBe(true);
+  });
+
+  it('D42 installPack: slug override renames the scaffold; conflicts are loud; unknown packs 404', async () => {
+    const created = await svc.installPack(db, admin, 'blog', NOW, { slug: 'essays' });
+    expect(created[0].slug).toBe('essays');
+    expect((await svc.getCollection(db, 'essays'))?.template).toBe('article');
+
+    // A second install of the same target → ConflictError, nothing partial.
+    await expect(
+      svc.installPack(db, admin, 'blog', NOW, { slug: 'essays' }),
+    ).rejects.toBeInstanceOf(ConflictError);
+    await expect(svc.installPack(db, admin, 'nope', NOW)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('D42 installPack: authorization precedes existence probing (no conflict-vs-forbidden oracle)', async () => {
+    await svc.installPack(db, admin, 'blog', NOW);
+    // The editor lacks manage_schema: even though 'articles' now exists, the
+    // denial must be Forbidden — a ConflictError would leak collection
+    // existence to an unauthorized caller.
+    await expect(svc.installPack(db, editor, 'blog', NOW)).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it("B4: accepts lifecycle 'none'; rejects the contradictory none+draftPublish combo", async () => {

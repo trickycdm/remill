@@ -56,6 +56,12 @@ export const onRequestGet = factory.createHandlers(async (c) => {
 export const onRequestPost = factory.createHandlers(async (c) => {
   const now = nowIso();
   const slug = pathParam(c, 'collection');
-  const doc = await createDocument(getDb(c.env.DB), await apiPrincipal(c, now), slug, await jsonBody(c), now);
+  const doc = await createDocument(
+    getDb(c.env.DB),
+    await apiPrincipal(c, now),
+    slug,
+    await jsonBody(c),
+    now,
+  );
   return apiJson(c, { data: doc }, 201);
 });

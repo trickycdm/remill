@@ -41,7 +41,12 @@ describe('REST API — integration through the Hono app', () => {
   beforeEach(async () => {
     const d1 = createTestD1();
     db = getDb(d1);
-    env = { DB: d1, MEDIA: {} as R2Bucket, SESSION_SECRET: 'x'.repeat(32), BASE_URL: 'http://test' };
+    env = {
+      DB: d1,
+      MEDIA: {} as R2Bucket,
+      SESSION_SECRET: 'x'.repeat(32),
+      BASE_URL: 'http://test',
+    };
     await seedRoles(db, NOW);
     admin = await makePrincipal(db, NOW, { id: 'prn_admin', role: 'admin' });
     await collectionsService.createCollection(db, admin, POSTS, NOW);
@@ -49,14 +54,18 @@ describe('REST API — integration through the Hono app', () => {
     // An editor agent (full content perms) and a reader agent (published-only).
     const editorId = await access.createAgent(db, admin, 'editor-bot', NOW);
     await access.assignRole(db, admin, editorId, 'editor', '*', NOW);
-    editorToken = (await access.issueToken(db, admin, { principalId: editorId, name: 't' }, NOW)).token;
+    editorToken = (await access.issueToken(db, admin, { principalId: editorId, name: 't' }, NOW))
+      .token;
 
     const readerId = await access.createAgent(db, admin, 'reader-bot', NOW);
     await access.assignRole(db, admin, readerId, 'reader', '*', NOW);
-    readerToken = (await access.issueToken(db, admin, { principalId: readerId, name: 't' }, NOW)).token;
+    readerToken = (await access.issueToken(db, admin, { principalId: readerId, name: 't' }, NOW))
+      .token;
 
     // A token for the admin principal (manage_access) to drive the Share endpoint.
-    adminToken = (await access.issueToken(db, admin, { principalId: admin.id, name: 'admin-t' }, NOW)).token;
+    adminToken = (
+      await access.issueToken(db, admin, { principalId: admin.id, name: 'admin-t' }, NOW)
+    ).token;
   });
 
   it('rejects an invalid token with 401', async () => {
@@ -144,9 +153,21 @@ describe('REST API — integration through the Hono app', () => {
 
   it('publicRead: anonymous sees published docs only; drafts never leak', async () => {
     // editor creates one published + one draft
-    const a = await req('/api/c/posts', { method: 'POST', headers: { ...auth(editorToken), 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Public One' }) });
-    await req(`/api/c/posts/${a.json.data.id}/publish`, { method: 'POST', headers: { ...auth(editorToken), 'Content-Type': 'application/json' }, body: '{}' });
-    await req('/api/c/posts', { method: 'POST', headers: { ...auth(editorToken), 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Secret Draft' }) });
+    const a = await req('/api/c/posts', {
+      method: 'POST',
+      headers: { ...auth(editorToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Public One' }),
+    });
+    await req(`/api/c/posts/${a.json.data.id}/publish`, {
+      method: 'POST',
+      headers: { ...auth(editorToken), 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    await req('/api/c/posts', {
+      method: 'POST',
+      headers: { ...auth(editorToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Secret Draft' }),
+    });
 
     const anon = await req('/api/c/posts'); // no token
     expect(anon.status).toBe(200);
@@ -161,16 +182,31 @@ describe('REST API — integration through the Hono app', () => {
       body: JSON.stringify({ title: 'nope' }),
     });
     expect(r.status).toBe(403);
-    expect(r.json).toMatchObject({ code: 'FORBIDDEN', missing: { action: 'create', collection: 'posts' } });
+    expect(r.json).toMatchObject({
+      code: 'FORBIDDEN',
+      missing: { action: 'create', collection: 'posts' },
+    });
   });
 
   it('filter + sort over the document index (only indexed fields allowed)', async () => {
     for (const t of ['Banana', 'Apple', 'Cherry']) {
-      const c = await req('/api/c/posts', { method: 'POST', headers: { ...auth(editorToken), 'Content-Type': 'application/json' }, body: JSON.stringify({ title: t }) });
-      await req(`/api/c/posts/${c.json.data.id}/publish`, { method: 'POST', headers: { ...auth(editorToken), 'Content-Type': 'application/json' }, body: '{}' });
+      const c = await req('/api/c/posts', {
+        method: 'POST',
+        headers: { ...auth(editorToken), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: t }),
+      });
+      await req(`/api/c/posts/${c.json.data.id}/publish`, {
+        method: 'POST',
+        headers: { ...auth(editorToken), 'Content-Type': 'application/json' },
+        body: '{}',
+      });
     }
     const sorted = await req('/api/c/posts?sort=title', { headers: auth(editorToken) });
-    expect(sorted.json.data.map((d: { data: { title: string } }) => d.data.title)).toEqual(['Apple', 'Banana', 'Cherry']);
+    expect(sorted.json.data.map((d: { data: { title: string } }) => d.data.title)).toEqual([
+      'Apple',
+      'Banana',
+      'Cherry',
+    ]);
 
     const filtered = await req('/api/c/posts?filter[title]=Apple', { headers: auth(editorToken) });
     expect(filtered.json.total).toBe(1);
@@ -178,6 +214,60 @@ describe('REST API — integration through the Hono app', () => {
     // Filtering a non-indexed field is a 400.
     const bad = await req('/api/c/posts?filter[body]=x', { headers: auth(editorToken) });
     expect(bad.status).toBe(400);
+  });
+
+  it('D42 packs: discovery is anonymous; install is manage_schema-gated with 201/403/409', async () => {
+    // Anonymous discovery of both registries.
+    const tpls = await req('/api/templates');
+    expect(tpls.status).toBe(200);
+    expect(tpls.json.data.map((t: { key: string }) => t.key)).toContain('article');
+
+    const packs = await req('/api/packs');
+    expect(packs.status).toBe(200);
+    const blog = packs.json.data.find((p: { key: string }) => p.key === 'blog');
+    expect(blog.installed).toBe(false);
+
+    // Install without manage_schema → structured 403.
+    const denied = await req('/api/packs/blog/install', {
+      method: 'POST',
+      headers: auth(readerToken),
+    });
+    expect(denied.status).toBe(403);
+
+    // Install with manage_schema → 201 with the created definition(s); body optional.
+    const created = await req('/api/packs/blog/install', {
+      method: 'POST',
+      headers: auth(adminToken),
+    });
+    expect(created.status).toBe(201);
+    expect(created.json.data[0].slug).toBe('articles');
+
+    // Repeat → 409; unknown pack → 404.
+    const again = await req('/api/packs/blog/install', {
+      method: 'POST',
+      headers: auth(adminToken),
+    });
+    expect(again.status).toBe(409);
+    const ghost = await req('/api/packs/ghost/install', {
+      method: 'POST',
+      headers: auth(adminToken),
+    });
+    expect(ghost.status).toBe(404);
+
+    // Slug override rides the JSON body.
+    const renamed = await req('/api/packs/blog/install', {
+      method: 'POST',
+      headers: { ...auth(adminToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'essays' }),
+    });
+    expect(renamed.status).toBe(201);
+    expect(renamed.json.data[0].slug).toBe('essays');
+
+    // The OpenAPI doc advertises the static pack paths.
+    const openapi = await req('/api/openapi.json');
+    expect(Object.keys(openapi.json.paths)).toEqual(
+      expect.arrayContaining(['/api/templates', '/api/packs', '/api/packs/{key}/install']),
+    );
   });
 
   it('generates an OpenAPI document from the live definitions', async () => {

@@ -13,14 +13,17 @@ const factory = createFactory<{ Bindings: Env }>();
  *  export (10 MiB cap — split larger imports into files). `?dryRun=1`
  *  validates without writing. Response {created, updated, failed, errors:
  *  [{line, id?, error}]} — per-line errors, the run never aborts. */
-export const onRequestPost = factory.createHandlers(rateLimit('import', IMPORT_RATE_LIMIT), async (c) => {
-  assertBodyWithinLimit(c, MAX_IMPORT_BODY_BYTES);
-  const now = nowIso();
-  const principal = await apiPrincipal(c, now);
-  const slug = pathParam(c, 'collection');
-  const text = await c.req.text();
-  const result = await importCollection(getDb(c.env.DB), principal, slug, text, now, {
-    dryRun: c.req.query('dryRun') === '1',
-  });
-  return apiJson(c, result);
-});
+export const onRequestPost = factory.createHandlers(
+  rateLimit('import', IMPORT_RATE_LIMIT),
+  async (c) => {
+    assertBodyWithinLimit(c, MAX_IMPORT_BODY_BYTES);
+    const now = nowIso();
+    const principal = await apiPrincipal(c, now);
+    const slug = pathParam(c, 'collection');
+    const text = await c.req.text();
+    const result = await importCollection(getDb(c.env.DB), principal, slug, text, now, {
+      dryRun: c.req.query('dryRun') === '1',
+    });
+    return apiJson(c, result);
+  },
+);

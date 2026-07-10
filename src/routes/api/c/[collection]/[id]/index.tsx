@@ -11,20 +11,39 @@ const factory = createFactory<{ Bindings: Env }>();
 /** GET /api/c/:collection/:id — read one document. */
 export const onRequestGet = factory.createHandlers(async (c) => {
   const now = nowIso();
-  const doc = await getDocument(getDb(c.env.DB), await apiPrincipal(c, now), pathParam(c, 'collection'), pathParam(c, 'id'), now);
+  const doc = await getDocument(
+    getDb(c.env.DB),
+    await apiPrincipal(c, now),
+    pathParam(c, 'collection'),
+    pathParam(c, 'id'),
+    now,
+  );
   return apiJson(c, { data: doc });
 });
 
 /** PATCH /api/c/:collection/:id — update a document. */
 export const onRequestPatch = factory.createHandlers(async (c) => {
   const now = nowIso();
-  const doc = await updateDocument(getDb(c.env.DB), await apiPrincipal(c, now), pathParam(c, 'collection'), pathParam(c, 'id'), await jsonBody(c), now);
+  const doc = await updateDocument(
+    getDb(c.env.DB),
+    await apiPrincipal(c, now),
+    pathParam(c, 'collection'),
+    pathParam(c, 'id'),
+    await jsonBody(c),
+    now,
+  );
   return apiJson(c, { data: doc });
 });
 
 /** DELETE /api/c/:collection/:id — delete a document. */
 export const onRequestDelete = factory.createHandlers(async (c) => {
   const now = nowIso();
-  await deleteDocument(getDb(c.env.DB), await apiPrincipal(c, now), pathParam(c, 'collection'), pathParam(c, 'id'), now);
+  await deleteDocument(
+    getDb(c.env.DB),
+    await apiPrincipal(c, now),
+    pathParam(c, 'collection'),
+    pathParam(c, 'id'),
+    now,
+  );
   return apiJson(c, { data: { deleted: true } });
 });

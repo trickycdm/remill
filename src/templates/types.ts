@@ -29,6 +29,10 @@ export interface RenderTemplate {
   readonly key: string;
   /** Human label (for a future admin template picker). */
   readonly name: string;
+  /** One-sentence pitch for the discovery surfaces (list_templates over MCP,
+   *  GET /api/templates, the Marketplace) — what the reading page looks like
+   *  and what field shape it binds best. */
+  readonly description: string;
   /** Capability flags: which derived context/affordances this template actually
    *  renders. The ROUTE keys work off these — the reading-time computation and
    *  the reader-share island load are per-template capabilities, not implied by

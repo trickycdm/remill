@@ -18,3 +18,13 @@ const TEMPLATES: Record<TemplateKey, RenderTemplate> = {
 export function resolveTemplate(key?: string): RenderTemplate | undefined {
   return key && isTemplateKey(key) ? TEMPLATES[key] : undefined;
 }
+
+/** Discovery projection of the registry (MCP `list_templates`, REST
+ *  `GET /api/templates`, the admin Marketplace): metadata only, no components. */
+export function listTemplates(): { key: string; name: string; description: string }[] {
+  return Object.values(TEMPLATES).map((t) => ({
+    key: t.key,
+    name: t.name,
+    description: t.description,
+  }));
+}

@@ -13,6 +13,13 @@ export const onRequestPost = factory.createHandlers(async (c) => {
   const now = nowIso();
   const body = await jsonBody(c).catch(() => ({ publish: true }));
   const publish = body.publish !== false;
-  const doc = await setPublished(getDb(c.env.DB), await apiPrincipal(c, now), pathParam(c, 'collection'), pathParam(c, 'id'), publish, now);
+  const doc = await setPublished(
+    getDb(c.env.DB),
+    await apiPrincipal(c, now),
+    pathParam(c, 'collection'),
+    pathParam(c, 'id'),
+    publish,
+    now,
+  );
   return apiJson(c, { data: doc });
 });

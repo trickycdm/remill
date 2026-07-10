@@ -14,9 +14,20 @@
 import type { Database } from '@/db/client';
 import { scopeMatches, type Principal, type Action } from '@/access';
 // COR-6: the MCP surface must go through SERVICES, never the queries layer directly.
-import { getPrincipalPermissions, grantItem, listTeams, createShareLink, listAuditPage } from '@/services/access';
+import {
+  getPrincipalPermissions,
+  grantItem,
+  listTeams,
+  createShareLink,
+  listAuditPage,
+} from '@/services/access';
 import { InputValidationError } from '@/lib/errors';
-import { listCollections, getCollection, listCollectionsForDiscovery } from '@/services/collections';
+import {
+  listCollections,
+  getCollection,
+  listCollectionsForDiscovery,
+} from '@/services/collections';
+import { listTemplates } from '@/templates/registry';
 import * as docs from '@/services/documents';
 import * as collectionsService from '@/services/collections';
 import { listMedia, getMediaById, uploadMedia } from '@/services/media';
@@ -59,7 +70,9 @@ function couldDo(
   const scope = principal.tokenScope;
   if (scope && !scopeMatches(scope, action, collection)) return false;
   if (action === 'read' && publicRead) return true;
-  return perms.some((p) => p.action === action && (p.collection === '*' || p.collection === collection));
+  return perms.some(
+    (p) => p.action === action && (p.collection === '*' || p.collection === collection),
+  );
 }
 
 function docInputSchema(def: CollectionDefinition): JSONSchema {
@@ -116,23 +129,86 @@ export async function buildToolsForPrincipal(
     // callers never see the internal access/workflow config.
     handler: async () => listCollectionsForDiscovery(db, principal),
   });
+  // Template + pack discovery — ungated like list_collections: registry
+  // metadata is code, and `installed` reveals nothing list_collections doesn't.
+  tools.push({
+    name: 'list_templates',
+    description:
+      'List the reading TEMPLATES a collection can select via its `template` key — each renders a ' +
+      'designed public page for documents in that collection. Templates bind fields by convention; ' +
+      'a collection can pin slots explicitly via its `bind` key ({title|hero|lead: field key}).',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async () => listTemplates(),
+  });
+  tools.push({
+    name: 'list_packs',
+    description:
+      'List the installable content PACKS — a pack bundles a reading template with the collection ' +
+      'definition(s) co-designed for it (e.g. the blog pack: an articles collection + the article ' +
+      'template). Shows what each install would create and whether it already exists. Install with ' +
+      'install_pack.',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async () => collectionsService.listPackStatuses(db),
+  });
   if (couldDo(perms, principal, 'manage_schema', '*', false)) {
     tools.push({
       name: 'create_collection',
       description:
         'Define a new content type. The body is a collection definition (slug, name, shape, fields[]). ' +
         'Field keys are lowercase snake_case (^[a-z][a-z0-9_]*$). A slug field is indexed by default so it ' +
-        'serves the pretty public URL; set index:true on any relation field you want backlinks or filtering on.',
-      inputSchema: { type: 'object', properties: { definition: { type: 'object' } }, required: ['definition'] },
+        'serves the pretty public URL; set index:true on any relation field you want backlinks or filtering on. ' +
+        'Optional `template` selects a designed public reading page (see list_templates) and `bind` pins its ' +
+        'title/hero/lead slots to specific fields; for a ready-made shape, prefer install_pack.',
+      inputSchema: {
+        type: 'object',
+        properties: { definition: { type: 'object' } },
+        required: ['definition'],
+      },
       handler: async (args) =>
-        collectionsService.createCollection(db, principal, args.definition as CollectionDefinition, now()),
+        collectionsService.createCollection(
+          db,
+          principal,
+          args.definition as CollectionDefinition,
+          now(),
+        ),
+    });
+    tools.push({
+      name: 'install_pack',
+      description:
+        'Install a content pack (see list_packs): creates its co-designed collection(s) through the ' +
+        'standard validated pipeline, ready to fill immediately — no field design needed. Optional ' +
+        '`slug` renames the collection (single-collection packs only). Fails with a conflict if a ' +
+        'target collection already exists.',
+      inputSchema: {
+        type: 'object',
+        properties: { pack: { type: 'string' }, slug: { type: 'string' } },
+        required: ['pack'],
+      },
+      handler: async (args) =>
+        collectionsService.installPack(
+          db,
+          principal,
+          String(args.pack),
+          now(),
+          args.slug !== undefined ? { slug: String(args.slug) } : undefined,
+        ),
     });
     tools.push({
       name: 'update_collection',
       description: 'Modify an existing content type.',
-      inputSchema: { type: 'object', properties: { slug: { type: 'string' }, definition: { type: 'object' } }, required: ['slug', 'definition'] },
+      inputSchema: {
+        type: 'object',
+        properties: { slug: { type: 'string' }, definition: { type: 'object' } },
+        required: ['slug', 'definition'],
+      },
       handler: async (args) =>
-        collectionsService.updateCollection(db, principal, String(args.slug), args.definition as CollectionDefinition, now()),
+        collectionsService.updateCollection(
+          db,
+          principal,
+          String(args.slug),
+          args.definition as CollectionDefinition,
+          now(),
+        ),
     });
   }
 
@@ -197,7 +273,9 @@ export async function buildToolsForPrincipal(
             page: { type: 'integer' },
             pageSize: { type: 'integer' },
             // lifecycle:'none' collections have no meaningful status axis (B4).
-            ...(hasLifecycle(def) ? { status: { type: 'string', enum: ['draft', 'published'] } } : {}),
+            ...(hasLifecycle(def)
+              ? { status: { type: 'string', enum: ['draft', 'published'] } }
+              : {}),
             sort: { type: 'string', description: 'indexed field name, prefix "-" for descending' },
             filters: {
               type: 'array',
@@ -236,7 +314,10 @@ export async function buildToolsForPrincipal(
         inputSchema: {
           type: 'object',
           properties: {
-            q: { type: 'string', description: 'search terms (words are ANDed; the last word prefix-matches)' },
+            q: {
+              type: 'string',
+              description: 'search terms (words are ANDed; the last word prefix-matches)',
+            },
             limit: { type: 'integer' },
             offset: { type: 'integer' },
           },
@@ -291,7 +372,11 @@ export async function buildToolsForPrincipal(
       tools.push({
         name: `update_${slug}`,
         description: `Update a ${def.name} document. Provide id + changed fields.`,
-        inputSchema: { type: 'object', properties: { id: { type: 'string' }, ...docInputSchema(def).properties as object }, required: ['id'] },
+        inputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' }, ...(docInputSchema(def).properties as object) },
+          required: ['id'],
+        },
         handler: async (args) => {
           const { id, ...rest } = args;
           return docs.updateDocument(db, principal, slug, String(id), rest, now());
@@ -324,8 +409,13 @@ export async function buildToolsForPrincipal(
       tools.push({
         name: `publish_${slug}`,
         description: `Publish or unpublish a ${def.name} document.`,
-        inputSchema: { type: 'object', properties: { id: { type: 'string' }, publish: { type: 'boolean' } }, required: ['id'] },
-        handler: async (args) => docs.setPublished(db, principal, slug, String(args.id), args.publish !== false, now()),
+        inputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' }, publish: { type: 'boolean' } },
+          required: ['id'],
+        },
+        handler: async (args) =>
+          docs.setPublished(db, principal, slug, String(args.id), args.publish !== false, now()),
       });
       tools.push({
         name: `schedule_${slug}`,
@@ -334,7 +424,10 @@ export async function buildToolsForPrincipal(
           type: 'object',
           properties: {
             id: { type: 'string' },
-            publish_at: { type: 'string', description: 'ISO-8601 datetime to publish at (drafts only)' },
+            publish_at: {
+              type: 'string',
+              description: 'ISO-8601 datetime to publish at (drafts only)',
+            },
             cancel: { type: 'boolean', description: 'true to clear a pending schedule' },
           },
           required: ['id'],
@@ -347,7 +440,14 @@ export async function buildToolsForPrincipal(
               { path: 'publish_at', message: 'Provide exactly one of publish_at or cancel:true.' },
             ]);
           }
-          return docs.scheduleDocument(db, principal, slug, String(args.id), cancel ? null : String(args.publish_at), now());
+          return docs.scheduleDocument(
+            db,
+            principal,
+            slug,
+            String(args.id),
+            cancel ? null : String(args.publish_at),
+            now(),
+          );
         },
       });
     }
@@ -361,7 +461,11 @@ export async function buildToolsForPrincipal(
             id: { type: 'string', description: 'the document id to share' },
             subjectKind: { type: 'string', enum: ['principal', 'role', 'team'] },
             subjectId: { type: 'string', description: 'principal id, role slug, or team id' },
-            actions: { type: 'array', items: { type: 'string' }, description: 'actions to grant, e.g. ["read"]' },
+            actions: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'actions to grant, e.g. ["read"]',
+            },
             expiresAt: { type: 'string', description: 'optional ISO-8601 expiry' },
           },
           required: ['id', 'subjectKind', 'subjectId', 'actions'],
@@ -371,7 +475,12 @@ export async function buildToolsForPrincipal(
             db,
             principal,
             {
-              subjectKind: args.subjectKind === 'role' ? 'role' : args.subjectKind === 'team' ? 'team' : 'principal',
+              subjectKind:
+                args.subjectKind === 'role'
+                  ? 'role'
+                  : args.subjectKind === 'team'
+                    ? 'team'
+                    : 'principal',
               subjectId: String(args.subjectId ?? ''),
               documentId: String(args.id ?? ''),
               collection: slug,
@@ -391,17 +500,24 @@ export async function buildToolsForPrincipal(
           type: 'object',
           properties: {
             id: { type: 'string', description: 'the document id to share' },
-            expiresAt: { type: 'string', description: 'REQUIRED ISO-8601 expiry (clamped to 30 days out)' },
+            expiresAt: {
+              type: 'string',
+              description: 'REQUIRED ISO-8601 expiry (clamped to 30 days out)',
+            },
           },
           required: ['id', 'expiresAt'],
         },
         handler: async (args) => {
           const requested = Date.parse(String(args.expiresAt ?? ''));
           if (Number.isNaN(requested)) {
-            throw new InputValidationError([{ path: 'expiresAt', message: 'A valid ISO-8601 expiry is required.' }]);
+            throw new InputValidationError([
+              { path: 'expiresAt', message: 'A valid ISO-8601 expiry is required.' },
+            ]);
           }
           const nowIso = now();
-          const expiresAt = new Date(Math.min(requested, new Date(nowIso).getTime() + SHARE_LINK_MAX_TTL_MS)).toISOString();
+          const expiresAt = new Date(
+            Math.min(requested, new Date(nowIso).getTime() + SHARE_LINK_MAX_TTL_MS),
+          ).toISOString();
           const { grantId, token } = await createShareLink(
             db,
             principal,
@@ -448,16 +564,31 @@ export async function buildToolsForPrincipal(
           },
           now(),
         );
-        return { id: rec.id, url: `/media/${rec.id}`, mime: rec.mime, size: rec.size, alt: rec.alt };
+        return {
+          id: rec.id,
+          url: `/media/${rec.id}`,
+          mime: rec.mime,
+          size: rec.size,
+          alt: rec.alt,
+        };
       },
     });
   }
 
   // Media read tools.
-  if (couldDo(perms, principal, 'read', 'media', (await getCollection(db, 'media'))?.access?.publicRead === true)) {
+  if (
+    couldDo(
+      perms,
+      principal,
+      'read',
+      'media',
+      (await getCollection(db, 'media'))?.access?.publicRead === true,
+    )
+  ) {
     tools.push({
       name: 'list_media',
-      description: 'List uploaded media assets (newest first; pass the returned cursor for the next page).',
+      description:
+        'List uploaded media assets (newest first; pass the returned cursor for the next page).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -469,7 +600,10 @@ export async function buildToolsForPrincipal(
         listMedia(
           db,
           principal,
-          { cursor: typeof args.cursor === 'string' ? args.cursor : null, limit: args.pageSize as number | undefined },
+          {
+            cursor: typeof args.cursor === 'string' ? args.cursor : null,
+            limit: args.pageSize as number | undefined,
+          },
           now(),
         ),
     });
@@ -504,7 +638,8 @@ export async function buildToolsForPrincipal(
     handler: async (args) =>
       pollEvents(db, principal, {
         since: args.since === undefined ? undefined : Number(args.since),
-        collection: typeof args.collection === 'string' && args.collection ? args.collection : undefined,
+        collection:
+          typeof args.collection === 'string' && args.collection ? args.collection : undefined,
         limit: args.limit === undefined ? undefined : Number(args.limit),
       }),
   });
