@@ -35,7 +35,10 @@ import {
   anonymousPrincipal,
   systemPrincipal,
   type Principal,
+  type ResolvedAccess,
 } from '@/access';
+import type { Grant } from '@/access/grant';
+import { collectionsWithAction, getPrincipalPermissions } from '@/services/access';
 import { newId } from '@/lib/id';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { titleFieldOf } from '@/lib/def-helpers';
@@ -771,6 +774,81 @@ export async function listDocuments(
   const expanded = await expandRelations(db, principal, def, rows, now);
   const withMedia = await expandMedia(db, principal, def, expanded, now);
   return { rows: withMedia, total, page, pageSize, nextCursor };
+}
+
+/** One collection's card on the content home: the definition, with document
+ *  counts + freshness attached when the caller can read the collection. */
+export interface ContentOverviewItem {
+  readonly def: CollectionDefinition;
+  /** Present only when the caller can read the collection; counts reflect the
+   *  caller's compiled read filter (an `own`-conditioned author counts their
+   *  own drafts, not anyone else's). */
+  readonly counts?: { readonly published: number; readonly draft: number };
+  /** MAX(updated_at) among the caller-visible documents. */
+  readonly lastUpdatedAt?: string;
+  /** Whether the caller may create documents here — UI-hiding only (the create
+   *  pipeline's authorize() is the enforcement). */
+  readonly canCreate: boolean;
+}
+
+/**
+ * The content home's per-collection summary (/admin/c): every collection
+ * definition, with counts + freshness for the collections the caller can read.
+ * Pre-scoped via collectionsWithAction (no deny-audit spray — ACCESS_CONTROL's
+ * capability pre-check pattern, the listTrash precedent), then each readable
+ * collection is read-authorized for its Grant, and the caller's compiled read
+ * filter narrows the ONE grouped count query in-query (D17 — counts never
+ * leak). NOTE: like collectionsWithAction itself, publicRead does not widen
+ * the pre-check — a principal with no explicit read permission gets the card
+ * without counts.
+ */
+export async function contentOverview(
+  db: Database,
+  principal: Principal,
+  now: string,
+): Promise<ContentOverviewItem[]> {
+  const defs = await listCollectionDefs(db);
+  const readable = await collectionsWithAction(db, principal, 'read');
+  const creatable = await collectionsWithAction(db, principal, 'create');
+  const readableDefs = defs.filter((d) => readable === '*' || readable.includes(d.slug));
+
+  // Resolve permissions ONCE; per-collection publicRead comes from the defs we
+  // already hold (TD-3 — no N re-resolutions).
+  const permissions = await getPrincipalPermissions(db, principal.id);
+  const grants: Grant[] = [];
+  const scopes: dq.DocCountScope[] = [];
+  for (const def of readableDefs) {
+    const resolved: ResolvedAccess = { permissions, publicRead: def.access?.publicRead === true };
+    grants.push(await authorize(db, principal, 'read', { collection: def.slug }, now, resolved));
+    scopes.push({
+      collection: def.slug,
+      accessFilter: await compileReadFilter(db, principal, def.slug, now, resolved),
+    });
+  }
+
+  const rows = scopes.length ? await dq.countDocumentsByCollection(db, scopes, grants) : [];
+  const bySlug = new Map<string, { published: number; draft: number; latest?: string }>();
+  for (const def of readableDefs) bySlug.set(def.slug, { published: 0, draft: 0 });
+  for (const r of rows) {
+    const entry = bySlug.get(r.collection);
+    if (!entry) continue;
+    if (r.status === 'published') entry.published = r.n;
+    else entry.draft = r.n;
+    if (r.latest && (!entry.latest || r.latest > entry.latest)) entry.latest = r.latest;
+  }
+
+  return defs.map((def) => {
+    const entry = bySlug.get(def.slug);
+    const canCreate = creatable === '*' || creatable.includes(def.slug);
+    return entry
+      ? {
+          def,
+          counts: { published: entry.published, draft: entry.draft },
+          lastUpdatedAt: entry.latest,
+          canCreate,
+        }
+      : { def, canCreate };
+  });
 }
 
 /** Resolve a document by its indexed slug-field value (the public URL path,

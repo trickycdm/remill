@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getDocument } from '@/db/queries/documents';
+import { getDocument, countDocumentsByCollection } from '@/db/queries/documents';
 import { Grant } from '@/access/grant';
 import type { Database } from '@/db/client';
 
@@ -19,6 +19,9 @@ async function _witnessGuarantees(db: Database) {
 
   // @ts-expect-error — Grant's constructor is private; services cannot mint one
   await getDocument(db, 'posts', 'doc_1', new Grant('p', 'read', { collection: 'posts' }));
+
+  // @ts-expect-error — the grouped count read requires the Grant[] witness too
+  await countDocumentsByCollection(db, [{ collection: 'posts' }]);
 }
 
 describe('Grant witness — compile-time enforcement', () => {

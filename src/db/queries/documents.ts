@@ -9,7 +9,7 @@
  * document, its index, and its history never drift apart (DATABASE_STANDARDS.md).
  */
 
-import { and, eq, sql, desc, count, inArray, type SQL } from 'drizzle-orm';
+import { and, or, eq, sql, desc, count, inArray, type SQL } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { Database } from '@/db/client';
 import { documents, documentIndex, documentRevisions } from '@/db/schema';
@@ -269,6 +269,57 @@ export async function listDocuments(
 
   const totalRows = await db.select({ n: count() }).from(documents).where(baseWhere);
   return { rows: rows.map(toDomain), total: totalRows[0]?.n ?? 0 };
+}
+
+/** One collection's slice of the content-overview counts (the /admin/c home).
+ *  `accessFilter` is the caller's compiled read predicate (compileReadFilter) —
+ *  applied IN-QUERY so counts can never leak (D17); undefined = unrestricted. */
+export interface DocCountScope {
+  readonly collection: string;
+  readonly accessFilter?: SQL;
+}
+
+export interface DocCountRow {
+  readonly collection: string;
+  readonly status: 'draft' | 'published';
+  readonly n: number;
+  /** MAX(updated_at) within the scope — the collection's freshness signal. */
+  readonly latest: string | null;
+}
+
+/** Per-collection, per-status document counts + newest updated_at across the
+ *  caller's scopes, in ONE grouped query (documents_collection_status_idx).
+ *  Metadata only (no data_json flows), but counts are leak-capable, so each
+ *  scope's read predicate narrows in-query — never post-filter — and one Grant
+ *  per scope is required (the service read-authorized each collection; the
+ *  listTrash scope precedent). */
+export async function countDocumentsByCollection(
+  db: Database,
+  scopes: readonly DocCountScope[],
+  _grants: readonly Grant[],
+): Promise<DocCountRow[]> {
+  if (!scopes.length) return [];
+  const preds = scopes.map((s) =>
+    s.accessFilter
+      ? and(eq(documents.collection, s.collection), s.accessFilter)!
+      : eq(documents.collection, s.collection),
+  );
+  const rows = await db
+    .select({
+      collection: documents.collection,
+      status: documents.status,
+      n: count(),
+      latest: sql<string | null>`MAX(${documents.updatedAt})`,
+    })
+    .from(documents)
+    .where(or(...preds))
+    .groupBy(documents.collection, documents.status);
+  return rows.map((r) => ({
+    collection: r.collection,
+    status: r.status as 'draft' | 'published',
+    n: r.n,
+    latest: r.latest,
+  }));
 }
 
 /** Batch-read documents by id within ONE collection, with the caller's compiled

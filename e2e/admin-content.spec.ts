@@ -14,9 +14,10 @@ test.describe('Phase 4 — generated document admin', () => {
   test('full lifecycle: create → publish → edit → revision → restore, then delete', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Content home lists collections; open Posts.
+    // Content home lists collections; open Posts. exact: true — the card's
+    // footer "New Posts" quick action would substring-match { name: 'Posts' }.
     await page.goto('/admin/c');
-    await page.getByRole('link', { name: 'Posts' }).first().click();
+    await page.getByRole('link', { name: 'Posts', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts$/);
 
     // Create a document via the generated form.
@@ -57,6 +58,23 @@ test.describe('Phase 4 — generated document admin', () => {
     await expect(del).toBeVisible();
     await del.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts$/);
+  });
+
+  test('content home cards show author-centric meta and a New quick action', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/c');
+
+    // The Posts card (an <li>) carries a content summary, not schema plumbing.
+    const posts = page
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('link', { name: 'Posts', exact: true }) });
+    await expect(
+      posts.getByText(/published|draft|documents|No documents yet/).first(),
+    ).toBeVisible();
+
+    // The per-card quick action goes straight to the generated create form.
+    await posts.getByRole('link', { name: 'New Posts', exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/c\/posts\/new$/);
   });
 
   test('validation error renders inline without navigating', async ({ page }) => {
