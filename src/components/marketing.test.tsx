@@ -26,6 +26,31 @@ describe('homepage (marketing)', () => {
     expect(html).toContain('https://example.org/mcp');
   });
 
+  it('names the customer and the conversion: who strip, jobs, run-your-own, dogfood, footer depth', async () => {
+    const res = await app.request('/', {}, env);
+    const html = await res.text();
+    // P1: the audience/problem strip sits between hero and proof.
+    expect(html).toContain('A backend where the AI is a citizen, not a shared key.');
+    // P7: the proof section leads with a value claim, not an H1 echo.
+    expect(html).toContain('Define it once. It ships six ways.');
+    // P4: the jobs section.
+    expect(html).toContain('What the mill is for');
+    expect(html).toContain('Agent drafts, human publishes');
+    // P3: the falsifiable trust claim is the headline (apostrophes render
+    // HTML-escaped, so pin the escape-free prefix).
+    expect(html).toContain('Your agent can draft all night. It still can');
+    // P2: the deploy story is a first-class section and the hero's primary CTA.
+    expect(html).toContain('id="run"');
+    expect(html).toContain('Run your own mill');
+    expect(html).toContain('under ten minutes');
+    // P5: the writing index is dogfood proof (heading present even when empty
+    // install shows the EmptyState instead of the list).
+    expect(html).toContain('This site is a remill');
+    // P6: footer credibility links.
+    expect(html).toContain('/api/openapi.json');
+    expect(html).toContain('Live on Cloudflare Workers since July 2026');
+  });
+
   it('surface previews mirror the real wire shapes, and tabs carry APG keyboard state', async () => {
     const res = await app.request('/', {}, env);
     const html = await res.text();

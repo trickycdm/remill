@@ -3,13 +3,16 @@
  * auth-shell.tsx). Composed by src/routes/index.tsx inside MarketingShell.
  *
  * Design notes (tasteskill v2 + DESIGN_SYSTEM.md): product-showcase-led,
- * narrative promise -> proof -> trust -> connect -> writing. The one iris
- * accent is used with confidence as a real colour field (the hero band, the
- * quickstart band, tinted bento cells) — the "push it bold" direction, still
- * 100% on-token. Exactly two mono-caps eyebrows page-wide (hero + quickstart);
- * five distinct section layout families; every preview is remill's own UI
- * primitives rendering real markup, never a div-built fake screenshot. Zero
- * em-dashes in visible copy.
+ * narrative promise -> who it's for -> proof -> jobs -> guarantee -> run your
+ * own -> connect -> dogfood writing. The one iris accent is used with
+ * confidence as a real colour field (the hero band, the quickstart band,
+ * tinted bento cells) — the "push it bold" direction, still 100% on-token.
+ * Exactly two mono-caps eyebrows page-wide (hero + quickstart); every section
+ * uses a distinct layout family; every preview is remill's own UI primitives
+ * rendering real markup, never a div-built fake screenshot. Zero em-dashes in
+ * visible copy. The primary CTA is "Run your own mill" — remill.org is a
+ * single-tenant instance, so a cold visitor's conversion is deploying their
+ * own, never signing in here.
  */
 
 import { Button } from '@/components/ui/button';
@@ -68,12 +71,39 @@ export function MarketingHero() {
           agents.
         </p>
         <div class="mt-2 flex flex-wrap items-center gap-3">
-          <a href="#connect" class={HERO_CTA_PRIMARY}>
+          <a href="#run" class={HERO_CTA_PRIMARY}>
+            Run your own mill
+          </a>
+          <a href="#connect" class={HERO_CTA_SECONDARY}>
             Connect an agent
           </a>
-          <a href="#writing" class={HERO_CTA_SECONDARY}>
-            Browse the writing
-          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The who/why strip (the beat the first cut skipped): name the customer and the
+ * problem BEFORE showing the mechanism. Quiet prose band, stacked, no eyebrow —
+ * the sentence is the design.
+ */
+export function WhoItsFor() {
+  return (
+    <section aria-labelledby="home-who" class="border-b border-border">
+      <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-6 py-16 sm:py-20">
+        <h2 id="home-who" class={`${SECTION_H2} max-w-3xl`}>
+          A backend where the AI is a citizen, not a shared key.
+        </h2>
+        <div class="flex max-w-2xl flex-col gap-3 leading-relaxed text-ink-muted">
+          <p>
+            remill is for builders who let agents write. An agent here is a principal: its own
+            identity, a scoped token, a least-privilege role, and an audit trail.
+          </p>
+          <p>
+            People get a calm admin. Apps get a clean REST API. Agents get MCP tools. Every write
+            goes through the same validated, authorized pipeline.
+          </p>
         </div>
       </div>
     </section>
@@ -141,11 +171,11 @@ reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
     <section aria-labelledby="home-surfaces" class="mx-auto w-full max-w-5xl px-6 py-20 sm:py-24">
       <div class="flex max-w-2xl flex-col gap-4">
         <h2 id="home-surfaces" class={SECTION_H2}>
-          One definition works for humans, apps, and agents.
+          Define it once. It ships six ways.
         </h2>
         <p class="leading-relaxed text-ink-muted">
-          Define a collection once, in the admin or over MCP, and remill generates all six surfaces:
-          storage, validation, the admin list and editor, the REST API, and MCP tools. No deploy, no
+          One collection definition, written in the admin or over MCP, generates storage,
+          validation, the admin list and editor, the REST API, and MCP tools. No deploy, no
           migrations.
         </p>
       </div>
@@ -284,11 +314,55 @@ reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
   );
 }
 
+/** The jobs the platform is genuinely best at, told as second-person stories —
+ *  scenarios, deliberately NOT dressed up as testimonials (no invented names). */
+const USE_CASES: { title: string; story: string }[] = [
+  {
+    title: 'Agent drafts, human publishes',
+    story:
+      'Your agent turns the changelog into release-note drafts overnight. You read them over ' +
+      'coffee and press publish. The agent cannot, by design.',
+  },
+  {
+    title: 'A backend for agent products',
+    story:
+      'Give a support agent a token scoped to one collection. It files drafts over MCP; your ' +
+      'app reads the same data over REST. Nothing else is exposed.',
+  },
+  {
+    title: 'Publishing you own',
+    story:
+      'Write on your own Worker. Public pages, RSS, scheduled posts, and expiring draft links ' +
+      'ship with every collection. No third party holds your content.',
+  },
+];
+
+/** Use cases as a two-column ledger (title | story), collapsing to a stack. */
+export function UseCases() {
+  return (
+    <section aria-labelledby="home-jobs" class="border-t border-border">
+      <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-20 sm:py-24">
+        <h2 id="home-jobs" class={SECTION_H2}>
+          What the mill is for
+        </h2>
+        <ul class="flex flex-col divide-y divide-border">
+          {USE_CASES.map((u) => (
+            <li class="grid gap-2 py-6 first:pt-0 last:pb-0 sm:grid-cols-[16rem_1fr] sm:gap-8">
+              <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">{u.title}</h3>
+              <p class="leading-relaxed text-ink-muted">{u.story}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 const TRUST: { icon: unknown; lead: string; body: string; wide: boolean }[] = [
   {
     icon: <Bot class="size-6" />,
-    lead: 'Agents you can trust.',
-    body: 'Every agent gets its own identity, a scoped token, and a least-privilege role. It can draft all day without ever being able to publish.',
+    lead: 'Agents are principals.',
+    body: 'Own identity, scoped token, least-privilege role. Even a denial is recorded, attributed to the exact token that asked.',
     wide: true,
   },
   {
@@ -306,19 +380,24 @@ const TRUST: { icon: unknown; lead: string; body: string; wide: boolean }[] = [
   {
     icon: <ShieldCheck class="size-6" />,
     lead: 'Locked down by default.',
-    body: 'Every write, human or agent, runs through one validated, authorized pipeline, and everything lands in the audit log.',
+    body: 'Default-deny access, additive-only grants. Fields that were never declared are rejected before they reach storage.',
     wide: true,
   },
 ];
 
-/** Bento grid: four cells, asymmetric spans for rhythm, iris-washed lead cells. */
+/** Bento grid: four cells, asymmetric spans for rhythm, iris-washed lead cells.
+ *  The headline is the page's one falsifiable trust claim, promoted from a cell. */
 export function TrustBento() {
   return (
     <section aria-labelledby="home-trust" class="border-t border-border">
       <div class="mx-auto w-full max-w-5xl px-6 py-20 sm:py-24">
-        <h2 id="home-trust" class={SECTION_H2}>
-          Built for trust
+        <h2 id="home-trust" class={`${SECTION_H2} max-w-3xl`}>
+          Your agent can draft all night. It still can't publish.
         </h2>
+        <p class="mt-4 max-w-2xl leading-relaxed text-ink-muted">
+          Every write, human or agent, runs through one authorized pipeline and lands in the audit
+          log under its own token.
+        </p>
         <ul class="mt-8 grid gap-4 sm:grid-cols-3">
           {TRUST.map((c) => (
             <li
@@ -332,6 +411,59 @@ export function TrustBento() {
             </li>
           ))}
         </ul>
+      </div>
+    </section>
+  );
+}
+
+/** The pieces a mill is made of — concrete, not marketing abstractions. */
+const MILL_PIECES: { label: string; body: string }[] = [
+  { label: 'One Worker', body: 'The whole platform: admin, API, MCP, public pages.' },
+  { label: 'One D1 database', body: 'Schema as data; content, index, and audit trail.' },
+  { label: 'One R2 bucket', body: 'Media originals, streamed with range support.' },
+  { label: 'Your domain', body: 'Feeds, OG cards, and share links mint from it.' },
+];
+
+/**
+ * The real conversion story (the funnel bug the review named): remill.org is
+ * the author's single-tenant instance, so a cold visitor's path is DEPLOY YOUR
+ * OWN, not sign-in. Honest about availability: the repo is private while it is
+ * readied for release, so the CTA-grade artifact here is the open API
+ * reference, and the section earns trust by being concrete about the pieces.
+ * TODO(release): add the repository link + license line here and in the footer
+ * when the source goes public.
+ */
+export function RunYourOwnMill() {
+  return (
+    <section id="run" aria-labelledby="home-run" class="border-t border-border">
+      <div class="mx-auto grid w-full max-w-5xl gap-10 px-6 py-20 sm:py-24 lg:grid-cols-[1fr_20rem] lg:gap-16">
+        <div class="flex flex-col gap-4">
+          <h2 id="home-run" class={SECTION_H2}>
+            Run your own mill.
+          </h2>
+          <p class="max-w-2xl leading-relaxed text-ink-muted">
+            remill is single-tenant on purpose: one Worker, one database, one bucket, all yours. A
+            styled CMS on your own Cloudflare URL in under ten minutes, deployed from your own
+            repository by GitHub Actions.
+          </p>
+          <p class="max-w-2xl leading-relaxed text-ink-muted">
+            remill.org runs this exact code as the author's own mill. The source is being readied
+            for a public release; the live API is open to read today.
+          </p>
+          <p class="mt-2">
+            <a href="/api/openapi.json" class={LINK}>
+              Browse the live API reference
+            </a>
+          </p>
+        </div>
+        <dl class="grid grid-cols-2 gap-x-6 gap-y-6 self-start lg:grid-cols-1">
+          {MILL_PIECES.map((p) => (
+            <div class="flex flex-col gap-1 border-t border-border pt-3">
+              <dt class="font-mono text-sm font-medium text-accent-text">{p.label}</dt>
+              <dd class="text-sm leading-relaxed text-ink-muted">{p.body}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </section>
   );
@@ -437,7 +569,10 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
   );
 }
 
-/** The live instance's published content: the discovery index, one level down. */
+/** The live instance's published content, reframed as dogfood proof: this page
+ *  IS the product. Empty collections are hidden (an empty state is an admin's
+ *  affordance, not a visitor's); a fresh install still gets the whole-page
+ *  EmptyState below. */
 export function PublishedIndex({
   sections,
   settings,
@@ -445,6 +580,7 @@ export function PublishedIndex({
   sections: { def: CollectionDefinition; docs: DiscoveryDoc[] }[];
   settings: SiteSettings;
 }) {
+  const populated = sections.filter(({ docs }) => docs.length > 0);
   return (
     <section
       id="writing"
@@ -452,11 +588,17 @@ export function PublishedIndex({
       class="mx-auto w-full max-w-5xl px-6 py-20 sm:py-24"
     >
       <h2 id="home-writing" class={SECTION_H2}>
-        Latest writing
+        This site is a remill
       </h2>
-      {sections.length ? (
+      {populated.length ? (
+        <p class="mt-4 max-w-2xl leading-relaxed text-ink-muted">
+          You're reading the product. This page, the writing below, its feeds, and the open API are
+          all served by one instance.
+        </p>
+      ) : null}
+      {populated.length ? (
         <div class="mt-8 flex flex-col gap-10">
-          {sections.map(({ def, docs }) => (
+          {populated.map(({ def, docs }) => (
             <section aria-labelledby={`home-${def.slug}`}>
               <h3
                 id={`home-${def.slug}`}
@@ -464,24 +606,20 @@ export function PublishedIndex({
               >
                 {def.name}
               </h3>
-              {docs.length ? (
-                <ul class="mt-4 flex flex-col gap-3">
-                  {docs.map((d) => (
-                    <li class="flex items-baseline justify-between gap-4">
-                      <a href={d.path} class={LINK}>
-                        {d.title}
-                      </a>
-                      {d.publishedAt ? (
-                        <span class="shrink-0 text-sm text-ink-subtle">
-                          {formatDate(d.publishedAt, settings)}
-                        </span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p class="mt-4 text-sm text-ink-muted">Nothing published yet.</p>
-              )}
+              <ul class="mt-4 flex flex-col gap-3">
+                {docs.map((d) => (
+                  <li class="flex items-baseline justify-between gap-4">
+                    <a href={d.path} class={LINK}>
+                      {d.title}
+                    </a>
+                    {d.publishedAt ? (
+                      <span class="shrink-0 text-sm text-ink-subtle">
+                        {formatDate(d.publishedAt, settings)}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             </section>
           ))}
         </div>

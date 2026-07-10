@@ -52,18 +52,33 @@ export function MarketingShell({ children }: { children?: unknown }) {
         {children}
       </main>
 
+      {/* The credibility layer (was one line deep, which read as abandoned).
+          TODO(release): add the repository + license links when the source
+          goes public. */}
       <footer class="border-t border-border">
-        <div class="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-10 sm:flex-row sm:items-center sm:justify-between">
+        <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex flex-col gap-1.5">
             <Wordmark />
             <p class="text-xs text-ink-subtle">A lightweight, agent-native CMS.</p>
+            <p class="text-xs text-ink-subtle">
+              Live on Cloudflare Workers since July 2026. This site runs the product.
+            </p>
           </div>
-          <nav aria-label="Footer" class="flex items-center gap-6">
+          <nav aria-label="Footer" class="grid grid-cols-2 gap-x-10 gap-y-3 sm:text-right">
+            <a href="/api/openapi.json" class={NAV_LINK}>
+              API reference
+            </a>
+            <a href="#connect" class={NAV_LINK}>
+              MCP endpoint
+            </a>
             <a href="/rss.xml" class={NAV_LINK}>
               RSS
             </a>
             <a href="/sitemap.xml" class={NAV_LINK}>
               Sitemap
+            </a>
+            <a href="#writing" class={NAV_LINK}>
+              Writing
             </a>
             <a href="/admin" class={NAV_LINK}>
               Sign in
