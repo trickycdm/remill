@@ -37,6 +37,7 @@ rendered public pages + share links.)
 > across admin Marketplace / MCP / REST, plus the `bind` collection-def escape hatch, public
 > `/:collection` index pages, and a customer-focused homepage rework (plan:
 > [`plans/2026-07-09-content_packs_marketplace_homepage_fixes/`](plans/2026-07-09-content_packs_marketplace_homepage_fixes/)).
+> **v1.4.0 shipped 2026-07-10**: the author-centric Content home redesign (`/admin/c` with per-collection counts, freshness, and quick actions via a `contentOverview` service that reuses the compiled read filter, ensuring counts respect access grants).
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -142,7 +143,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   base64 decode for MCP uploads), `markdown/` (micromark, sanitized), `def-helpers.ts`
   (titleFieldOf/titleOf/publicUrlOf/excerptFrom — shared title/URL/excerpt heuristics, D35),
   `feeds.ts` (pure RSS/sitemap/robots builders, D35), `ndjson.ts` (import/export, D37), `diff.ts`
-  (LCS line diff for revision compare view, D39), `reading-time.ts` (word-count estimate, D41);
+  (LCS line diff for revision compare view, D39), `reading-time.ts` (word-count estimate, D41), `relative-time.ts` (compact "x ago" freshness, deterministic);
   **`src/components/`** Hono JSX with `field-view.tsx` (ViewComponent), `document-view.tsx`,
   `layouts/public-shell.tsx` (read-only render), `share-bar.tsx` (reader share UI — copy-link +
   Web Share, D41), `backlinks.tsx` (relation backlinks list); **`src/client/`** browser islands:

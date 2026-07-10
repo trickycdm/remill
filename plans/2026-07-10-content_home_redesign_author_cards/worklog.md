@@ -8,3 +8,6 @@
 | 2026-07-10 08:50 | built | relative-time helper + route rewrite (ul/li, stretched link, role-gated header actions, marketplace CTA in empty state) |
 | 2026-07-10 08:52 | verified | tsc + eslint clean; 404/404 unit tests pass (incl. count-leak property, witness fixture) |
 | 2026-07-10 08:55 | verified | 11/11 e2e pass (new card test + both axe AA sweeps of /admin/c); 4 screenshots (mobile/desktop × light/dark) sent to user |
+| 2026-07-10 09:03 | merged | PR #22 merged to main (CI green: build/lint/type-check/test + preview deploy) |
+| 2026-07-10 09:05 | deployed | v1.4.0 tag pushed; Deploy production succeeded; remill.org smoke-checked |
+| 2026-07-10 09:10 | COMPLETE | plan wrapped up |

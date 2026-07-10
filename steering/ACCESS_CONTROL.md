@@ -159,6 +159,12 @@ code. The audit log is itself readable only with `manage_access`.
   evaluate exactly as against the live document. Metadata-only helpers (`getTrashMeta`,
   `trashedCollections`) are witness-free (getDocumentMetaForAuth precedent); full snapshot reads
   demand a Grant.
+- **Read-scoped aggregates reuse `compileReadFilter` — never mirror it.** The content-home
+  overview (`contentOverview` → `countDocumentsByCollection`) compiles the SAME predicate
+  `listDocuments` uses into its grouped count query, so counts always agree with list totals
+  and can never leak drafts to conditioned readers (D17). Mirror-shaped scopes (`TrashScope`)
+  exist only for actions with no compiled filter of their own (`delete`); any surface counting
+  or summarizing what a principal can *read* reuses the real filter.
 - **Witness-free maintenance (D31)**: retention purges (trash; later events) run from cron with no
   principal — they are maintenance, not authorization decisions, so they are witness-free query
   functions and write NO audit rows. Keep this category to deletions of derived/expired state; a

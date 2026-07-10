@@ -1,5 +1,7 @@
 # Redesign the admin Content home (`/admin/c`)
 
+**Status: COMPLETE — 2026-07-10** (merged as PR #22, released as v1.4.0, live on remill.org)
+
 ## Context
 
 The Content page (`src/routes/admin/c/index.tsx`) is the plainest page in the admin and predates the newer house patterns (marketplace, D42). Each collection card shows only schema-centric meta ("Collection · 6 fields") that's useless to an author, there are no document counts, no freshness signal, no quick actions, the grid is bare `<a>`s in a `<div>` (not a semantic list), and the empty state doesn't mention the Marketplace. The user asked to improve its form, function, and style (screenshot was the mobile view of remill.org).
@@ -27,7 +29,7 @@ Counts must respect access (default-deny, D17: compiled in-query, never post-fil
 
 ## Steps
 
-### 1. Query: `countDocumentsByCollection` — `src/db/queries/documents.ts`
+### 1. Query: `countDocumentsByCollection` — `src/db/queries/documents.ts` — DONE
 
 Mirror `listTrash`'s shape (`src/db/queries/trash.ts:150-180`) but take pre-compiled filters (existing `accessFilter?: SQL` plumbing, see line 188):
 
@@ -50,7 +52,7 @@ export async function countDocumentsByCollection(
 
 One `SELECT collection, status, COUNT(*), MAX(updated_at) … WHERE or(scope preds) GROUP BY collection, status`; pred = `and(eq(documents.collection, s.collection), s.accessFilter)` when filtered. Uses `documents_collection_status_idx`. Returns `[]` for empty scopes.
 
-### 2. Service: `contentOverview` — `src/services/documents/index.ts`
+### 2. Service: `contentOverview` — `src/services/documents/index.ts` — DONE
 
 ```ts
 export interface ContentOverviewItem {
@@ -68,7 +70,7 @@ Flow (trash-listing pattern):
 3. `perms = await getPrincipalPermissions(db, principal.id)` once; per readable def build `resolved: ResolvedAccess = { permissions: perms, publicRead: def.access?.publicRead === true }`, then `authorize(db, principal, 'read', { collection: def.slug }, now, resolved)` → Grant, and `compileReadFilter(db, principal, def.slug, now, resolved)` → scope filter.
 4. One `countDocumentsByCollection` call; fold rows into `{published, draft}` (missing status rows → 0) + `lastUpdatedAt = max(latest)`.
 
-### 3. Helper: `src/lib/relative-time.ts` (new) + test
+### 3. Helper: `src/lib/relative-time.ts` (new) + test — DONE
 
 No relative-time helper exists (`format-date.ts` is absolute-only). Pure, deterministic (`formatDate` precedent — takes `now` explicitly, no clock):
 
@@ -78,7 +80,7 @@ No relative-time helper exists (`format-date.ts` is absolute-only). Pure, determ
 export function relativeTime(ts: string, nowIso: string): string
 ```
 
-### 4. Route rewrite: `src/routes/admin/c/index.tsx`
+### 4. Route rewrite: `src/routes/admin/c/index.tsx` — DONE
 
 Stays thin: `contentOverview(getDb(c.env.DB), requirePrincipal(c), nowIso())`, filter out `media`, render. Route-local pure `metaLine(it)`:
 - unreadable (no counts) → fall back to `${fields.length} fields`
@@ -89,7 +91,7 @@ Footer: left = `<span class="font-mono text-xs text-ink-subtle">Updated {relativ
 
 Imports to add: `requirePrincipal` (`@/lib/principal`), `nowIso` (`@/lib/now`), `contentOverview`, `hasLifecycle`, `relativeTime`, `Badge`, `CardFooter`.
 
-### 5. Tests
+### 5. Tests — DONE
 
 - `src/services/documents/content-overview.test.ts` (new; mirror `documents.test.ts` setup — `createTestD1`, `seedRoles`, `makePrincipal`):
   - admin sees `{published: 2, draft: 1}` + correct `lastUpdatedAt`
@@ -101,12 +103,12 @@ Imports to add: `requirePrincipal` (`@/lib/principal`), `nowIso` (`@/lib/now`), 
 - `src/lib/relative-time.test.ts`: unit boundaries (60s/60m/24h/30d), future clamp, invalid → `''`.
 - `e2e/admin-content.spec.ts`: tighten line 19 to `getByRole('link', { name: 'Posts', exact: true })` ("New Posts" substring-matches otherwise); add one test: Posts card shows a counts/meta line and its "New Posts" action lands on `/admin/c/posts/new`. Axe sweeps of `/admin/c` already exist (this spec + `admin-smoke.spec.ts`) — no changes.
 
-## Verification
+## Verification — DONE
 
-1. `bun run type-check && bun run lint`
-2. `bun run test:run` (new tests + full suite)
-3. `bun run e2e` — at minimum `admin-content.spec.ts` + `admin-smoke.spec.ts` (both axe-sweep `/admin/c`)
-4. Manual `bun run dev`: `/admin/c` at 375px + desktop, **both themes**, keyboard-tab a card (title ring visible, footer button clickable above the overlay), empty-DB state, and a non-admin session (no header actions, counts still correct for conditioned readers).
+1. `bun run type-check && bun run lint` — clean.
+2. `bun run test:run` — 404/404 across 53 files (incl. the count-leak property, witness fixture, relative-time boundaries).
+3. e2e `admin-content.spec.ts` + `admin-smoke.spec.ts` — 11/11, both axe WCAG 2.1 AA sweeps of `/admin/c` clean.
+4. Visual: production build served locally, screenshots at 390px/1280px in both themes against the e2e seed (all card states exercised: counts, drafts split, Singleton badge, populated singleton without create, freshness lines). Post-deploy: remill.org smoke-checked (/ 200, /admin/c → login).
 
 ## Risks
 
@@ -114,3 +116,8 @@ Imports to add: `requirePrincipal` (`@/lib/principal`), `nowIso` (`@/lib/now`), 
 - **E2E substring matching**: mitigated by `exact: true`; title anchor precedes footer in DOM order so even untouched specs stay green.
 - **D1 cost**: one grouped query for all counts (no N+1); `compileReadFilter` short-circuits to zero extra queries for unconditional readers (admin/editor common case).
 - **publicRead-only readers**: a principal with no explicit read perm on a publicRead collection is excluded by the `collectionsWithAction` pre-check → card shows without counts. Edge case, consistent with trash's simplification; document in JSDoc.
+
+## Revision Log
+
+- 2026-07-10: Planning refinement — dropped the originally sketched hand-rolled `readScopeFor` (a `deleteScopeFor` mirror) in favour of reusing `compileReadFilter` verbatim; it already handles publicRead + item grants and guarantees card counts agree with list-page totals.
+- 2026-07-10: Implementation addition — `ContentOverviewItem.canCreate` (from `collectionsWithAction(…, 'create')`) so the per-card "New {name}" action only renders for principals who can actually create there; UI-hiding only, the create pipeline stays the enforcement.

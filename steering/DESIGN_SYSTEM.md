@@ -123,6 +123,13 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   Footer) and `Table` (+ Head/Body/Row/HeaderCell/Cell) are helper sets, not
   mega-props. `FormField` wraps a control with a label + help + live error slot and
   exposes `describedBy(fieldId, …)` for the `aria-describedby` id convention.
+- **Card-as-link with inner actions = the stretched link.** When a whole card should
+  navigate but also carries its own actions (the `/admin/c` collection cards), never
+  nest controls inside an `<a>`-wrapped card. Instead: a positioned wrapper
+  (`<li class="relative">`), the title `<a>` stretched over the card with
+  `after:absolute after:inset-0`, and each inner action stacked above the overlay
+  with `class="relative"`. The whole card stays tappable, the link's accessible name
+  stays the title, and the global `:focus-visible` ring lands on the title anchor.
 - **Accessibility is built in, not opt-in:** semantic elements, real `<label>`s,
   `<th scope>`, native `<dialog>` for Dialog/Drawer (focus trap + Esc free), visible
   focus rings, icon-only buttons carry `aria-label`, `aria-current` on the active
