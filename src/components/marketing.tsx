@@ -36,8 +36,11 @@ const LINK =
 // Hero CTAs sit on the solid accent band, so the normal accent-fill Button is
 // invisible here: primary inverts to a paper button with iris-ink label, and
 // the focus ring is forced white so it stays visible on iris.
+// (outline-accent-fg only — adding outline-ring too would lose: Tailwind emits
+// .outline-ring AFTER .outline-accent-fg, and in light mode --color-ring equals
+// the band's --color-accent, making the ring invisible. DESIGN_SYSTEM.md.)
 const HERO_CTA_BASE =
-  'inline-flex h-11 items-center justify-center rounded-md px-5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-accent-fg active:translate-y-px';
+  'inline-flex h-11 items-center justify-center rounded-md px-5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-fg active:translate-y-px';
 const HERO_CTA_PRIMARY = `${HERO_CTA_BASE} bg-surface-raised text-accent-text shadow-sm hover:bg-surface`;
 const HERO_CTA_SECONDARY = `${HERO_CTA_BASE} border border-accent-fg/50 text-accent-fg hover:bg-accent-fg/10`;
 
@@ -88,6 +91,20 @@ const SURFACE_TABS = [
   { key: 'agents', label: 'Agents' },
 ] as const;
 
+// APG tabs keyboard support (A11Y_STANDARDS: custom tabs take Arrow keys).
+// Roving tabindex, selection follows focus (automatic activation) — one
+// bubbling keydown on the tablist; Datastar expression, ;-separated statements.
+const TABLIST_KEYDOWN = [
+  `const keys = ['${SURFACE_TABS.map((t) => t.key).join("','")}']`,
+  'const i = keys.indexOf($tab)',
+  "let next = ''",
+  "if (evt.key === 'ArrowRight') next = keys[(i + 1) % keys.length]",
+  "else if (evt.key === 'ArrowLeft') next = keys[(i + keys.length - 1) % keys.length]",
+  "else if (evt.key === 'Home') next = keys[0]",
+  "else if (evt.key === 'End') next = keys[keys.length - 1]",
+  "if (next) { evt.preventDefault(); $tab = next; document.getElementById('surface-tab-' + next).focus() }",
+].join('; ');
+
 /**
  * The centrepiece: one real collection definition on the left, and a Datastar
  * segmented control on the right that swaps between the three audience-facing
@@ -99,15 +116,18 @@ const SURFACE_TABS = [
  * ternary for the always-present aria-selected, display:none on hidden panels.
  */
 export function EverySurface() {
+  // Both snippets mirror the real wire shapes (flat page/pageSize/total
+  // envelope from the list handler; doc_-prefixed nanoid ids) — the section's
+  // promise is real markup, never a fake.
   const restResponse = `GET /api/c/essays?status=published
 
 {
   "data": [
-    { "id": "aF9x2q",
+    { "id": "doc_aF9x2qWn41Kd",
       "title": "Why we rebuilt the docs",
       "status": "published" }
   ],
-  "page": { "total": 1, "size": 20 }
+  "page": 1, "pageSize": 20, "total": 1
 }`;
   const mcpCall = `tools/call  create_essays
 {
@@ -115,7 +135,7 @@ export function EverySurface() {
   "body": "## What shipped\\n..."
 }
 
-reply  { "id": "b7Kp0d", "status": "draft" }`;
+reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
 
   return (
     <section aria-labelledby="home-surfaces" class="mx-auto w-full max-w-5xl px-6 py-20 sm:py-24">
@@ -151,25 +171,39 @@ reply  { "id": "b7Kp0d", "status": "draft" }`;
 
         {/* Every surface — the Datastar segmented preview. */}
         <div class="flex flex-col gap-3" data-signals="{tab: 'admin'}">
+          {/* Selected-tab styling keys off aria-selected (the reactive source of
+              truth via data-attr) — data-class:* toggles can't be trusted here:
+              Tailwind only emits utilities it sees as literal classes, and a
+              dynamically-added class loses same-property cascades to the
+              always-present base (text-ink vs text-ink-muted). Scoped-style
+              idiom per AdminShell's #rm-sidebar rule. */}
+          {/* Unquoted attr value on purpose: Hono JSX escapes quotes inside
+              <style> to &quot;, which kills the rule; `true` is a CSS ident. */}
+          <style>
+            {
+              '[data-rm-tab][aria-selected=true]{border-color:var(--color-accent);color:var(--color-ink);font-weight:600;}'
+            }
+          </style>
           <span class="text-sm font-medium text-ink-muted">Every surface</span>
           <div
             role="tablist"
             aria-label="Preview the generated surface"
             class="flex gap-1 border-b border-border"
+            data-on:keydown={TABLIST_KEYDOWN}
           >
             {SURFACE_TABS.map((t) => (
               <button
                 type="button"
                 role="tab"
                 id={`surface-tab-${t.key}`}
+                data-rm-tab
                 aria-controls={`surface-panel-${t.key}`}
                 aria-selected={t.key === 'admin' ? 'true' : 'false'}
+                tabindex={t.key === 'admin' ? 0 : -1}
                 data-attr:aria-selected={`$tab === '${t.key}' ? 'true' : 'false'`}
+                data-attr:tabindex={`$tab === '${t.key}' ? '0' : '-1'`}
                 data-on:click={`$tab = '${t.key}'`}
                 class="-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                data-class:border-accent={`$tab === '${t.key}'`}
-                data-class:text-ink={`$tab === '${t.key}'`}
-                data-class:font-semibold={`$tab === '${t.key}'`}
               >
                 {t.label}
               </button>

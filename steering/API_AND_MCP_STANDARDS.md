@@ -75,6 +75,10 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   Titles are permission-gated: a dangling id or a target the reader cannot see expands with
   `title: null` — never an error, and never a leak (the batch load applies the reader's compiled
   filter in-query).
+- **Media read-expansion (D41)**: document reads likewise attach a `media` object BESIDE `data` —
+  `{ [mediaFieldKey]: { id, alt, width, height } }` — whitelisted metadata only (never `r2Key`,
+  filenames, or uploader). Gated once per batch via `read` on `media`; on Forbidden the expansion
+  degrades to absent rather than erroring, so a public render never 500s.
 - **Backlinks (B3)**: `GET /api/c/:collection/:id/backlinks` (and the MCP `backlinks_<slug>` tool)
   lists documents that reference the given one through **indexed** relation fields —
   `[{ id, collection, title, status, updatedAt }]`. Read-gated twice: asking requires `read` on the

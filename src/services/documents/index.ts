@@ -12,7 +12,13 @@
 
 import { z } from 'zod';
 import type { Database } from '@/db/client';
-import type { CollectionDefinition, FieldDescriptor, SaveCtx, ExpandedReference, MediaMeta } from '@/fields/types';
+import type {
+  CollectionDefinition,
+  FieldDescriptor,
+  SaveCtx,
+  ExpandedReference,
+  MediaMeta,
+} from '@/fields/types';
 import { resolveField, isMultiValued, referencesOf } from '@/fields/registry';
 import * as dq from '@/db/queries/documents';
 import { getMediaByIds } from '@/db/queries/media';
@@ -22,7 +28,14 @@ import { getCollection, listCollections as listCollectionDefs } from '@/db/queri
 import { getGrantedDocumentIds } from '@/db/queries/grants';
 import { getPrincipalRoleSlugs } from '@/db/queries/roles';
 import { getPrincipalTeamIds } from '@/db/queries/teams';
-import { authorize, compileReadFilter, resolveAccess, anonymousPrincipal, systemPrincipal, type Principal } from '@/access';
+import {
+  authorize,
+  compileReadFilter,
+  resolveAccess,
+  anonymousPrincipal,
+  systemPrincipal,
+  type Principal,
+} from '@/access';
 import { newId } from '@/lib/id';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { titleFieldOf } from '@/lib/def-helpers';
@@ -137,7 +150,10 @@ function coerceNumericFilter(field: FieldDescriptor, raw: string): string {
  *  sync layer replaces a document's rows wholesale, so N rows need no query change.
  *  Exported for the trash restore path (D29), which re-indexes a snapshot against
  *  the CURRENT definition. */
-export function buildIndex(def: CollectionDefinition, data: Record<string, unknown>): dq.IndexValue[] {
+export function buildIndex(
+  def: CollectionDefinition,
+  data: Record<string, unknown>,
+): dq.IndexValue[] {
   const rows: dq.IndexValue[] = [];
   for (const field of def.fields) {
     if (!field.index) continue;
@@ -164,9 +180,15 @@ export function buildIndex(def: CollectionDefinition, data: Record<string, unkno
  *  title field (pickTitleField — same heuristic relation expansion uses), `body`
  *  from every field with searchable text. Fields need NOT be `index:true` — FTS
  *  is its own surface. `toSearchText` supplies FULL text (markdown/html strip to
- *  plain text untruncated); types without it fall back to their string `toIndex`
- *  output (text/slug/tags/select…). Exported for the rebuild path
- *  (src/services/search). */
+ *  plain text untruncated); of the rest, only PROSE types fall back to their
+ *  string `toIndex` output. Exported for the rebuild path (src/services/search). */
+/** Types whose `toIndex` output is human-readable prose, safe for the FTS body
+ *  and the excerpts derived from it (og/meta descriptions, discovery feeds).
+ *  Identifier-shaped output (slug URLs, med_/doc_ ids, ISO datetimes) is for
+ *  the document_index filter surface, never the search body — it pollutes FTS
+ *  matches and leaks machine ids into share previews. */
+const PROSE_FALLBACK_TYPES = new Set(['text', 'tags', 'select']);
+
 export function buildSearchText(
   def: CollectionDefinition,
   data: Record<string, unknown>,
@@ -184,7 +206,7 @@ export function buildSearchText(
     let text: string | null = null;
     if (ft.toSearchText) {
       text = ft.toSearchText(v as never);
-    } else if (ft.toIndex) {
+    } else if (ft.toIndex && PROSE_FALLBACK_TYPES.has(field.type)) {
       const idx = ft.toIndex(v as never);
       const strings = (Array.isArray(idx) ? idx : [idx]).filter(
         (x): x is string => typeof x === 'string',
@@ -267,7 +289,10 @@ async function expandRelations(
 ): Promise<ExpandedDocument[]> {
   const refFields = def.fields
     .map((field) => ({ field, ref: referencesOf(field) }))
-    .filter((x): x is { field: FieldDescriptor; ref: { collection: string; titleField?: string } } => x.ref !== null);
+    .filter(
+      (x): x is { field: FieldDescriptor; ref: { collection: string; titleField?: string } } =>
+        x.ref !== null,
+    );
   if (!refFields.length || !rows.length) return rows;
 
   // Collect the referenced ids per target collection.
@@ -285,9 +310,15 @@ async function expandRelations(
 
   // Batch-load each target's READABLE docs (authorize + compiled filter — an
   // unpublished target reads as title:null for a publicRead-only reader).
-  const loaded = new Map<string, { def: CollectionDefinition | null; docs: Map<string, DocumentRecord> }>();
+  const loaded = new Map<
+    string,
+    { def: CollectionDefinition | null; docs: Map<string, DocumentRecord> }
+  >();
   for (const [target, ids] of wanted) {
-    const entry = { def: null as CollectionDefinition | null, docs: new Map<string, DocumentRecord>() };
+    const entry = {
+      def: null as CollectionDefinition | null,
+      docs: new Map<string, DocumentRecord>(),
+    };
     loaded.set(target, entry);
     if (!ids.size) continue;
     entry.def = await getCollection(db, target);
@@ -369,7 +400,8 @@ async function expandMedia(
     for (const field of mediaFields) {
       const v = row.data[field.key];
       const rec = typeof v === 'string' ? loaded.get(v) : undefined;
-      if (rec) media[field.key] = { id: rec.id, alt: rec.alt, width: rec.width, height: rec.height };
+      if (rec)
+        media[field.key] = { id: rec.id, alt: rec.alt, width: rec.width, height: rec.height };
     }
     return Object.keys(media).length ? { ...row, media } : row;
   });
@@ -406,7 +438,13 @@ export async function getBacklinks(
   id: string,
   now: string,
 ): Promise<Backlink[]> {
-  const grant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const grant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
   const target = await dq.getDocument(db, collectionSlug, id, grant);
   if (!target) throw new NotFoundError('Document');
 
@@ -419,7 +457,14 @@ export async function getBacklinks(
     let rows: DocumentRecord[];
     try {
       const resolved = await resolveAccess(db, principal.id, def.slug);
-      const srcGrant = await authorize(db, principal, 'read', { collection: def.slug }, now, resolved);
+      const srcGrant = await authorize(
+        db,
+        principal,
+        'read',
+        { collection: def.slug },
+        now,
+        resolved,
+      );
       const filter = await compileReadFilter(db, principal, def.slug, now, resolved);
       rows = await dq.listBacklinks(db, def.slug, fieldKeys, id, filter, BACKLINKS_LIMIT, srcGrant);
     } catch (e) {
@@ -462,21 +507,32 @@ export interface SharedWithMeRow {
  * batch-read under the witness (getBacklinks pattern), so a grant a collection
  * denies anyway (e.g. revoked role) yields no row.
  */
-export async function listSharedWithMe(db: Database, principal: Principal, now: string): Promise<SharedWithMeRow[]> {
+export async function listSharedWithMe(
+  db: Database,
+  principal: Principal,
+  now: string,
+): Promise<SharedWithMeRow[]> {
   const [roleSlugs, teamIds] = await Promise.all([
     getPrincipalRoleSlugs(db, principal.id),
     getPrincipalTeamIds(db, principal.id),
   ]);
-  const granted = (await getGrantedDocumentIds(db, principal.id, roleSlugs, now, undefined, teamIds)).filter((g) =>
-    g.actions.includes('read'),
-  );
+  const granted = (
+    await getGrantedDocumentIds(db, principal.id, roleSlugs, now, undefined, teamIds)
+  ).filter((g) => g.actions.includes('read'));
   if (!granted.length) return [];
 
   // Union actions + keep the longest-lived expiry per document: any unexpired
   // grant keeps access, and null ("never expires") wins outright.
-  const byDoc = new Map<string, { actions: Set<string>; expiresAt: string | null; hasNoExpiry: boolean }>();
+  const byDoc = new Map<
+    string,
+    { actions: Set<string>; expiresAt: string | null; hasNoExpiry: boolean }
+  >();
   for (const g of granted) {
-    const entry = byDoc.get(g.documentId) ?? { actions: new Set<string>(), expiresAt: null, hasNoExpiry: false };
+    const entry = byDoc.get(g.documentId) ?? {
+      actions: new Set<string>(),
+      expiresAt: null,
+      hasNoExpiry: false,
+    };
     g.actions.forEach((a) => entry.actions.add(a));
     if (g.expiresAt === null) entry.hasNoExpiry = true;
     else if (!entry.hasNoExpiry && (entry.expiresAt === null || g.expiresAt > entry.expiresAt)) {
@@ -533,7 +589,13 @@ export async function getDocument(
   id: string,
   now: string,
 ): Promise<ExpandedDocument> {
-  const grant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const grant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
   const doc = await dq.getDocument(db, collectionSlug, id, grant);
   if (!doc) throw new NotFoundError('Document');
   const def = await loadCollection(db, collectionSlug);
@@ -569,18 +631,29 @@ function compileFilters(
   const field = assertIndexed(def, fieldKey, 'filter');
   const kind = indexKind(field);
   const entries: [string, string][] =
-    typeof spec === 'string' ? [['eq', spec]] : Object.entries(spec).map(([o, v]) => [o, String(v)]);
+    typeof spec === 'string'
+      ? [['eq', spec]]
+      : Object.entries(spec).map(([o, v]) => [o, String(v)]);
   return entries.map(([op, value]) => {
     if (!dq.FILTER_OPS.includes(op as dq.FilterOp)) {
-      throw new BadRequestError(`Unknown filter operator '${op}' (expected ${dq.FILTER_OPS.join('/')}).`);
+      throw new BadRequestError(
+        `Unknown filter operator '${op}' (expected ${dq.FILTER_OPS.join('/')}).`,
+      );
     }
     if (op === 'contains' && kind === 'num') {
-      throw new BadRequestError(`Field '${fieldKey}' is numeric; 'contains' applies to text fields.`);
+      throw new BadRequestError(
+        `Field '${fieldKey}' is numeric; 'contains' applies to text fields.`,
+      );
     }
     if (op === 'in') {
-      const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
+      const parts = value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (!parts.length || parts.length > MAX_IN_FILTER_VALUES) {
-        throw new BadRequestError(`'in' filter takes 1–${MAX_IN_FILTER_VALUES} comma-separated values.`);
+        throw new BadRequestError(
+          `'in' filter takes 1–${MAX_IN_FILTER_VALUES} comma-separated values.`,
+        );
       }
       const coerced = kind === 'num' ? parts.map((p) => coerceNumericFilter(field, p)) : parts;
       return { fieldKey, kind, op: op as dq.FilterOp, value: coerced.join(',') };
@@ -640,7 +713,14 @@ export async function listDocuments(
   // Resolve permissions + publicRead ONCE and thread into both authorize and the
   // compiled read filter (TD-3) — a single list previously resolved them twice.
   const resolved = await resolveAccess(db, principal.id, collectionSlug);
-  const grant = await authorize(db, principal, 'read', { collection: collectionSlug }, now, resolved);
+  const grant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug },
+    now,
+    resolved,
+  );
 
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, params.pageSize ?? DEFAULT_PAGE_SIZE));
@@ -658,7 +738,9 @@ export async function listDocuments(
       // subquery would pick an arbitrary one — reject rather than sort randomly.
       // (Filtering stays allowed: matching ANY element is the wanted semantics.)
       if (isMultiValued(field)) {
-        throw new BadRequestError(`Field '${params.sort.field}' is multi-valued; cannot sort by it.`);
+        throw new BadRequestError(
+          `Field '${params.sort.field}' is multi-valued; cannot sort by it.`,
+        );
       }
       sort = { fieldKey: params.sort.field, dir: params.sort.dir, kind: indexKind(field) };
     }
@@ -744,7 +826,13 @@ export async function listRevisions(
   id: string,
   now: string,
 ) {
-  const grant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const grant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
   return dq.listRevisions(db, id, grant);
 }
 
@@ -780,7 +868,9 @@ export async function createDocument(
   await checkUnique(db, def, data);
 
   if (overrides?.id !== undefined && !DOC_ID_RE.test(overrides.id)) {
-    throw new InputValidationError([{ path: 'id', message: "Preserved ids must match 'doc_' + [A-Za-z0-9_-]." }]);
+    throw new InputValidationError([
+      { path: 'id', message: "Preserved ids must match 'doc_' + [A-Za-z0-9_-]." },
+    ]);
   }
   const id = overrides?.id ?? newId('document');
   const status = overrides?.status ?? initialStatus(def);
@@ -799,12 +889,19 @@ export async function createDocument(
         publishedAt,
         index: buildIndex(def, data),
         search: buildSearchText(def, data),
-        event: { type: 'document.created', collection: collectionSlug, resource: id, principalId: principal.id, at: now },
+        event: {
+          type: 'document.created',
+          collection: collectionSlug,
+          resource: id,
+          principalId: principal.id,
+          at: now,
+        },
       },
       grant,
     );
   } catch (e) {
-    if (isUniqueConstraintError(e)) throw new ConflictError('A unique field value is already taken.');
+    if (isUniqueConstraintError(e))
+      throw new ConflictError('A unique field value is already taken.');
     throw e;
   }
   // Return the freshly-written record directly — no re-fetch round-trip (TD-9).
@@ -830,7 +927,13 @@ export async function updateDocument(
   now: string,
 ): Promise<DocumentRecord> {
   const def = await loadCollection(db, collectionSlug);
-  const readGrant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const readGrant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
   const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
   if (!existing) throw new NotFoundError('Document');
 
@@ -838,7 +941,12 @@ export async function updateDocument(
     db,
     principal,
     'update',
-    { collection: collectionSlug, documentId: id, status: existing.status, createdBy: existing.createdBy ?? undefined },
+    {
+      collection: collectionSlug,
+      documentId: id,
+      status: existing.status,
+      createdBy: existing.createdBy ?? undefined,
+    },
     now,
   );
 
@@ -867,12 +975,19 @@ export async function updateDocument(
         revision: await dq.nextRevisionNumber(db, id),
         index: buildIndex(def, data),
         search: buildSearchText(def, data),
-        event: { type: 'document.updated', collection: collectionSlug, resource: id, principalId: principal.id, at: now },
+        event: {
+          type: 'document.updated',
+          collection: collectionSlug,
+          resource: id,
+          principalId: principal.id,
+          at: now,
+        },
       },
       grant,
     );
   } catch (e) {
-    if (isUniqueConstraintError(e)) throw new ConflictError('A unique field value is already taken.');
+    if (isUniqueConstraintError(e))
+      throw new ConflictError('A unique field value is already taken.');
     throw e;
   }
   // Construct the written record from known values (existing immutables + new data)
@@ -922,7 +1037,13 @@ export async function setPublished(
   publish: boolean,
   now: string,
 ): Promise<DocumentRecord> {
-  const readGrant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const readGrant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
   const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
   if (!existing) throw new NotFoundError('Document');
 
@@ -984,7 +1105,13 @@ export async function scheduleDocument(
   publishAt: string | null,
   now: string,
 ): Promise<DocumentRecord> {
-  const readGrant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const readGrant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
   const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
   if (!existing) throw new NotFoundError('Document');
 
@@ -994,7 +1121,9 @@ export async function scheduleDocument(
   }
   if (publishAt !== null) {
     if (Number.isNaN(Date.parse(publishAt))) {
-      throw new InputValidationError([{ path: 'publishAt', message: 'A valid ISO-8601 datetime is required.' }]);
+      throw new InputValidationError([
+        { path: 'publishAt', message: 'A valid ISO-8601 datetime is required.' },
+      ]);
     }
     if (existing.status === 'published') {
       throw new BadRequestError('Already published — unpublish first to schedule.');
@@ -1005,7 +1134,12 @@ export async function scheduleDocument(
     db,
     principal,
     'publish',
-    { collection: collectionSlug, documentId: id, status: existing.status, createdBy: existing.createdBy ?? undefined },
+    {
+      collection: collectionSlug,
+      documentId: id,
+      status: existing.status,
+      createdBy: existing.createdBy ?? undefined,
+    },
     now,
   );
   await dq.setPublishAt(db, { id, publishAt, now }, grant);
@@ -1048,10 +1182,22 @@ export async function deleteDocument(
   id: string,
   now: string,
 ): Promise<void> {
-  const readGrant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const readGrant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
   const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
   if (!existing) throw new NotFoundError('Document');
-  const grant = await authorize(db, principal, 'delete', { collection: collectionSlug, documentId: id }, now);
+  const grant = await authorize(
+    db,
+    principal,
+    'delete',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
   const revisions = (await dq.listRevisions(db, id, readGrant))
     .slice(0, TRASH_MAX_REVISIONS)
     .map((r) => ({ revision: r.revision, data: r.data, savedBy: r.savedBy, savedAt: r.savedAt }));
@@ -1069,7 +1215,13 @@ export async function deleteDocument(
       publishedAt: existing.publishedAt,
       deletedBy: principal.id,
       deletedAt: now,
-      event: { type: 'document.deleted', collection: collectionSlug, resource: id, principalId: principal.id, at: now },
+      event: {
+        type: 'document.deleted',
+        collection: collectionSlug,
+        resource: id,
+        principalId: principal.id,
+        at: now,
+      },
     },
     grant,
   );
@@ -1136,7 +1288,13 @@ export async function restoreRevision(
   revision: number,
   now: string,
 ): Promise<DocumentRecord> {
-  const readGrant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  const readGrant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
   const revs = await dq.listRevisions(db, id, readGrant);
   const target = revs.find((r) => r.revision === revision);
   if (!target) throw new NotFoundError(`Revision ${revision}`);
