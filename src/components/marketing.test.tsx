@@ -36,9 +36,10 @@ describe('homepage (marketing)', () => {
     // P4: the jobs section.
     expect(html).toContain('What the mill is for');
     expect(html).toContain('Agent drafts, human publishes');
-    // P3: the falsifiable trust claim is the headline (apostrophes render
-    // HTML-escaped, so pin the escape-free prefix).
-    expect(html).toContain('Your agent can draft all night. It still can');
+    // P3: the falsifiable trust claim is the headline — publish is a grantable
+    // permission, never an inherent impossibility (an update-granted agent can
+    // already change live content).
+    expect(html).toContain('Your agent can draft all night. Whether it publishes is up to you.');
     // P2: the deploy story is a first-class section and the hero's primary CTA.
     expect(html).toContain('id="run"');
     expect(html).toContain('Run your own mill');

@@ -321,7 +321,7 @@ const USE_CASES: { title: string; story: string }[] = [
     title: 'Agent drafts, human publishes',
     story:
       'Your agent turns the changelog into release-note drafts overnight. You read them over ' +
-      'coffee and press publish. The agent cannot, by design.',
+      'coffee and press publish, a permission you kept for yourself.',
   },
   {
     title: 'A backend for agent products',
@@ -392,11 +392,12 @@ export function TrustBento() {
     <section aria-labelledby="home-trust" class="border-t border-border">
       <div class="mx-auto w-full max-w-5xl px-6 py-20 sm:py-24">
         <h2 id="home-trust" class={`${SECTION_H2} max-w-3xl`}>
-          Your agent can draft all night. It still can't publish.
+          Your agent can draft all night. Whether it publishes is up to you.
         </h2>
         <p class="mt-4 max-w-2xl leading-relaxed text-ink-muted">
-          Every write, human or agent, runs through one authorized pipeline and lands in the audit
-          log under its own token.
+          Access starts at deny: an agent holds exactly the permissions you grant, publish
+          included. Every write, human or agent, runs through one authorized pipeline and lands in
+          the audit log under its own token.
         </p>
         <ul class="mt-8 grid gap-4 sm:grid-cols-3">
           {TRUST.map((c) => (
