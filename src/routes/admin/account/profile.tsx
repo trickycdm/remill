@@ -27,7 +27,12 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
     const updated = await updateProfile(getDb(c.env.DB), user.id, { displayName, email });
     // Refresh the session so the shell reflects the new name/email on next render;
     // id + role are unchanged (role is never self-editable here).
-    setSessionUser(c, { id: user.id, email: updated.email, displayName: updated.displayName, role: user.role });
+    setSessionUser(c, {
+      id: user.id,
+      email: updated.email,
+      displayName: updated.displayName,
+      role: user.role,
+    });
     return dsRedirect(c, '/admin/account');
   } catch (err) {
     return renderSaveError(c, err, 'profile-result');

@@ -27,6 +27,13 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
     throw new BadRequestError(`Unknown bulk op '${op}'.`);
   }
   if (ids.length === 0) return c.redirect(`/admin/c/${slug}?bulk=none`, 303);
-  const { ok, failed } = await bulkDocuments(getDb(c.env.DB), requirePrincipal(c), slug, op as BulkOp, ids, nowIso());
+  const { ok, failed } = await bulkDocuments(
+    getDb(c.env.DB),
+    requirePrincipal(c),
+    slug,
+    op as BulkOp,
+    ids,
+    nowIso(),
+  );
   return c.redirect(`/admin/c/${slug}?bulk=ok:${ok},failed:${failed}`, 303);
 });

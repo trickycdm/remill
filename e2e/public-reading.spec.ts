@@ -77,6 +77,15 @@ test.describe.serial('Public reading experience — the article template', () =>
     // The masthead links home.
     await expect(anonPage.getByRole('link', { name: /home/i })).toHaveAttribute('href', '/');
 
+    // twitter:card rides og:type pages; large-image because the article has a hero.
+    await expect(anonPage.locator('meta[name="twitter:card"]')).toHaveAttribute(
+      'content',
+      'summary_large_image',
+    );
+
+    // The public-shell footer carries feed wayfinding.
+    await expect(anonPage.getByRole('link', { name: 'RSS' })).toHaveAttribute('href', '/rss.xml');
+
     // Reader share: the island reveals a "Copy link" button (proves it mounts).
     await expect(anonPage.getByRole('button', { name: 'Copy link' })).toBeVisible();
 
@@ -85,6 +94,40 @@ test.describe.serial('Public reading experience — the article template', () =>
       axe.violations,
       `axe on /articles: ${axe.violations.map((v) => v.id).join(',')}`,
     ).toEqual([]);
+
+    await anon.close();
+  });
+
+  test('the collection index: masthead link leads to /articles, which lists the entry; private 404s', async ({
+    browser,
+  }) => {
+    const anon = await browser.newContext({ reducedMotion: 'reduce' });
+    const anonPage = await anon.newPage();
+
+    // From the article, the masthead "More Articles" affordance reaches the index.
+    await anonPage.goto('/');
+    await anonPage.getByRole('link', { name: TITLE }).click();
+    await anonPage.getByRole('link', { name: 'More Articles' }).click();
+    await anonPage.waitForURL('**/articles');
+
+    // The index lists the published article with a date, linking back to it.
+    await expect(anonPage.getByRole('heading', { level: 1, name: 'Articles' })).toBeVisible();
+    const entry = anonPage.getByRole('link', { name: TITLE });
+    await expect(entry).toBeVisible();
+
+    const axe = await new AxeBuilder({ page: anonPage }).withTags(WCAG).analyze();
+    expect(
+      axe.violations,
+      `axe on /articles index: ${axe.violations.map((v) => v.id).join(',')}`,
+    ).toEqual([]);
+
+    await entry.click();
+    await expect(anonPage.getByRole('heading', { level: 1, name: TITLE })).toBeVisible();
+
+    // A non-public collection index is an indistinguishable 404.
+    const res = await anonPage.goto('/definitely-not-a-collection');
+    expect(res?.status()).toBe(404);
+    await expect(anonPage.getByText(/doesn't exist or isn't public/)).toBeVisible();
 
     await anon.close();
   });

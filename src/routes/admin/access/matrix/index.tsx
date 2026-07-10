@@ -56,7 +56,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
   // Effective permissions per principal (un-gated capability read).
   const permsList = await Promise.all(principals.map((p) => getPrincipalPermissions(db, p.id)));
-  const permsByPrincipal = new Map<string, Perm[]>(principals.map((p, i) => [p.id, permsList[i] as Perm[]]));
+  const permsByPrincipal = new Map<string, Perm[]>(
+    principals.map((p, i) => [p.id, permsList[i] as Perm[]]),
+  );
 
   return c.render(
     <AdminShell user={user} current="access">
@@ -110,7 +112,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       <section class="mb-10">
         <h2 class="mb-3 font-serif text-display-sm">Item grants</h2>
         {grants.length === 0 ? (
-          <p class="text-sm text-ink-subtle">No per-document grants. Share a document from its edit page to add one.</p>
+          <p class="text-sm text-ink-subtle">
+            No per-document grants. Share a document from its edit page to add one.
+          </p>
         ) : (
           <Table>
             <TableHead>
@@ -156,7 +160,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                   </TableCell>
                   <TableCell>
                     {g.expiresAt ? (
-                      <span class="font-mono text-xs text-ink-subtle">{g.expiresAt.slice(0, 16).replace('T', ' ')}</span>
+                      <span class="font-mono text-xs text-ink-subtle">
+                        {g.expiresAt.slice(0, 16).replace('T', ' ')}
+                      </span>
                     ) : (
                       <span class="text-ink-subtle">never</span>
                     )}

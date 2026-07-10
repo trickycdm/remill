@@ -11,6 +11,7 @@ import type { RenderTemplate } from '@/templates/types';
 import { resolveConventionLayout } from '@/templates/lib/conventions';
 import { FieldView } from '@/components/field-view';
 import { Backlinks } from '@/components/backlinks';
+import { dedupeBacklinks } from '@/templates/lib/dedupe-backlinks';
 import { fieldLabel } from '@/lib/humanize';
 
 export const docsTemplate: RenderTemplate = {
@@ -73,7 +74,7 @@ export const docsTemplate: RenderTemplate = {
           </section>
         ) : null}
 
-        <Backlinks backlinks={backlinks} surface="public" />
+        <Backlinks backlinks={dedupeBacklinks(backlinks, def, doc)} surface="public" />
       </article>
     );
   },

@@ -64,27 +64,30 @@ export const onRequestGet = factory.createHandlers((c) => {
 // ---------------------------------------------------------------------------
 // POST /admin/login — verify credentials, start the session
 // ---------------------------------------------------------------------------
-export const onRequestPost = factory.createHandlers(rateLimit('login', LOGIN_RATE_LIMIT), async (c) => {
-  const form = await c.req.parseBody();
-  const email = String(form.email ?? '');
-  const password = String(form.password ?? '');
-  const redirect = safeRedirect(String(form.redirect ?? ''));
+export const onRequestPost = factory.createHandlers(
+  rateLimit('login', LOGIN_RATE_LIMIT),
+  async (c) => {
+    const form = await c.req.parseBody();
+    const email = String(form.email ?? '');
+    const password = String(form.password ?? '');
+    const redirect = safeRedirect(String(form.redirect ?? ''));
 
-  const user = await authenticateUser(getDb(c.env.DB), email, password);
-  if (!user) {
-    // Invalid credentials — return an inline error fragment (Datastar morphs
-    // #login-result by id; must be 200, DATASTAR_PATTERNS.md).
-    return c.html(
-      <div
-        id="login-result"
-        role="alert"
-        class="rounded-md bg-danger-soft px-3 py-2 text-sm font-medium text-danger"
-      >
-        Incorrect email or password.
-      </div>,
-    );
-  }
+    const user = await authenticateUser(getDb(c.env.DB), email, password);
+    if (!user) {
+      // Invalid credentials — return an inline error fragment (Datastar morphs
+      // #login-result by id; must be 200, DATASTAR_PATTERNS.md).
+      return c.html(
+        <div
+          id="login-result"
+          role="alert"
+          class="rounded-md bg-danger-soft px-3 py-2 text-sm font-medium text-danger"
+        >
+          Incorrect email or password.
+        </div>,
+      );
+    }
 
-  setSessionUser(c, user);
-  return dsRedirect(c, redirect);
-});
+    setSessionUser(c, user);
+    return dsRedirect(c, redirect);
+  },
+);

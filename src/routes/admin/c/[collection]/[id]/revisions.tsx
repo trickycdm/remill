@@ -12,7 +12,16 @@ import { fieldLabel } from '@/lib/humanize';
 import { formatDate } from '@/lib/format-date';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, Button, Card, CardHeader, CardTitle, CardContent, Select, EmptyState } from '@/components/ui';
+import {
+  PageHeader,
+  Button,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  Select,
+  EmptyState,
+} from '@/components/ui';
 import type { CollectionDefinition } from '@/fields/types';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -24,7 +33,9 @@ type Revision = { revision: number; data: Record<string, unknown>; savedAt: stri
 function fieldKeys(def: CollectionDefinition, a: Revision, b: Revision): string[] {
   const declared = def.fields.map((f) => f.key);
   const seen = new Set(declared);
-  const stale = [...Object.keys(a.data), ...Object.keys(b.data)].filter((k) => !seen.has(k) && seen.add(k));
+  const stale = [...Object.keys(a.data), ...Object.keys(b.data)].filter(
+    (k) => !seen.has(k) && seen.add(k),
+  );
   return [...declared, ...stale];
 }
 
@@ -57,7 +68,13 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const def = await getCollectionOrThrow(db, slug);
   const settings = await getSettings(db);
   // Newest first; carries full data per revision.
-  const revisions = (await listRevisions(db, requirePrincipal(c), slug, id, nowIso())) as Revision[];
+  const revisions = (await listRevisions(
+    db,
+    requirePrincipal(c),
+    slug,
+    id,
+    nowIso(),
+  )) as Revision[];
 
   const editorHref = `/admin/c/${slug}/${id}`;
   const shell = (children: unknown) => (
@@ -161,7 +178,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                     <DiffBlock ops={row.ops} />
                   ) : (
                     <p class="text-sm text-ink-muted">
-                      This field changed but is too large to diff — restore a revision to inspect it.
+                      This field changed but is too large to diff — restore a revision to inspect
+                      it.
                     </p>
                   )}
                 </CardContent>

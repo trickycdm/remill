@@ -23,7 +23,12 @@ const PICKER_PAGE = 24;
 export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const db = getDb(c.env.DB);
   const cursor = c.req.query('cursor') || null;
-  const { rows, nextCursor } = await listMedia(db, requirePrincipal(c), { limit: PICKER_PAGE, cursor }, nowIso());
+  const { rows, nextCursor } = await listMedia(
+    db,
+    requirePrincipal(c),
+    { limit: PICKER_PAGE, cursor },
+    nowIso(),
+  );
 
   return c.html(
     <div class="flex flex-col gap-4">
@@ -60,7 +65,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       {rows.length === 0 ? (
         <p class="py-6 text-center text-sm text-ink-muted">No media yet — upload a file above.</p>
       ) : (
-        <ul class="grid list-none grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4" aria-label="Media assets">
+        <ul
+          class="grid list-none grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4"
+          aria-label="Media assets"
+        >
           {rows.map((m) => (
             <li>
               <button
@@ -71,9 +79,16 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
               >
                 <span class="flex aspect-video items-center justify-center overflow-hidden bg-hover">
                   {m.mime.startsWith('image/') ? (
-                    <img src={`/media/${m.id}`} alt="" class="h-full w-full object-cover" loading="lazy" />
+                    <img
+                      src={`/media/${m.id}`}
+                      alt=""
+                      class="h-full w-full object-cover"
+                      loading="lazy"
+                    />
                   ) : (
-                    <span class="font-mono text-xs text-ink-subtle uppercase">{m.mime.split('/')[1]}</span>
+                    <span class="font-mono text-xs text-ink-subtle uppercase">
+                      {m.mime.split('/')[1]}
+                    </span>
                   )}
                 </span>
                 <span class="truncate px-2 py-1.5 text-xs text-ink" title={m.filename}>

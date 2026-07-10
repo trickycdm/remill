@@ -13,6 +13,7 @@ import type { RenderTemplate } from '@/templates/types';
 import { resolveConventionLayout } from '@/templates/lib/conventions';
 import { FieldView } from '@/components/field-view';
 import { Backlinks } from '@/components/backlinks';
+import { dedupeBacklinks } from '@/templates/lib/dedupe-backlinks';
 import { ShareBar } from '@/components/share-bar';
 import { fieldLabel } from '@/lib/humanize';
 
@@ -105,7 +106,7 @@ export const portfolioTemplate: RenderTemplate = {
 
         {ctx.shareUrl ? <ShareBar url={ctx.shareUrl} title={title} /> : null}
 
-        <Backlinks backlinks={backlinks} surface="public" />
+        <Backlinks backlinks={dedupeBacklinks(backlinks, def, doc)} surface="public" />
       </article>
     );
   },

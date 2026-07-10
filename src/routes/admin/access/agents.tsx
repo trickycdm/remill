@@ -12,6 +12,12 @@ const factory = createFactory<{ Bindings: Env }>();
 export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
   const body = await c.req.parseBody();
   const subtype = String(body.subtype ?? 'agent') === 'service' ? 'service' : 'agent';
-  await createAgent(getDb(c.env.DB), requirePrincipal(c), String(body.name ?? ''), nowIso(), subtype);
+  await createAgent(
+    getDb(c.env.DB),
+    requirePrincipal(c),
+    String(body.name ?? ''),
+    nowIso(),
+    subtype,
+  );
   return c.redirect('/admin/access', 303);
 });

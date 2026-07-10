@@ -71,7 +71,14 @@ export const onRequestGet = factory.createHandlers(requireAuth(), (c) => {
                 />
               </FormField>
               <FormField fieldId="email" label="Email" required>
-                <Input id="email" name="email" type="email" value={user.email} required autocomplete="email" />
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={user.email}
+                  required
+                  autocomplete="email"
+                />
               </FormField>
               {/* Morph target for the inline profile error (200, #profile-result). */}
               <div id="profile-result" />
@@ -88,7 +95,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), (c) => {
         <Card>
           <CardHeader>
             <CardTitle as="h2">Security</CardTitle>
-            <CardDescription>Change your password. You will stay signed in on this device.</CardDescription>
+            <CardDescription>
+              Change your password. You will stay signed in on this device.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form
@@ -110,7 +119,13 @@ export const onRequestGet = factory.createHandlers(requireAuth(), (c) => {
                 description="At least 8 characters."
                 required
               >
-                <Input id="newPassword" name="newPassword" type="password" required autocomplete="new-password" />
+                <Input
+                  id="newPassword"
+                  name="newPassword"
+                  type="password"
+                  required
+                  autocomplete="new-password"
+                />
               </FormField>
               <FormField fieldId="confirmPassword" label="Confirm new password" required>
                 <Input

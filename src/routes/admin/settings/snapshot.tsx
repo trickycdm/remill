@@ -17,6 +17,11 @@ import { snapshotSite } from '@/services/transfer';
 const factory = createFactory<{ Bindings: Env }>();
 
 export const onRequestPost = factory.createHandlers(requireRole('admin'), async (c) => {
-  const { prefix } = await snapshotSite(getDb(c.env.DB), c.env.MEDIA, requirePrincipal(c), nowIso());
+  const { prefix } = await snapshotSite(
+    getDb(c.env.DB),
+    c.env.MEDIA,
+    requirePrincipal(c),
+    nowIso(),
+  );
   return c.redirect(`/admin/settings?snapshot=${encodeURIComponent(prefix)}`, 303);
 });

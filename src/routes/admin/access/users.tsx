@@ -50,11 +50,17 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   const settings = await getSettings(db);
   const link = `${resolveBaseUrl(c.env, settings, c.req.url)}/auth/set-password/${inviteToken}`;
   const transport = getEmailTransport(c.env, settings);
-  await transport.send({ to: String(body.email ?? ''), ...inviteEmail({ link, siteName: settings.siteName }) });
+  await transport.send({
+    to: String(body.email ?? ''),
+    ...inviteEmail({ link, siteName: settings.siteName }),
+  });
 
   return c.html(
     <div id="invite-reveal">
-      <div class="mt-3 rounded-md border border-accent/40 bg-accent/5 p-4" data-signals={jsonForScript({ inviteCopied: false })}>
+      <div
+        class="mt-3 rounded-md border border-accent/40 bg-accent/5 p-4"
+        data-signals={jsonForScript({ inviteCopied: false })}
+      >
         <p class="text-sm font-medium text-ink">Invitation created — copy the link now</p>
         <p class="mt-0.5 mb-3 text-[13px] text-ink-muted">
           {transport.kind === 'resend'

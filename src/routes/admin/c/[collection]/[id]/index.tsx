@@ -8,7 +8,13 @@ import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
 import { getDocument, updateDocument, listRevisions, getBacklinks } from '@/services/documents';
 import { getSettings } from '@/services/settings';
-import { getPrincipalPermissions, listItemGrants, listPrincipals, listRoles, listTeams } from '@/services/access';
+import {
+  getPrincipalPermissions,
+  listItemGrants,
+  listPrincipals,
+  listRoles,
+  listTeams,
+} from '@/services/access';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';

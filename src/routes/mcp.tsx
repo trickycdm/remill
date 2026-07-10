@@ -41,12 +41,19 @@ export const onRequestPost = factory.createHandlers(async (c) => {
   const ctx: McpToolContext = {
     media: c.env.MEDIA,
     consumeUploadLimit: () =>
-      consumeRateLimit(c.env.RATE_LIMIT, 'upload', UPLOAD_RATE_LIMIT, principal.tokenId ?? clientKey(c)),
+      consumeRateLimit(
+        c.env.RATE_LIMIT,
+        'upload',
+        UPLOAD_RATE_LIMIT,
+        principal.tokenId ?? clientKey(c),
+      ),
   };
 
   // Support a single request or a batch.
   if (Array.isArray(body)) {
-    const responses = (await Promise.all(body.map((m) => handleMcp(db, principal, nowIso, m, baseUrl, ctx)))).filter(Boolean);
+    const responses = (
+      await Promise.all(body.map((m) => handleMcp(db, principal, nowIso, m, baseUrl, ctx)))
+    ).filter(Boolean);
     return responses.length ? c.json(responses) : c.body(null, 202);
   }
   const response = await handleMcp(db, principal, nowIso, body as never, baseUrl, ctx);

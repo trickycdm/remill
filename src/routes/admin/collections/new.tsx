@@ -21,7 +21,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
     <AdminShell user={user} current="collections">
       <PageHeader
         title="New collection"
-        breadcrumb={[{ label: 'Collections', href: '/admin/collections' }, { label: 'New collection' }]}
+        breadcrumb={[
+          { label: 'Collections', href: '/admin/collections' },
+          { label: 'New collection' },
+        ]}
       />
       <div class="max-w-3xl">
         <CollectionBuilder

@@ -115,6 +115,26 @@ export async function allPublishedDocs(db: Database, now: string): Promise<Disco
   return out;
 }
 
+/** /:collection index page cap (v1: one bounded page, newest first). */
+export const INDEX_CAP = 100;
+
+/** One public collection + its published docs, newest publishedAt first — the
+ *  data behind the public `/:collection` index page. Throws NotFoundError for
+ *  a collection that isn't publicly advertised (the route renders the same
+ *  indistinguishable 404 as a missing one). */
+export async function collectionIndex(
+  db: Database,
+  now: string,
+  slug: string,
+  cap = INDEX_CAP,
+): Promise<{ def: CollectionDefinition; docs: DiscoveryDoc[] }> {
+  const [def] = await narrowTo(db, slug);
+  const docs = (await publishedDocs(db, def, now, cap)).sort((a, b) =>
+    (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''),
+  );
+  return { def, docs };
+}
+
 /** The homepage shape: each public collection with its recent published docs. */
 export async function publicOverview(
   db: Database,

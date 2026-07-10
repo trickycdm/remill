@@ -75,9 +75,25 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
       <Card class="mb-6">
         <CardContent class="pt-4">
-          <form method="get" action="/admin/activity" class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-            <Input name="principal" size="sm" placeholder="Principal id" aria-label="Filter by principal id" value={q.principal ?? ''} />
-            <Input name="collection" size="sm" placeholder="Collection" aria-label="Filter by collection" value={q.collection ?? ''} />
+          <form
+            method="get"
+            action="/admin/activity"
+            class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6"
+          >
+            <Input
+              name="principal"
+              size="sm"
+              placeholder="Principal id"
+              aria-label="Filter by principal id"
+              value={q.principal ?? ''}
+            />
+            <Input
+              name="collection"
+              size="sm"
+              placeholder="Collection"
+              aria-label="Filter by collection"
+              value={q.collection ?? ''}
+            />
             <Select name="action" size="sm" aria-label="Filter by action">
               <option value="">Any action</option>
               {ACTIONS.map((a) => (
@@ -111,7 +127,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       </Card>
 
       {page.rows.length === 0 ? (
-        <EmptyState title="No matching activity" description="Adjust the filters — every authorize() decision is recorded here." />
+        <EmptyState
+          title="No matching activity"
+          description="Adjust the filters — every authorize() decision is recorded here."
+        />
       ) : (
         <Card>
           <CardContent class="pt-4">
@@ -131,7 +150,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                 {page.rows.map((a) => (
                   <TableRow>
                     <TableCell>
-                      <span class="font-mono text-xs text-ink-subtle">{a.createdAt.slice(0, 19).replace('T', ' ')}</span>
+                      <span class="font-mono text-xs text-ink-subtle">
+                        {a.createdAt.slice(0, 19).replace('T', ' ')}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span class="font-mono text-xs">{a.principalId}</span>
@@ -143,7 +164,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                       <span class="font-mono text-xs">{a.resource}</span>
                     </TableCell>
                     <TableCell>
-                      <Badge tone={a.allowed ? 'success' : 'danger'}>{a.allowed ? 'allow' : 'deny'}</Badge>
+                      <Badge tone={a.allowed ? 'success' : 'danger'}>
+                        {a.allowed ? 'allow' : 'deny'}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))}

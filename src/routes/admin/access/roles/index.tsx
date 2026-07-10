@@ -84,7 +84,12 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
               </FormField>
             </div>
             <FormField fieldId="role-desc" label="Description">
-              <Input id="role-desc" name="description" type="text" placeholder="What this role can do" />
+              <Input
+                id="role-desc"
+                name="description"
+                type="text"
+                placeholder="What this role can do"
+              />
             </FormField>
             <ScopePicker
               idPrefix="new-role"
@@ -133,15 +138,30 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
               {/* Custom roles are editable + deletable; system roles are not. */}
               {!r.system && (
                 <div class="flex flex-col gap-4 border-t border-border pt-3 sm:flex-row sm:items-start">
-                  <form method="post" action="/admin/access/roles" class="flex flex-1 flex-col gap-4">
+                  <form
+                    method="post"
+                    action="/admin/access/roles"
+                    class="flex flex-1 flex-col gap-4"
+                  >
                     <input type="hidden" name="op" value="update" />
                     <input type="hidden" name="slug" value={r.slug} />
                     <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
                       <FormField fieldId={`name-${r.slug}`} label="Name">
-                        <Input id={`name-${r.slug}`} name="name" type="text" value={r.name} required />
+                        <Input
+                          id={`name-${r.slug}`}
+                          name="name"
+                          type="text"
+                          value={r.name}
+                          required
+                        />
                       </FormField>
                       <FormField fieldId={`desc-${r.slug}`} label="Description">
-                        <Input id={`desc-${r.slug}`} name="description" type="text" value={r.description ?? ''} />
+                        <Input
+                          id={`desc-${r.slug}`}
+                          name="description"
+                          type="text"
+                          value={r.description ?? ''}
+                        />
                       </FormField>
                     </div>
                     <ScopePicker
@@ -199,7 +219,12 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   if (op === 'update') {
     await access.updateRole(db, principal, slug, name, description || undefined, permissions, now);
   } else {
-    await access.createRole(db, principal, { slug: String(body.slug ?? ''), name, description, permissions }, now);
+    await access.createRole(
+      db,
+      principal,
+      { slug: String(body.slug ?? ''), name, description, permissions },
+      now,
+    );
   }
   return c.redirect('/admin/access/roles', 303);
 });
