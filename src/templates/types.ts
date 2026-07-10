@@ -29,6 +29,11 @@ export interface RenderTemplate {
   readonly key: string;
   /** Human label (for a future admin template picker). */
   readonly name: string;
+  /** Capability flags: which derived context/affordances this template actually
+   *  renders. The ROUTE keys work off these — the reading-time computation and
+   *  the reader-share island load are per-template capabilities, not implied by
+   *  "a template resolved" (a changelog wants neither). Absent flag ⇒ false. */
+  readonly wants?: { readonly readingTime?: boolean; readonly shareBar?: boolean };
   readonly Component: FC<{
     def: CollectionDefinition;
     doc: ExpandedDocument;

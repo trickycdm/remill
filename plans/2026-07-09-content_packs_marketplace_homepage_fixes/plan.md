@@ -6,7 +6,7 @@ A multi-agent review of the two recent shipments (704afb4 public reading templat
 
 User decisions: build **three new packs (docs, changelog, portfolio)**, expose packs through an **internal marketplace** (new admin menu item + MCP tools), do the **full homepage rework** as its own phase, and add a **public collection index page**.
 
-Six phases, each ≈ one independently shippable PR. No DB migrations, no new field types, no new access actions anywhere in this plan.
+Six phases, each ≈ one independently shippable PR. No new field types, no new access actions anywhere in this plan; one additive migration (0013 `bind_json` — see Revision Log).
 
 ---
 
@@ -110,7 +110,7 @@ Each sub-PR: new `src/templates/<name>.tsx` + key in `keys.ts` + entry in `regis
 - **`buildSearchText` slug exclusion**: render surfaces fix on deploy; stored FTS rows need the admin rebuild (exists: Settings → rebuild, `rebuildSearchIndex` src/services/search/index.ts:108). Run it post-deploy of Phase 1.
 - **Partial installs** prevented by installPack's pre-flight all-slugs check.
 - **`bun run routes`** required after adding any route file (Phases 3 & 5) — type-check runs it, but don't skip locally.
-- **No migrations, no new actions, no new field types** anywhere. `bind` and `template` live inside the definition JSON.
+- **No new actions, no new field types** anywhere. `template` has its own column (0012); `bind` needed one too — additive migration 0013 `bind_json` (the definition is stored column-per-concern, not as one JSON blob).
 - Marketplace icon: add a small `Store` function to `src/components/ui/icon.tsx` (verified: no suitable glyph exists).
 
 ## Verification (end-to-end, after all phases)
@@ -119,3 +119,6 @@ Each sub-PR: new `src/templates/<name>.tsx` + key in `keys.ts` + entry in `regis
 2. Agent flow over MCP against a preview deploy: `list_packs` → `install_pack('changelog')` → `create_changelog` → `publish_changelog` → fetch the public page + `/changelog` index.
 3. Admin flow: Marketplace → install portfolio → land on collection → create/publish → public page renders portfolio template.
 4. Live checks post-deploy: og:description clean, focus ring visible, tab indicators visible, homepage sections per P1–P7, rebuild search index once.
+
+## Revision Log
+- 2026-07-10: Phase 2 — added additive migration 0013 (`collections.bind_json`); the plan assumed `bind` could ride an existing definition JSON column, but the collections table stores each concern in its own column (0012 `template` precedent).

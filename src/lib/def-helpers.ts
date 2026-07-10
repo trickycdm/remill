@@ -15,12 +15,19 @@ export interface DocLike {
   readonly data: Record<string, unknown>;
 }
 
-/** The collection's display-title field: the configured `titleField` when it
- *  exists, else the first text/slug field (the SAME heuristic the search index
- *  and relation expansion use — keep them identical). */
+/** The collection's display-title field: an explicit binding first (`configured`
+ *  arg, else the definition's `bind.title`), else the first TEXT field, else the
+ *  first slug field (last resort — a slug-first collection must never render its
+ *  slug as the H1 while prose is available). The SAME heuristic serves the
+ *  search index, relation expansion, OG/feeds, and the reading templates — keep
+ *  them identical. */
 export function titleFieldOf(def: CollectionDefinition, configured?: string): string | undefined {
-  if (configured && def.fields.some((f) => f.key === configured)) return configured;
-  return def.fields.find((f) => f.type === 'text' || f.type === 'slug')?.key;
+  for (const explicit of [configured, def.bind?.title]) {
+    if (explicit && def.fields.some((f) => f.key === explicit)) return explicit;
+  }
+  return (
+    def.fields.find((f) => f.type === 'text')?.key ?? def.fields.find((f) => f.type === 'slug')?.key
+  );
 }
 
 /** A document's display title, falling back to its id (feeds/OG must never be

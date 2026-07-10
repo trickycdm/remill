@@ -64,13 +64,21 @@ export const onRequestGet = factory.createHandlers(async (c) => {
 
     // A registered template renders the reading layout; otherwise the generic
     // shell (DocumentView). `renderMode: 'raw'` already short-circuited above.
+    // Reading time and the reader-share island are template CAPABILITIES
+    // (tpl.wants) — a template that renders neither loads neither.
     const tpl = resolveTemplate(def.template);
+    const wants = tpl?.wants ?? {};
     const content = tpl ? (
       <tpl.Component
         def={def}
         doc={doc}
         backlinks={backlinks}
-        ctx={{ settings, baseUrl, readingMinutes: readingTimeMinutes(body), shareUrl: canonical }}
+        ctx={{
+          settings,
+          baseUrl,
+          readingMinutes: wants.readingTime ? readingTimeMinutes(body) : 0,
+          shareUrl: wants.shareBar ? canonical : undefined,
+        }}
       />
     ) : (
       <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" />
@@ -79,8 +87,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     return c.render(
       <PublicShell settings={settings}>
         {content}
-        {/* Reader-share island — a no-op on pages without a share bar (§g). */}
-        {tpl ? <Script src="/src/client/share.ts" /> : null}
+        {wants.shareBar ? <Script src="/src/client/share.ts" /> : null}
       </PublicShell>,
       {
         title: `${titleOf(def, doc)} — ${siteName}`,

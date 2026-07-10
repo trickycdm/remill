@@ -38,6 +38,15 @@ const WORKFLOW_SCHEMA = z.strictObject({
   lifecycle: z.enum(['publish', 'none']).optional(),
 });
 const ACCESS_SCHEMA = z.strictObject({ publicRead: z.boolean().optional() });
+// Explicit render bindings (templates' escape hatch when convention would guess
+// wrong). CLOSED shape like workflow/access; slot-appropriate field types are
+// checked below against the actual field list.
+const BIND_SCHEMA = z.strictObject({
+  title: z.string().optional(),
+  hero: z.string().optional(),
+  lead: z.string().optional(),
+});
+const BIND_SLOT_TYPES = { title: ['text'], hero: ['media'], lead: ['text'] } as const;
 
 export const listCollections = q.listCollections;
 export const getCollection = q.getCollection;
@@ -46,7 +55,10 @@ export const getCollection = q.getCollection;
  *  form of the `getCollection(...) → if (!def) throw` guard the admin routes each
  *  hand-repeated (TD-5). Returns the FULL definition — use `getCollectionForDiscovery`
  *  for the access-omitting public projection on discovery surfaces. */
-export async function getCollectionOrThrow(db: Database, slug: string): Promise<CollectionDefinition> {
+export async function getCollectionOrThrow(
+  db: Database,
+  slug: string,
+): Promise<CollectionDefinition> {
   const def = await q.getCollection(db, slug);
   if (!def) throw new NotFoundError('Collection');
   return def;
@@ -72,7 +84,10 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
   const fields = Array.isArray(input.fields) ? input.fields.map(withFieldDefaults) : [];
 
   if (!SLUG_RE.test(input.slug)) {
-    issues.push({ path: 'slug', message: 'Slug must be lowercase, start with a letter (a-z0-9-).' });
+    issues.push({
+      path: 'slug',
+      message: 'Slug must be lowercase, start with a letter (a-z0-9-).',
+    });
   }
   // A collection named after a static top-level route would be shadowed on the
   // public surface (C2) — reject up front rather than 404 mysteriously later.
@@ -96,7 +111,8 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     if (RESERVED_FIELD_KEYS.includes(f.key as (typeof RESERVED_FIELD_KEYS)[number])) {
       issues.push({ path: `${at}.key`, message: `'${f.key}' is a reserved key.` });
     }
-    if (seen.has(f.key)) issues.push({ path: `${at}.key`, message: `Duplicate field key '${f.key}'.` });
+    if (seen.has(f.key))
+      issues.push({ path: `${at}.key`, message: `Duplicate field key '${f.key}'.` });
     seen.add(f.key);
 
     try {
@@ -128,7 +144,10 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     const r = WORKFLOW_SCHEMA.safeParse(input.workflow);
     if (!r.success) {
       for (const iss of r.error.issues) {
-        issues.push({ path: `workflow${iss.path.length ? `.${iss.path.join('.')}` : ''}`, message: iss.message });
+        issues.push({
+          path: `workflow${iss.path.length ? `.${iss.path.join('.')}` : ''}`,
+          message: iss.message,
+        });
       }
     } else if (r.data.lifecycle === 'none' && r.data.draftPublish) {
       issues.push({
@@ -141,7 +160,10 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     const r = ACCESS_SCHEMA.safeParse(input.access);
     if (!r.success) {
       for (const iss of r.error.issues) {
-        issues.push({ path: `access${iss.path.length ? `.${iss.path.join('.')}` : ''}`, message: iss.message });
+        issues.push({
+          path: `access${iss.path.length ? `.${iss.path.join('.')}` : ''}`,
+          message: iss.message,
+        });
       }
     }
   }
@@ -151,14 +173,52 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     } else if (input.renderMode === 'raw' && !(input.fields ?? []).some((f) => f.type === 'html')) {
       // In raw mode the FIRST html field IS the page (D27) — without one there
       // is nothing to render.
-      issues.push({ path: 'renderMode', message: "renderMode 'raw' requires at least one 'html' field." });
+      issues.push({
+        path: 'renderMode',
+        message: "renderMode 'raw' requires at least one 'html' field.",
+      });
     }
   }
   // The `template` selector must name a REGISTERED reading template (src/templates/).
   // Closed set, rejected on write (SEC-6) — an unknown key would silently fall back
   // to the shell, so fail loudly instead.
   if (input.template !== undefined && input.template !== null && !isTemplateKey(input.template)) {
-    issues.push({ path: 'template', message: `template must be one of: ${TEMPLATE_KEYS.join(', ')}.` });
+    issues.push({
+      path: 'template',
+      message: `template must be one of: ${TEMPLATE_KEYS.join(', ')}.`,
+    });
+  }
+  // `bind` pins template slots to fields explicitly. Same loud-rejection posture:
+  // a binding to a missing or wrong-typed field would render silently wrong
+  // (a text field as a hero image), so fail on write instead.
+  if (input.bind !== undefined && input.bind !== null) {
+    const r = BIND_SCHEMA.safeParse(input.bind);
+    if (!r.success) {
+      for (const iss of r.error.issues) {
+        issues.push({
+          path: `bind${iss.path.length ? `.${iss.path.join('.')}` : ''}`,
+          message: iss.message,
+        });
+      }
+    } else {
+      for (const [slot, allowed] of Object.entries(BIND_SLOT_TYPES)) {
+        const key = r.data[slot as keyof typeof BIND_SLOT_TYPES];
+        if (key === undefined) continue;
+        const target = fields.find((f) => f.key === key);
+        if (!target) {
+          issues.push({ path: `bind.${slot}`, message: `bind.${slot} names no field '${key}'.` });
+        } else if (!(allowed as readonly string[]).includes(target.type)) {
+          issues.push({
+            path: `bind.${slot}`,
+            message: `bind.${slot} must name a ${allowed.join('/')} field, '${key}' is '${target.type}'.`,
+          });
+        }
+      }
+      const bound = Object.values(r.data).filter((v): v is string => typeof v === 'string');
+      if (new Set(bound).size !== bound.length) {
+        issues.push({ path: 'bind', message: 'bind slots must name distinct fields.' });
+      }
+    }
   }
 
   if (issues.length) throw new InputValidationError(issues, 'Invalid collection definition');
@@ -172,6 +232,7 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     access: input.access,
     renderMode: input.renderMode,
     template: input.template ?? undefined,
+    bind: input.bind ?? undefined,
     protected: input.protected ?? false,
   };
 }
@@ -231,7 +292,8 @@ export async function deleteCollection(
   const grant = await authorize(db, principal, 'manage_schema', { collection: slug }, now);
   const existing = await q.getCollection(db, slug);
   if (!existing) throw new NotFoundError('Collection');
-  if (existing.protected) throw new ForbiddenError(`Collection '${slug}' is protected and cannot be deleted.`);
+  if (existing.protected)
+    throw new ForbiddenError(`Collection '${slug}' is protected and cannot be deleted.`);
   await q.deleteCollectionRow(db, slug, grant, {
     type: 'collection.deleted',
     collection: slug,

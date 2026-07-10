@@ -21,8 +21,16 @@ export const blogCollectionScaffold: CollectionDefinition = {
   fields: [
     { key: 'title', type: 'text', required: true, index: true, admin: { showInList: true } },
     { key: 'slug', type: 'slug', config: { from: 'title' }, unique: true, index: true },
-    { key: 'hero', type: 'media', admin: { help: 'Lead image, shown full-width at the top of the article.' } },
-    { key: 'excerpt', type: 'text', admin: { help: 'A one-line standfirst shown under the title.' } },
+    {
+      key: 'hero',
+      type: 'media',
+      admin: { help: 'Lead image, shown full-width at the top of the article.' },
+    },
+    {
+      key: 'excerpt',
+      type: 'text',
+      admin: { help: 'A one-line standfirst shown under the title.' },
+    },
     { key: 'body', type: 'markdown' },
     { key: 'tags', type: 'tags', index: true },
   ],
