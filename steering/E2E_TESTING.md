@@ -132,6 +132,12 @@ Accessible-name traps in THIS codebase (each cost a failed run, 2026-07-05/06/08
   and once-unique names now match twice (strict mode). Derive per-attempt-unique names at module
   scope (`const RUN = Date.now().toString(36)`; fresh worker ⇒ fresh value) and give repeated
   per-card actions team/row-scoped aria-labels (`Mint join link for ${team.name}`).
+- **Fixed-slug collection creation is never re-run safe** — unique titles don't help when the spec
+  creates a collection with a hardcoded slug (`companies`, `changelog`): the second full-suite run
+  against the same D1 hits ConflictError and the redirect wait times out. Either derive the slug
+  per-run too, or branch on the existing state (the marketplace spec's pattern: click Install when
+  the button exists, else assert the Installed state) — and remember only a clean `bun run e2e` is
+  signal anyway (the bullet above; re-confirmed the hard way 2026-07-10).
 - **Markdown fields are CodeMirror islands (D38)** — `getByLabel(/^body/i)` strict-violates on the
   PAIR (the hidden carrier textarea + the CM `role=textbox` named by the same label). Fill them
   ONLY via `fillMarkdown` (`e2e/helpers/editor.ts`), which targets the role (the aria-hidden

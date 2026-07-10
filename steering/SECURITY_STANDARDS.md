@@ -63,6 +63,11 @@ onto the record — any field an attacker named got written. remill's fix, from 
   ACCESS_CONTROL.md — this doc does not restate them.
 - **Never post-filter lists in memory.** The access module compiles permissions into SQL predicates
   applied inside the query; in-memory filtering leaks unreadable rows through pagination and miscounts.
+- **Authorize BEFORE any existence probe.** When a service both checks authorization and checks
+  whether a resource exists, the `authorize()` call comes first — otherwise the error shape
+  (Conflict/NotFound vs Forbidden) becomes an enumeration oracle for callers who hold no permission
+  at all. Precedent: `installPack` authorizes every target slug before its pre-flight conflict
+  checks (D42; tested in collections.test.ts "authorization precedes existence probing").
 
 ## 3. Roles come from the session/token, never from the client
 

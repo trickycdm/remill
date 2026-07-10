@@ -31,7 +31,13 @@ rendered public pages + share links.)
 > the public discovery pack — rss/sitemap/robots/OG head props + the `/` homepage (D35/D36), the
 > events outbox (D33), import/export + R2 snapshot (D37), the editor islands — CodeMirror markdown
 > and the dialog media picker (D38, implements D13/supersedes D12), the revision diff viewer, bulk
-> list actions (D39), and public reading templates (D41). The plan's Deferred/Tier-4 list records
+> list actions (D39), and public reading templates (D41). **v1.3.0 shipped D42 on 2026-07-10**: a
+> closed content-pack registry (`src/templates/packs.ts` — blog, changelog, portfolio, docs; each
+> pack pairs a template with co-designed collection def(s)) installed by one `installPack` service
+> across admin Marketplace / MCP / REST, plus the `bind` collection-def escape hatch, public
+> `/:collection` index pages, and a customer-focused homepage rework (plan:
+> [`plans/2026-07-09-content_packs_marketplace_homepage_fixes/`](plans/2026-07-09-content_packs_marketplace_homepage_fixes/)).
+> The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
 
@@ -69,7 +75,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
-  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41) + /s/:token share links (anonymous)
+  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41) + /:c index pages (D42) + /s/:token share links (anonymous)
                      / · /rss.xml · /sitemap.xml · /robots.txt   Discovery pack (D35, anonymous gated reads)
   Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29: purges · D32: publish drain as the system actor)
 
@@ -124,7 +130,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
   module owning the MCP protocol surface (decision D18). Tools include `share_<slug>` (subjectKind
   principal|role|team), `share_link_<slug>` (D26 agent-mintable links), `list_teams` (D24), `search_<slug>`
-  - `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
+  — `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
     (D34 parity), `schedule_<slug>` (D32 per-collection scheduled publishing), `poll_events` (D33 outbox
     change feed), `list_audit` (audit log access), and the D42 marketplace trio — `list_templates` +
     `list_packs` (ungated discovery) and `install_pack` (manage_schema) — so the agent flow

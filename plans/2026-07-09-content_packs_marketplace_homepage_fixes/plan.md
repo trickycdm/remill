@@ -1,5 +1,7 @@
 # Content packs, marketplace, homepage rework & review fixes
 
+**Status: COMPLETE — 2026-07-10** (all 6 phases merged to main as PRs #14/#20/#16–#19 and deployed live as v1.3.0)
+
 ## Context
 
 A multi-agent review of the two recent shipments (704afb4 public reading templates / D41, 4db40d0 homepage redesign) found: (1) three shipped bugs — an invisible hero-CTA focus ring, dead active-tab indicators on the EverySurface segmented control (both Tailwind cascade-order traps, verified against compiled CSS), and the raw slug prepended to every article's `og:description` live on remill.org; (2) the "content pack" concept exists only as an unwired constant — `blog-pack.ts` is imported by nothing but its own test, invisible to agents and humans alike, contradicting the agent-first thesis; (3) the homepage never names the customer and its primary CTA ("Connect an agent") is un-actionable for a cold visitor on a single-tenant instance.
@@ -10,7 +12,7 @@ Six phases, each ≈ one independently shippable PR. No new field types, no new 
 
 ---
 
-## Phase 1 — Bug fixes (M)
+## Phase 1 — Bug fixes (M) — **DONE** (PR #14)
 
 **Files:** `src/components/marketing.tsx`, `src/services/documents/index.ts`, `src/routes/[collection]/[slug]/index.tsx` (prettier only), `steering/API_AND_MCP_STANDARDS.md`, tests.
 
@@ -27,7 +29,7 @@ Six phases, each ≈ one independently shippable PR. No new field types, no new 
 
 ---
 
-## Phase 2 — Convention & template-contract hardening (M)
+## Phase 2 — Convention & template-contract hardening (M) — **DONE** (PR #20, recreated #15)
 
 Behavior-preserving for article; makes Phase 4 purely additive (Phase 2 is the single owner of edits to `templates/types.ts`, `conventions.ts`, and the render route).
 
@@ -43,7 +45,7 @@ Behavior-preserving for article; makes Phase 4 purely additive (Phase 2 is the s
 
 ---
 
-## Phase 3 — Pack + marketplace infrastructure, blog pack only (L)
+## Phase 3 — Pack + marketplace infrastructure, blog pack only (L) — **DONE** (PR #16, D42)
 
 **New files:** `src/templates/packs.ts`; REST routes `src/routes/api/templates/index.tsx`, `src/routes/api/packs/index.tsx`, `src/routes/api/packs/[key]/install.tsx`; admin page `src/routes/admin/marketplace/index.tsx`; tests (`packs.test.ts`, `install-pack.test.ts`, MCP/REST additions, `e2e/marketplace.spec.ts`).
 **Modified:** `src/services/collections/index.ts` (installPack), `src/mcp/tools.ts`, `src/lib/openapi.ts` (staticPaths), `src/components/layouts/admin-shell.tsx` (nav), `src/components/ui/icon.tsx` (new `Store` glyph — none exists in the barrel), `src/templates/blog-pack.ts` (scaffold moves into packs.ts; keep a re-export), `docs/TECH_DECISIONS.md` (D42), `CLAUDE.md`, `steering/API_AND_MCP_STANDARDS.md`, `steering/SCHEMA_ENGINE.md`.
@@ -60,7 +62,7 @@ Behavior-preserving for article; makes Phase 4 purely additive (Phase 2 is the s
 
 ---
 
-## Phase 4 — Three packs + templates (L; three sub-PRs)
+## Phase 4 — Three packs + templates (L) — **DONE** (PR #17; one PR with three commits, not three sub-PRs)
 
 Each sub-PR: new `src/templates/<name>.tsx` + key in `keys.ts` + entry in `registry.ts` (compiler-enforced exhaustive) + pack entry in `packs.ts` + tests mirroring article.test.tsx and blog-pack.test.ts incl. the render-level drift assertion. All use the 12 existing field types (`url`→text, date→datetime, semver→text). No route/contract edits — Phase 2 froze those.
 
@@ -72,7 +74,7 @@ Each sub-PR: new `src/templates/<name>.tsx` + key in `keys.ts` + entry in `regis
 
 ---
 
-## Phase 5 — Public reading polish (M)
+## Phase 5 — Public reading polish (M) — **DONE** (PR #18)
 
 **Files:** new `src/routes/[collection]/index.tsx`; `src/components/layouts/public-shell.tsx`; `src/layouts.tsx`; new `src/templates/lib/dedupe-backlinks.ts`; the four templates; tests.
 
@@ -86,7 +88,7 @@ Each sub-PR: new `src/templates/<name>.tsx` + key in `keys.ts` + entry in `regis
 
 ---
 
-## Phase 6 — Homepage rework P1–P7 (L) — must land after Phase 1
+## Phase 6 — Homepage rework P1–P7 (L) — **DONE** (PR #19; landed after Phase 1 as required)
 
 **Files:** `src/components/marketing.tsx`, `src/components/layouts/marketing-shell.tsx`, `src/components/marketing.test.tsx`. Copy raw material: `docs/PROJECT_BRIEF.md` success criteria (lines 146–165).
 
@@ -122,3 +124,8 @@ Each sub-PR: new `src/templates/<name>.tsx` + key in `keys.ts` + entry in `regis
 
 ## Revision Log
 - 2026-07-10: Phase 2 — added additive migration 0013 (`collections.bind_json`); the plan assumed `bind` could ride an existing definition JSON column, but the collections table stores each concern in its own column (0012 `template` precedent).
+- 2026-07-10: Phase 1 — the og:description fix widened from slug-only to a PROSE-ONLY search body: `toIndex` fallback also leaked media/relation ids and ISO datetimes into FTS + excerpts (the changelog pack would have shipped `2026-07-09T…` descriptions).
+- 2026-07-10: Phase 4 shipped as one PR with three commits instead of three sub-PRs (the stack was already three deep).
+- 2026-07-10: Phase 6 — the repo is PRIVATE with no LICENSE, so "Run your own mill" links the open API reference instead of a repository; `TODO(release)` markers hold the repo/license slots (marketing.tsx, marketing-shell.tsx).
+- 2026-07-10: Merge — PR #15 was auto-closed when #14's branch deletion raced GitHub's base retargeting; recreated as #20. Lesson: for stacked PRs, retarget the next PR to main BEFORE merging its predecessor.
+- 2026-07-10: Post-deploy ops — v1.3.0 live-verified (og prose-led, twitter:card, homepage sections, /api/packs, /articles). FTS refresh: 2 of 3 published articles re-saved over MCP; the third + stale drafts need the admin Settings → Rebuild search index click. `dateFormat: 'long'` optional setting still open.

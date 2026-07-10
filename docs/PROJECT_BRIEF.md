@@ -130,6 +130,16 @@ item grants. Everything — every allow and every deny — is audited with princ
 - **Tier 3 (Phases 9–11): shipped** — editor islands (D38: CodeMirror 6 markdown + native Dialog
   media picker, progressive enhancement over `data-bind` carriers; implements D13, supersedes D12/Uppy),
   revision diff viewer, and bulk list actions via one native form with per-item authorize/audit/events (D39).
+- **Public reading templates (D41) + content-pack marketplace (D42): shipped** — a closed
+  `src/templates/` registry (`article`, `changelog`, `portfolio`, `docs`) selected per-collection by a
+  `template` key, with an explicit `bind` escape hatch ({title/hero/lead}→field key) alongside the
+  convention-based default. Four packs (`src/templates/packs.ts`: blog, changelog, portfolio, docs —
+  each a template + a co-designed `CollectionDefinition`) are installable from three surfaces behind one
+  `installPack` service: the admin **Marketplace** (`/admin/marketplace`), MCP (`list_packs` →
+  `install_pack`), and REST (`POST /api/packs/:key/install`) — authorize-first, all-or-nothing. The
+  "second pack" deferral noted in D41 is resolved. A `/{collection}` public index page (published
+  entries, newest first) and a redesigned homepage (audience strip, use-case stories, "Run your own
+  mill" CTA, dogfood writing index) round out the public reading surface.
 
 Roadmap detail and per-phase status: `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`
 (Tracks A–C, worklogs), plus the full completion roadmap
