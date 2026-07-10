@@ -69,6 +69,13 @@ export interface CollectionDefinition {
    *  data). Absent ⇒ the generic DocumentView shell; `renderMode: 'raw'` still
    *  wins over any template. Validated against the registry on write. */
   readonly template?: string;
+  /** Explicit render bindings for the templates' scalar slots — the escape
+   *  hatch when convention guesses wrong (e.g. an `author` text field would
+   *  win the lead slot). Values are field keys; validated on write (existing
+   *  key, slot-appropriate type: title/lead → text, hero → media). Convention
+   *  resolves any slot left unbound. `bind.title` also drives titleFieldOf, so
+   *  H1, OG/feeds, search, and relation titles stay unified. */
+  readonly bind?: { readonly title?: string; readonly hero?: string; readonly lead?: string };
   readonly protected?: boolean;
 }
 

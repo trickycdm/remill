@@ -46,12 +46,24 @@ describe('collections service — definition validation', () => {
     // drops out of RSS/sitemap/canonical (getDocumentBySlug + publicUrlOf both
     // resolve via the index). Normalization defaults slug fields to index:true.
     const def = svc.validateDefinition(
-      bad({ slug: 'posts', fields: [{ key: 'slug', type: 'slug' }, { key: 'body', type: 'markdown' }] }),
+      bad({
+        slug: 'posts',
+        fields: [
+          { key: 'slug', type: 'slug' },
+          { key: 'body', type: 'markdown' },
+        ],
+      }),
     );
     expect(def.fields.find((f) => f.key === 'slug')?.index).toBe(true);
     // A deliberate opt-out (slug used as a plain normalized string, not a URL) survives.
     const optOut = svc.validateDefinition(
-      bad({ slug: 'posts2', fields: [{ key: 'slug', type: 'slug', index: false }, { key: 'body', type: 'markdown' }] }),
+      bad({
+        slug: 'posts2',
+        fields: [
+          { key: 'slug', type: 'slug', index: false },
+          { key: 'body', type: 'markdown' },
+        ],
+      }),
     );
     expect(optOut.fields.find((f) => f.key === 'slug')?.index).toBe(false);
   });
@@ -71,7 +83,11 @@ describe('collections service — definition validation', () => {
     await svc.createCollection(
       db,
       admin,
-      bad({ slug: 'pages', renderMode: 'raw', fields: [{ key: 'page', type: 'html', required: true }] }),
+      bad({
+        slug: 'pages',
+        renderMode: 'raw',
+        fields: [{ key: 'page', type: 'html', required: true }],
+      }),
       NOW,
     );
     expect((await svc.getCollection(db, 'pages'))?.renderMode).toBe('raw');
@@ -83,7 +99,12 @@ describe('collections service — definition validation', () => {
 
     // Outside the enum → rejected.
     await expect(
-      svc.createCollection(db, admin, bad({ slug: 'weird', renderMode: 'fullscreen' as never }), NOW),
+      svc.createCollection(
+        db,
+        admin,
+        bad({ slug: 'weird', renderMode: 'fullscreen' as never }),
+        NOW,
+      ),
     ).rejects.toBeInstanceOf(InputValidationError);
 
     // 'shell' (the default, spelled out) is fine and stored as such.
@@ -102,8 +123,75 @@ describe('collections service — definition validation', () => {
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 
+  it('bind slots validate against the field list and round-trip through storage', async () => {
+    const FIELDS: CollectionDefinition['fields'] = [
+      { key: 'headline', type: 'text', required: true },
+      { key: 'dek', type: 'text' },
+      { key: 'poster', type: 'media' },
+      { key: 'body', type: 'markdown' },
+    ];
+    // Valid explicit bindings → accepted and stored.
+    await svc.createCollection(
+      db,
+      admin,
+      bad({
+        slug: 'bound',
+        fields: FIELDS,
+        bind: { title: 'headline', hero: 'poster', lead: 'dek' },
+      }),
+      NOW,
+    );
+    expect((await svc.getCollection(db, 'bound'))?.bind).toEqual({
+      title: 'headline',
+      hero: 'poster',
+      lead: 'dek',
+    });
+
+    // A binding to a field that doesn't exist → rejected (would render silently wrong).
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({ slug: 'b1', fields: FIELDS, bind: { hero: 'nope' } }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+    // A slot bound to the wrong TYPE (text as hero) → rejected.
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({ slug: 'b2', fields: FIELDS, bind: { hero: 'dek' } }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+    // Unknown slots → rejected (closed shape, same posture as workflow/access).
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({ slug: 'b3', fields: FIELDS, bind: { banner: 'poster' } as never }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+    // Two slots on one field → rejected.
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        bad({ slug: 'b4', fields: FIELDS, bind: { title: 'dek', lead: 'dek' } }),
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
   it("B4: accepts lifecycle 'none'; rejects the contradictory none+draftPublish combo", async () => {
-    await svc.createCollection(db, admin, bad({ slug: 'records', workflow: { lifecycle: 'none' } }), NOW);
+    await svc.createCollection(
+      db,
+      admin,
+      bad({ slug: 'records', workflow: { lifecycle: 'none' } }),
+      NOW,
+    );
     await expect(
       svc.createCollection(
         db,
@@ -123,7 +211,12 @@ describe('collections service — definition validation', () => {
         fields: [
           { key: 'title', type: 'text', required: true, index: true },
           { key: 'author', type: 'relation', config: { collection: 'people' }, index: true },
-          { key: 'refs', type: 'relation', config: { collection: 'graph', multiple: true }, index: true },
+          {
+            key: 'refs',
+            type: 'relation',
+            config: { collection: 'graph', multiple: true },
+            index: true,
+          },
         ],
       }),
       NOW,
@@ -140,7 +233,13 @@ describe('collections service — definition validation', () => {
           slug: 'rel-u',
           fields: [
             { key: 'title', type: 'text', required: true, index: true },
-            { key: 'refs', type: 'relation', config: { collection: 'people', multiple: true }, index: true, unique: true },
+            {
+              key: 'refs',
+              type: 'relation',
+              config: { collection: 'people', multiple: true },
+              index: true,
+              unique: true,
+            },
           ],
         }),
         NOW,
@@ -163,9 +262,9 @@ describe('collections service — definition validation', () => {
   });
 
   it('rejects a bad slug', async () => {
-    await expect(svc.createCollection(db, admin, bad({ slug: 'Bad Slug' }), NOW)).rejects.toBeInstanceOf(
-      InputValidationError,
-    );
+    await expect(
+      svc.createCollection(db, admin, bad({ slug: 'Bad Slug' }), NOW),
+    ).rejects.toBeInstanceOf(InputValidationError);
   });
 
   it('C2: rejects URL-reserved slugs (static route segments would shadow them)', async () => {
@@ -193,7 +292,12 @@ describe('collections service — definition validation', () => {
       svc.createCollection(
         db,
         admin,
-        bad({ fields: [{ key: 'a', type: 'text' }, { key: 'a', type: 'number' }] }),
+        bad({
+          fields: [
+            { key: 'a', type: 'text' },
+            { key: 'a', type: 'number' },
+          ],
+        }),
         NOW,
       ),
     ).rejects.toBeInstanceOf(InputValidationError);
@@ -201,7 +305,12 @@ describe('collections service — definition validation', () => {
 
   it('rejects index:true on a non-indexable type (json)', async () => {
     await expect(
-      svc.createCollection(db, admin, bad({ fields: [{ key: 'blob', type: 'json', index: true }] }), NOW),
+      svc.createCollection(
+        db,
+        admin,
+        bad({ fields: [{ key: 'blob', type: 'json', index: true }] }),
+        NOW,
+      ),
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 
@@ -218,7 +327,9 @@ describe('collections service — definition validation', () => {
   });
 
   it('denies a non-admin (needs manage_schema)', async () => {
-    await expect(svc.createCollection(db, editor, valid, NOW)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(svc.createCollection(db, editor, valid, NOW)).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
   });
 
   it('rejects a duplicate collection slug', async () => {
@@ -228,7 +339,9 @@ describe('collections service — definition validation', () => {
 
   it('protects seeded collections from deletion', async () => {
     await svc.createCollection(db, admin, { ...valid, protected: true }, NOW);
-    await expect(svc.deleteCollection(db, admin, 'articles', NOW)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(svc.deleteCollection(db, admin, 'articles', NOW)).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
   });
 });
 
@@ -263,7 +376,12 @@ describe('collections service — discovery projection (SEC-5) + access/workflow
     expect((p as unknown as Record<string, unknown>).access).toBeUndefined();
     expect((p as unknown as Record<string, unknown>).workflow).toBeUndefined();
     expect(p.fields.map((f) => f.key)).toEqual(['title', 'body']);
-    expect(p.fields[0]).toMatchObject({ key: 'title', type: 'text', label: 'Title', required: true });
+    expect(p.fields[0]).toMatchObject({
+      key: 'title',
+      type: 'text',
+      label: 'Title',
+      required: true,
+    });
     // Field internals (index/config/admin) are not exposed to anonymous callers.
     expect((p.fields[0] as unknown as Record<string, unknown>).index).toBeUndefined();
   });
@@ -284,13 +402,23 @@ describe('collections service — discovery projection (SEC-5) + access/workflow
 
   it('SEC-6: rejects a malformed workflow config', async () => {
     await expect(
-      svc.createCollection(db, admin, { ...posts, slug: 'bad-wf', workflow: { draftPublish: 'yes' as unknown as boolean } }, NOW),
+      svc.createCollection(
+        db,
+        admin,
+        { ...posts, slug: 'bad-wf', workflow: { draftPublish: 'yes' as unknown as boolean } },
+        NOW,
+      ),
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 
   it('SEC-6: rejects a malformed access config', async () => {
     await expect(
-      svc.createCollection(db, admin, { ...posts, slug: 'bad-acc', access: { publicRead: 'nope' as unknown as boolean } }, NOW),
+      svc.createCollection(
+        db,
+        admin,
+        { ...posts, slug: 'bad-acc', access: { publicRead: 'nope' as unknown as boolean } },
+        NOW,
+      ),
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 

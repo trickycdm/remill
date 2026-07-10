@@ -22,6 +22,7 @@ import { formatDate } from '@/lib/format-date';
 export const articleTemplate: RenderTemplate = {
   key: 'article',
   name: 'Article',
+  wants: { readingTime: true, shareBar: true },
   Component: ({ def, doc, backlinks, ctx }) => {
     const layout = resolveConventionLayout(def);
     const titleRaw = layout.titleField ? doc.data[layout.titleField.key] : undefined;
@@ -52,10 +53,14 @@ export const articleTemplate: RenderTemplate = {
         ) : null}
 
         <header class="flex flex-col gap-4">
-          <h1 class="font-serif text-4xl font-semibold leading-tight tracking-tight text-ink">{title}</h1>
+          <h1 class="font-serif text-4xl font-semibold leading-tight tracking-tight text-ink">
+            {title}
+          </h1>
           {published || ctx.readingMinutes ? (
             <p class="flex flex-wrap items-center gap-x-2 text-sm text-ink-subtle">
-              {published ? <time datetime={published}>{formatDate(published, ctx.settings)}</time> : null}
+              {published ? (
+                <time datetime={published}>{formatDate(published, ctx.settings)}</time>
+              ) : null}
               {published && ctx.readingMinutes ? <span aria-hidden="true">·</span> : null}
               {ctx.readingMinutes ? <span>{ctx.readingMinutes} min read</span> : null}
             </p>
@@ -68,7 +73,10 @@ export const articleTemplate: RenderTemplate = {
         ))}
 
         {metaFields.length ? (
-          <section aria-label="Details" class="mt-2 flex flex-col gap-4 border-t border-border pt-6">
+          <section
+            aria-label="Details"
+            class="mt-2 flex flex-col gap-4 border-t border-border pt-6"
+          >
             {metaFields.map((field) => (
               <div class="flex flex-col gap-1">
                 <span class="font-mono text-eyebrow font-medium tracking-[0.1em] text-ink-subtle uppercase">

@@ -60,6 +60,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     );
     // A shared item renders through the same template as its public page — but
     // with NO shareUrl (a private link never advertises a public share).
+    // Reading time is a template capability (tpl.wants), same as the public route.
     const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
     const tpl = resolveTemplate(def.template);
     const content = tpl ? (
@@ -67,7 +68,13 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         def={def}
         doc={doc}
         backlinks={backlinks}
-        ctx={{ settings, baseUrl, readingMinutes: readingTimeMinutes(buildSearchText(def, doc.data)?.body ?? '') }}
+        ctx={{
+          settings,
+          baseUrl,
+          readingMinutes: tpl.wants?.readingTime
+            ? readingTimeMinutes(buildSearchText(def, doc.data)?.body ?? '')
+            : 0,
+        }}
       />
     ) : (
       <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" />

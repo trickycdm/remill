@@ -28,6 +28,7 @@ function toDomain(row: Row): CollectionDefinition {
     access: row.accessJson ? JSON.parse(row.accessJson) : undefined,
     renderMode: (row.renderMode as CollectionDefinition['renderMode']) ?? undefined,
     template: row.template ?? undefined,
+    bind: row.bindJson ? (JSON.parse(row.bindJson) as CollectionDefinition['bind']) : undefined,
     protected: row.protected === 1,
   };
 }
@@ -61,6 +62,7 @@ export async function insertCollection(
     accessJson: def.access ? JSON.stringify(def.access) : null,
     renderMode: def.renderMode ?? null,
     template: def.template ?? null,
+    bindJson: def.bind ? JSON.stringify(def.bind) : null,
     protected: def.protected ? 1 : 0,
     createdAt: now,
     updatedAt: now,
@@ -88,6 +90,7 @@ export async function updateCollectionRow(
       accessJson: def.access ? JSON.stringify(def.access) : null,
       renderMode: def.renderMode ?? null,
       template: def.template ?? null,
+      bindJson: def.bind ? JSON.stringify(def.bind) : null,
       updatedAt: now,
     })
     .where(eq(collections.slug, slug));
