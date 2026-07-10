@@ -69,7 +69,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         <p
           role="status"
           class={`mb-4 rounded-md border px-3 py-2 text-sm font-medium ${
-            flash.tone === 'success' ? 'border-border bg-success-soft text-success' : 'border-border bg-warning-soft text-warning'
+            flash.tone === 'success'
+              ? 'border-border bg-success-soft text-success'
+              : 'border-border bg-warning-soft text-warning'
           }`}
         >
           {flash.text}
@@ -79,7 +81,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       {pages > 1 && (
         <nav aria-label="Pagination" class="mt-6 flex items-center justify-center gap-2 text-sm">
           {page > 1 && (
-            <a class="rounded-md px-3 py-1.5 text-ink-muted hover:bg-hover hover:text-ink" href={`?page=${page - 1}`}>
+            <a
+              class="rounded-md px-3 py-1.5 text-ink-muted hover:bg-hover hover:text-ink"
+              href={`?page=${page - 1}`}
+            >
               Previous
             </a>
           )}
@@ -87,7 +92,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             Page {page} of {pages}
           </span>
           {page < pages && (
-            <a class="rounded-md px-3 py-1.5 text-ink-muted hover:bg-hover hover:text-ink" href={`?page=${page + 1}`}>
+            <a
+              class="rounded-md px-3 py-1.5 text-ink-muted hover:bg-hover hover:text-ink"
+              href={`?page=${page + 1}`}
+            >
               Next
             </a>
           )}

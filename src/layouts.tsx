@@ -40,42 +40,52 @@ declare module 'hono' {
  *   stored it sets nothing, so `color-scheme: light dark` follows the OS. Static
  *   string with no interpolated data — safe to inline.
  */
-export const RootLayout = jsxRenderer(({ children, title, description, canonical, ogType, ogImage, feedUrl }) => {
-  const pageTitle = title ?? 'remill';
-  const pageDescription = description ?? 'remill — a lightweight, agent-native CMS';
-  return (
-    <html lang="en">
-      <head>
-        <title>{pageTitle}</title>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta name="description" content={pageDescription} />
+export const RootLayout = jsxRenderer(
+  ({ children, title, description, canonical, ogType, ogImage, feedUrl }) => {
+    const pageTitle = title ?? 'remill';
+    const pageDescription = description ?? 'remill — a lightweight, agent-native CMS';
+    return (
+      <html lang="en">
+        <head>
+          <title>{pageTitle}</title>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <meta name="description" content={pageDescription} />
 
-        {/* Open Graph + discovery links (D36) — emitted only when a route set
+          {/* Open Graph + discovery links (D36) — emitted only when a route set
             head props; admin pages stay meta-minimal. */}
-        {title ? <meta property="og:title" content={title} /> : null}
-        {description ? <meta property="og:description" content={description} /> : null}
-        {ogType ? <meta property="og:type" content={ogType} /> : null}
-        {ogImage ? <meta property="og:image" content={ogImage} /> : null}
-        {canonical ? <meta property="og:url" content={canonical} /> : null}
-        {canonical ? <link rel="canonical" href={canonical} /> : null}
-        {feedUrl ? <link rel="alternate" type="application/rss+xml" title={pageTitle} href={feedUrl} /> : null}
+          {title ? <meta property="og:title" content={title} /> : null}
+          {description ? <meta property="og:description" content={description} /> : null}
+          {ogType ? <meta property="og:type" content={ogType} /> : null}
+          {ogImage ? <meta property="og:image" content={ogImage} /> : null}
+          {canonical ? <meta property="og:url" content={canonical} /> : null}
+          {canonical ? <link rel="canonical" href={canonical} /> : null}
+          {/* Twitter falls back to og:* for title/description; only the card
+            type (and image size hint) needs stating — on og-bearing pages. */}
+          {ogType ? (
+            <meta name="twitter:card" content={ogImage ? 'summary_large_image' : 'summary'} />
+          ) : null}
+          {ogImage ? <meta name="twitter:image" content={ogImage} /> : null}
+          {feedUrl ? (
+            <link rel="alternate" type="application/rss+xml" title={pageTitle} href={feedUrl} />
+          ) : null}
 
-        {/* The pen-nib wordmark glyph in iris ink (dark-aware inside the SVG).
+          {/* The pen-nib wordmark glyph in iris ink (dark-aware inside the SVG).
             Served from public/ — self-hosted, CSP-clean. */}
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+          <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SNIPPET }} />
+          <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SNIPPET }} />
 
-        <ViteClient />
-        <Link href="/src/tailwind.css" rel="stylesheet" />
-        <Script src="/src/client/init.ts" />
+          <ViteClient />
+          <Link href="/src/tailwind.css" rel="stylesheet" />
+          <Script src="/src/client/init.ts" />
 
-        {/* Datastar v1 — vendored, self-hosted. Drives all data-* reactivity,
+          {/* Datastar v1 — vendored, self-hosted. Drives all data-* reactivity,
             form posts, and SSE patches. See steering/DATASTAR_PATTERNS.md. */}
-        <script type="module" src="/vendor/datastar.js"></script>
-      </head>
-      <body class="min-h-screen">{children}</body>
-    </html>
-  );
-});
+          <script type="module" src="/vendor/datastar.js"></script>
+        </head>
+        <body class="min-h-screen">{children}</body>
+      </html>
+    );
+  },
+);

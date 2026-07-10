@@ -6,7 +6,16 @@ import { requirePrincipal } from '@/lib/principal';
 import { listMedia, MAX_UPLOAD_BYTES } from '@/services/media';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, Card, CardContent, EmptyState, Badge, Input, Button, FormField } from '@/components/ui';
+import {
+  PageHeader,
+  Card,
+  CardContent,
+  EmptyState,
+  Badge,
+  Input,
+  Button,
+  FormField,
+} from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -21,7 +30,12 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
   const db = getDb(c.env.DB);
   const cursor = c.req.query('cursor') || null;
-  const { rows, total, nextCursor } = await listMedia(db, requirePrincipal(c), { cursor }, nowIso());
+  const { rows, total, nextCursor } = await listMedia(
+    db,
+    requirePrincipal(c),
+    { cursor },
+    nowIso(),
+  );
 
   return c.render(
     <AdminShell user={user} current="media">
@@ -32,7 +46,12 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           through the same service). */}
       <Card class="mb-8">
         <CardContent class="pt-6">
-          <form method="post" action="/admin/media/upload" enctype="multipart/form-data" class="flex flex-wrap items-end gap-4">
+          <form
+            method="post"
+            action="/admin/media/upload"
+            enctype="multipart/form-data"
+            class="flex flex-wrap items-end gap-4"
+          >
             <FormField fieldId="file" label="Upload a file">
               <input
                 id="file"
@@ -61,9 +80,16 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             <Card>
               <div class="flex aspect-video items-center justify-center overflow-hidden rounded-t-lg bg-hover">
                 {m.mime.startsWith('image/') ? (
-                  <img src={`/media/${m.id}`} alt={m.alt ?? ''} class="h-full w-full object-cover" loading="lazy" />
+                  <img
+                    src={`/media/${m.id}`}
+                    alt={m.alt ?? ''}
+                    class="h-full w-full object-cover"
+                    loading="lazy"
+                  />
                 ) : (
-                  <span class="font-mono text-xs text-ink-subtle uppercase">{m.mime.split('/')[1]}</span>
+                  <span class="font-mono text-xs text-ink-subtle uppercase">
+                    {m.mime.split('/')[1]}
+                  </span>
                 )}
               </div>
               <CardContent class="pt-3">
@@ -75,17 +101,36 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                   {humanSize(m.size)}
                   {m.width && m.height ? `· ${m.width}×${m.height}` : ''}
                 </p>
-                <form method="post" action={`/admin/media/${m.id}/alt`} class="mt-2 flex items-center gap-2">
-                  <Input name="alt" type="text" size="sm" value={m.alt ?? ''} placeholder="Alt text" />
+                <form
+                  method="post"
+                  action={`/admin/media/${m.id}/alt`}
+                  class="mt-2 flex items-center gap-2"
+                >
+                  <Input
+                    name="alt"
+                    type="text"
+                    size="sm"
+                    value={m.alt ?? ''}
+                    placeholder="Alt text"
+                  />
                   <Button type="submit" size="sm" variant="secondary">
                     Save
                   </Button>
                 </form>
                 <div class="mt-2 flex items-center justify-between">
-                  <a href={`/media/${m.id}`} target="_blank" rel="noopener" class="font-mono text-xs text-ink-subtle hover:text-ink hover:underline">
+                  <a
+                    href={`/media/${m.id}`}
+                    target="_blank"
+                    rel="noopener"
+                    class="font-mono text-xs text-ink-subtle hover:text-ink hover:underline"
+                  >
                     open ↗
                   </a>
-                  <form method="post" action={`/admin/media/${m.id}/delete`} onsubmit="return confirm('Delete this media?')">
+                  <form
+                    method="post"
+                    action={`/admin/media/${m.id}/delete`}
+                    onsubmit="return confirm('Delete this media?')"
+                  >
                     <button type="submit" class="text-xs text-danger hover:underline">
                       Delete
                     </button>

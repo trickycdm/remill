@@ -113,22 +113,36 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                       <TableCell class="font-medium">{title}</TableCell>
                       <TableCell class="font-mono text-xs">{row.collection}</TableCell>
                       <TableCell>
-                        <Badge tone={row.status === 'published' ? 'accent' : 'neutral'}>{row.status}</Badge>
+                        <Badge tone={row.status === 'published' ? 'accent' : 'neutral'}>
+                          {row.status}
+                        </Badge>
                       </TableCell>
-                      <TableCell class="text-sm text-ink-subtle">{formatDate(row.deletedAt, settings)}</TableCell>
+                      <TableCell class="text-sm text-ink-subtle">
+                        {formatDate(row.deletedAt, settings)}
+                      </TableCell>
                       <TableCell>
                         <div class="flex justify-end gap-2">
                           <form method="post" action="/admin/trash">
                             <input type="hidden" name="op" value="restore" />
                             <input type="hidden" name="id" value={row.id} />
-                            <Button type="submit" variant="secondary" size="sm" aria-label={`Restore ${title}`}>
+                            <Button
+                              type="submit"
+                              variant="secondary"
+                              size="sm"
+                              aria-label={`Restore ${title}`}
+                            >
                               Restore
                             </Button>
                           </form>
                           <form method="post" action="/admin/trash">
                             <input type="hidden" name="op" value="destroy" />
                             <input type="hidden" name="id" value={row.id} />
-                            <Button type="submit" variant="danger" size="sm" aria-label={`Delete ${title} forever`}>
+                            <Button
+                              type="submit"
+                              variant="danger"
+                              size="sm"
+                              aria-label={`Delete ${title} forever`}
+                            >
                               Delete forever
                             </Button>
                           </form>

@@ -6,12 +6,28 @@
  *
  * Accessibility mirrors the admin shell: skip link → #main-content, one <main>
  * landmark, header/footer landmarks (A11Y_STANDARDS.md).
+ *
+ * `indexLink` (optional) is the masthead's wayfinding affordance — "More
+ * <collection>" on document pages, pointing at the public collection index.
+ * Callers pass it only when that index actually resolves (publicRead); the
+ * share-link route never passes it (a private link advertises nothing).
  */
 
 import type { SiteSettings } from '@/services/settings';
 import { Wordmark } from '@/components/ui/wordmark';
 
-export function PublicShell({ settings, children }: { settings: SiteSettings; children?: unknown }) {
+const FOOTER_LINK =
+  'rounded-sm hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+export function PublicShell({
+  settings,
+  indexLink,
+  children,
+}: {
+  settings: SiteSettings;
+  indexLink?: { readonly href: string; readonly label: string };
+  children?: unknown;
+}) {
   const siteName = settings.siteName?.trim() || 'remill';
   return (
     <div class="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-6">
@@ -22,17 +38,24 @@ export function PublicShell({ settings, children }: { settings: SiteSettings; ch
         Skip to content
       </a>
       <header class="border-b border-border py-6">
-        <a
-          href="/"
-          aria-label={`${siteName} home`}
-          class="inline-flex rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-        >
-          {settings.logo ? (
-            <img src={`/media/${settings.logo}`} alt="" class="h-8 w-auto" />
-          ) : (
-            <Wordmark label={siteName} />
-          )}
-        </a>
+        <div class="flex items-center justify-between gap-4">
+          <a
+            href="/"
+            aria-label={`${siteName} home`}
+            class="inline-flex rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          >
+            {settings.logo ? (
+              <img src={`/media/${settings.logo}`} alt="" class="h-8 w-auto" />
+            ) : (
+              <Wordmark label={siteName} />
+            )}
+          </a>
+          {indexLink ? (
+            <a href={indexLink.href} class={`text-sm font-medium text-ink-muted ${FOOTER_LINK}`}>
+              {indexLink.label}
+            </a>
+          ) : null}
+        </div>
         {settings.siteDescription ? (
           <p class="mt-1 text-sm text-ink-muted">{settings.siteDescription}</p>
         ) : null}
@@ -40,7 +63,23 @@ export function PublicShell({ settings, children }: { settings: SiteSettings; ch
       <main id="main-content" class="flex-1 py-10">
         {children}
       </main>
-      <footer class="border-t border-border py-6 text-sm text-ink-subtle">{siteName}</footer>
+      <footer class="flex flex-wrap items-center justify-between gap-3 border-t border-border py-6 text-sm text-ink-subtle">
+        <span>{siteName}</span>
+        <nav aria-label="Site feeds">
+          <ul class="flex items-center gap-4">
+            <li>
+              <a href="/rss.xml" class={FOOTER_LINK}>
+                RSS
+              </a>
+            </li>
+            <li>
+              <a href="/sitemap.xml" class={FOOTER_LINK}>
+                Sitemap
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </footer>
     </div>
   );
 }

@@ -6,7 +6,15 @@ import { requirePrincipal } from '@/lib/principal';
 import { nowIso } from '@/lib/now';
 import { listAudit } from '@/services/access';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, Card, CardHeader, CardTitle, CardContent, EmptyState, Badge } from '@/components/ui';
+import {
+  PageHeader,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  EmptyState,
+  Badge,
+} from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -35,15 +43,24 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             <ol class="ml-4 list-decimal space-y-2 text-sm text-ink-muted">
               <li>
                 Define a content type in{' '}
-                <a class="text-accent-text underline" href="/admin/collections">Collections</a>.
+                <a class="text-accent-text underline" href="/admin/collections">
+                  Collections
+                </a>
+                .
               </li>
               <li>
                 Author and publish documents from{' '}
-                <a class="text-accent-text underline" href="/admin/c">Content</a>.
+                <a class="text-accent-text underline" href="/admin/c">
+                  Content
+                </a>
+                .
               </li>
               <li>
                 Invite an agent and scope its access under{' '}
-                <a class="text-accent-text underline" href="/admin/access">Access</a>.
+                <a class="text-accent-text underline" href="/admin/access">
+                  Access
+                </a>
+                .
               </li>
             </ol>
           </CardContent>
@@ -64,16 +81,23 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                 <ol class="divide-y divide-border text-sm">
                   {audit.map((a) => (
                     <li class="flex items-center gap-2 py-2 first:pt-0 last:pb-0">
-                      <Badge tone={a.allowed ? 'success' : 'danger'}>{a.allowed ? 'allow' : 'deny'}</Badge>
+                      <Badge tone={a.allowed ? 'success' : 'danger'}>
+                        {a.allowed ? 'allow' : 'deny'}
+                      </Badge>
                       <span class="text-ink">{a.action}</span>
-                      <span class="min-w-0 flex-1 truncate font-mono text-xs text-ink-subtle">{a.resource}</span>
+                      <span class="min-w-0 flex-1 truncate font-mono text-xs text-ink-subtle">
+                        {a.resource}
+                      </span>
                       <span class="shrink-0 font-mono text-xs text-ink-subtle">
                         {a.createdAt.slice(5, 16).replace('T', ' ')}
                       </span>
                     </li>
                   ))}
                 </ol>
-                <a href="/admin/activity" class="mt-3 inline-block text-sm text-accent-text hover:underline">
+                <a
+                  href="/admin/activity"
+                  class="mt-3 inline-block text-sm text-accent-text hover:underline"
+                >
                   All activity →
                 </a>
               </>

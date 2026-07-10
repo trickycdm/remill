@@ -55,7 +55,10 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
     const email = String(body.email ?? '').trim();
     const transport = getEmailTransport(c.env, settings);
     if (email) {
-      await transport.send({ to: email, ...shareNotificationEmail({ url, siteName: settings.siteName }) });
+      await transport.send({
+        to: email,
+        ...shareNotificationEmail({ url, siteName: settings.siteName }),
+      });
     }
     // The plaintext token exists only in THIS response (its hash is what's
     // stored), so render the link once — a redirect would lose it.
@@ -68,10 +71,16 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
         <Card class="max-w-2xl">
           <CardContent class="flex flex-col gap-4 pt-6">
             <p class="text-sm text-ink-muted">
-              Copy it now — this link is shown <strong>only once</strong>. Anyone holding it can read
-              this document until it expires or the grant is revoked from the Share panel.
+              Copy it now — this link is shown <strong>only once</strong>. Anyone holding it can
+              read this document until it expires or the grant is revoked from the Share panel.
             </p>
-            <Input type="text" value={url} readonly aria-label="Share link URL" data-on:focus="evt.target.select()" />
+            <Input
+              type="text"
+              value={url}
+              readonly
+              aria-label="Share link URL"
+              data-on:focus="evt.target.select()"
+            />
             {email ? (
               transport.kind === 'resend' ? (
                 <p class="text-sm text-ink-muted">

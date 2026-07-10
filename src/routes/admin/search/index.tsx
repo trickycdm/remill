@@ -38,7 +38,12 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const page = Math.max(1, Number(c.req.query('page')) || 1);
 
   const result = q
-    ? await searchSite(db, principal, { q, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE }, nowIso())
+    ? await searchSite(
+        db,
+        principal,
+        { q, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE },
+        nowIso(),
+      )
     : { hits: [], hasMore: false, limit: PAGE_SIZE, offset: 0 };
   const groups = groupByCollection(result.hits);
   const pageHref = (p: number) => `/admin/search?q=${encodeURIComponent(q)}&page=${p}`;
@@ -78,7 +83,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                       >
                         {h.title ?? h.id}
                       </a>
-                      <Badge tone={h.status === 'published' ? 'accent' : 'neutral'}>{h.status}</Badge>
+                      <Badge tone={h.status === 'published' ? 'accent' : 'neutral'}>
+                        {h.status}
+                      </Badge>
                     </div>
                     {/* Safe by construction: snippetToHtml HTML-escapes the whole
                         snippet BEFORE swapping the char(1)/char(2) sentinels for

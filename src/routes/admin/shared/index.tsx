@@ -41,7 +41,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         description="Documents someone granted to you — directly, through a role, or through one of your teams."
       />
       {rows.length === 0 ? (
-        <EmptyState title="Nothing shared yet" description="When someone shares a document with you or one of your teams, it appears here." />
+        <EmptyState
+          title="Nothing shared yet"
+          description="When someone shares a document with you or one of your teams, it appears here."
+        />
       ) : (
         <Card>
           <CardContent class="pt-4">
@@ -59,13 +62,18 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                 {rows.map((r) => (
                   <TableRow>
                     <TableCell>
-                      <a href={`/admin/c/${r.collection}/${r.id}/view`} class="font-medium text-accent-text hover:underline">
+                      <a
+                        href={`/admin/c/${r.collection}/${r.id}/view`}
+                        class="font-medium text-accent-text hover:underline"
+                      >
                         {r.title ?? r.id}
                       </a>
                     </TableCell>
                     <TableCell class="font-mono text-xs">{r.collection}</TableCell>
                     <TableCell>
-                      <Badge tone={r.status === 'published' ? 'accent' : 'neutral'}>{r.status}</Badge>
+                      <Badge tone={r.status === 'published' ? 'accent' : 'neutral'}>
+                        {r.status}
+                      </Badge>
                     </TableCell>
                     <TableCell class="text-sm text-ink-muted">{r.actions.join(', ')}</TableCell>
                     <TableCell class="text-sm text-ink-subtle">

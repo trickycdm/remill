@@ -11,7 +11,18 @@ import { getEmailTransport } from '@/lib/email';
 import { teamJoinEmail } from '@/lib/email/templates';
 import { personaOf, PERSONA_LABEL } from '@/lib/persona';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, Card, CardContent, Badge, Input, Button, FormField, Breadcrumb, Select, EmptyState } from '@/components/ui';
+import {
+  PageHeader,
+  Card,
+  CardContent,
+  Badge,
+  Input,
+  Button,
+  FormField,
+  Breadcrumb,
+  Select,
+  EmptyState,
+} from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -71,7 +82,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
       {/* Teams */}
       {teamViews.length === 0 ? (
-        <EmptyState title="No teams yet" description="Create a team above, then add members or mint a join link." />
+        <EmptyState
+          title="No teams yet"
+          description="Create a team above, then add members or mint a join link."
+        />
       ) : (
         <div class="flex flex-col gap-4">
           {teamViews.map(({ team, members, invites }) => {
@@ -83,9 +97,13 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                   <div class="mb-2 flex flex-wrap items-center gap-2">
                     <span class="font-medium text-ink">{team.name}</span>
                     <span class="font-mono text-xs text-ink-subtle">{team.id}</span>
-                    <Badge tone="neutral">{members.length} member{members.length === 1 ? '' : 's'}</Badge>
+                    <Badge tone="neutral">
+                      {members.length} member{members.length === 1 ? '' : 's'}
+                    </Badge>
                   </div>
-                  {team.description && <p class="mb-3 text-sm text-ink-subtle">{team.description}</p>}
+                  {team.description && (
+                    <p class="mb-3 text-sm text-ink-subtle">{team.description}</p>
+                  )}
 
                   {/* Members */}
                   <ul class="mb-3 flex flex-wrap gap-1.5">
@@ -105,7 +123,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                               title="Remove from team"
                             >
                               {m.name}
-                              <span class="text-ink-subtle">({PERSONA_LABEL[personaOf(m.kind, m.subtype)]})</span>
+                              <span class="text-ink-subtle">
+                                ({PERSONA_LABEL[personaOf(m.kind, m.subtype)]})
+                              </span>
                               <span aria-hidden="true">×</span>
                             </button>
                           </form>
@@ -116,7 +136,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
                   {/* Add member */}
                   {addable.length > 0 && (
-                    <form method="post" action="/admin/access/teams" class="mb-4 flex flex-wrap items-end gap-2">
+                    <form
+                      method="post"
+                      action="/admin/access/teams"
+                      class="mb-4 flex flex-wrap items-end gap-2"
+                    >
                       <input type="hidden" name="op" value="add-member" />
                       <input type="hidden" name="teamId" value={team.id} />
                       <FormField fieldId={`add-${team.id}`} label="Add member">
@@ -129,7 +153,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                           ))}
                         </Select>
                       </FormField>
-                      <Button type="submit" variant="secondary" aria-label={`Add member to ${team.name}`}>
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        aria-label={`Add member to ${team.name}`}
+                      >
                         Add
                       </Button>
                     </form>
@@ -137,7 +165,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
                   {/* Join links */}
                   <div class="border-t border-border pt-3">
-                    <h3 class="mb-2 text-xs font-medium tracking-wide text-ink-muted uppercase">Join links</h3>
+                    <h3 class="mb-2 text-xs font-medium tracking-wide text-ink-muted uppercase">
+                      Join links
+                    </h3>
                     {invites.length > 0 && (
                       <ul class="mb-3 flex flex-col gap-1.5">
                         {invites.map((inv) => {
@@ -147,10 +177,17 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                           return (
                             <li class="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
                               <Badge tone={dead ? 'neutral' : 'accent'}>
-                                {inv.revokedAt ? 'revoked' : spent ? 'used up' : expired ? 'expired' : 'active'}
+                                {inv.revokedAt
+                                  ? 'revoked'
+                                  : spent
+                                    ? 'used up'
+                                    : expired
+                                      ? 'expired'
+                                      : 'active'}
                               </Badge>
                               <span>
-                                role <span class="font-mono text-xs">{inv.role}</span> · {inv.useCount}
+                                role <span class="font-mono text-xs">{inv.role}</span> ·{' '}
+                                {inv.useCount}
                                 {inv.maxUses !== null ? `/${inv.maxUses}` : ''} uses · expires{' '}
                                 {inv.expiresAt.slice(0, 16).replace('T', ' ')}
                               </span>
@@ -158,7 +195,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                                 <form method="post" action="/admin/access/teams" class="inline">
                                   <input type="hidden" name="op" value="revoke-invite" />
                                   <input type="hidden" name="inviteId" value={inv.id} />
-                                  <button type="submit" class="text-xs font-medium text-danger hover:underline">
+                                  <button
+                                    type="submit"
+                                    class="text-xs font-medium text-danger hover:underline"
+                                  >
                                     Revoke
                                   </button>
                                 </form>
@@ -168,7 +208,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                         })}
                       </ul>
                     )}
-                    <form method="post" action="/admin/access/teams" class="flex flex-wrap items-end gap-3">
+                    <form
+                      method="post"
+                      action="/admin/access/teams"
+                      class="flex flex-wrap items-end gap-3"
+                    >
                       <input type="hidden" name="op" value="invite" />
                       <input type="hidden" name="teamId" value={team.id} />
                       <FormField fieldId={`role-${team.id}`} label="Role for joiners">
@@ -181,22 +225,47 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                         </Select>
                       </FormField>
                       <FormField fieldId={`expires-${team.id}`} label="Expires">
-                        <Input id={`expires-${team.id}`} name="expiresAt" type="datetime-local" value={defaultExpiry(now)} required />
+                        <Input
+                          id={`expires-${team.id}`}
+                          name="expiresAt"
+                          type="datetime-local"
+                          value={defaultExpiry(now)}
+                          required
+                        />
                       </FormField>
                       <FormField fieldId={`uses-${team.id}`} label="Max uses (blank = unlimited)">
-                        <Input id={`uses-${team.id}`} name="maxUses" type="number" min="1" placeholder="∞" />
+                        <Input
+                          id={`uses-${team.id}`}
+                          name="maxUses"
+                          type="number"
+                          min="1"
+                          placeholder="∞"
+                        />
                       </FormField>
                       <FormField fieldId={`email-${team.id}`} label="Email link to (optional)">
-                        <Input id={`email-${team.id}`} name="email" type="email" placeholder="stu@example.com" />
+                        <Input
+                          id={`email-${team.id}`}
+                          name="email"
+                          type="email"
+                          placeholder="stu@example.com"
+                        />
                       </FormField>
-                      <Button type="submit" variant="secondary" aria-label={`Mint join link for ${team.name}`}>
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        aria-label={`Mint join link for ${team.name}`}
+                      >
                         Mint join link
                       </Button>
                     </form>
                   </div>
 
                   {/* Delete */}
-                  <form method="post" action="/admin/access/teams" class="mt-4 border-t border-border pt-3">
+                  <form
+                    method="post"
+                    action="/admin/access/teams"
+                    class="mt-4 border-t border-border pt-3"
+                  >
                     <input type="hidden" name="op" value="delete" />
                     <input type="hidden" name="teamId" value={team.id} />
                     <Button type="submit" variant="danger" aria-label={`Delete team ${team.name}`}>
@@ -226,7 +295,12 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   const teamId = String(body.teamId ?? '');
 
   if (op === 'create') {
-    await access.createTeam(db, principal, { name: String(body.name ?? ''), description: String(body.description ?? '') }, now);
+    await access.createTeam(
+      db,
+      principal,
+      { name: String(body.name ?? ''), description: String(body.description ?? '') },
+      now,
+    );
   } else if (op === 'delete') {
     await access.deleteTeam(db, principal, teamId, now);
   } else if (op === 'add-member') {
@@ -271,14 +345,20 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
     const user = getUser(c);
     return c.render(
       <AdminShell user={user} current="access">
-        <PageHeader title="Join link created" description="Share this link — it will not be shown again." />
+        <PageHeader
+          title="Join link created"
+          description="Share this link — it will not be shown again."
+        />
         <Card>
           <CardContent class="pt-6">
             <p class="mb-3 text-sm text-ink-muted">
-              Anyone with this link can create an account on {team?.name ? `the "${team.name}" team` : 'this team'} until it
-              expires{emailNote}. Copy it now; only its hash is stored.
+              Anyone with this link can create an account on{' '}
+              {team?.name ? `the "${team.name}" team` : 'this team'} until it expires{emailNote}.
+              Copy it now; only its hash is stored.
             </p>
-            <code class="block overflow-x-auto rounded-md bg-hover px-4 py-3 font-mono text-sm break-all">{link}</code>
+            <code class="block overflow-x-auto rounded-md bg-hover px-4 py-3 font-mono text-sm break-all">
+              {link}
+            </code>
             <div class="mt-5">
               <Button href="/admin/access/teams">Back to Teams</Button>
             </div>

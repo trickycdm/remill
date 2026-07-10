@@ -63,7 +63,11 @@ function PrincipalCard({
           <div>
             <span class="font-medium text-ink">{p.name}</span>{' '}
             <Badge tone={PERSONA_TONE[persona]}>{PERSONA_LABEL[persona]}</Badge>
-            {p.disabled && <span class="ml-2"><Badge tone="danger">disabled</Badge></span>}
+            {p.disabled && (
+              <span class="ml-2">
+                <Badge tone="danger">disabled</Badge>
+              </span>
+            )}
             {p.email && <span class="ml-2 font-mono text-xs text-ink-subtle">{p.email}</span>}
             <span class="ml-2 font-mono text-xs text-ink-subtle">{p.id}</span>
           </div>
@@ -92,7 +96,11 @@ function PrincipalCard({
         </div>
 
         {/* Assign a role */}
-        <form method="post" action="/admin/access/assign" class="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+        <form
+          method="post"
+          action="/admin/access/assign"
+          class="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"
+        >
           <input type="hidden" name="op" value="assign" />
           <input type="hidden" name="principalId" value={p.id} />
           <FormField fieldId={`role-${p.id}`} label="Assign role">
@@ -103,7 +111,13 @@ function PrincipalCard({
             </Select>
           </FormField>
           <FormField fieldId={`scope-${p.id}`} label="Scope">
-            <Input id={`scope-${p.id}`} name="collection" type="text" value="*" placeholder="* or a slug" />
+            <Input
+              id={`scope-${p.id}`}
+              name="collection"
+              type="text"
+              value="*"
+              placeholder="* or a slug"
+            />
           </FormField>
           <Button type="submit" variant="secondary">
             Assign
@@ -130,7 +144,9 @@ function PrincipalCard({
                     {/* Liveness at a glance: resolvePrincipal stamps last_used_at
                         on every authenticated REST/MCP call. */}
                     <span class="font-mono text-xs text-ink-subtle">
-                      {t.lastUsedAt ? `used ${t.lastUsedAt.slice(0, 16).replace('T', ' ')}` : 'never used'}
+                      {t.lastUsedAt
+                        ? `used ${t.lastUsedAt.slice(0, 16).replace('T', ' ')}`
+                        : 'never used'}
                     </span>
                   </span>
                 ))
@@ -145,7 +161,13 @@ function PrincipalCard({
               <input type="hidden" name="principalId" value={p.id} />
               <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
                 <FormField fieldId={`tok-${p.id}`} label="New token" class="sm:w-64">
-                  <Input id={`tok-${p.id}`} name="name" type="text" placeholder="prod read-only" required />
+                  <Input
+                    id={`tok-${p.id}`}
+                    name="name"
+                    type="text"
+                    placeholder="prod read-only"
+                    required
+                  />
                 </FormField>
                 <Button type="submit" variant="secondary" busy="$tokbusy">
                   Issue token
@@ -195,7 +217,11 @@ function PersonaGroup({
       ) : (
         <div class="flex flex-col gap-4">
           {principals.map((p) => (
-            <PrincipalCard p={p} tokens={tokensByPrincipal.get(p.id) ?? []} collectionSlugs={collectionSlugs} />
+            <PrincipalCard
+              p={p}
+              tokens={tokensByPrincipal.get(p.id) ?? []}
+              collectionSlugs={collectionSlugs}
+            />
           ))}
         </div>
       )}
@@ -227,7 +253,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
     tokensByPrincipal.set(t.principalId, list);
   }
 
-  const byPersona = (target: Persona) => principals.filter((p) => personaOf(p.kind, p.subtype) === target);
+  const byPersona = (target: Persona) =>
+    principals.filter((p) => personaOf(p.kind, p.subtype) === target);
   const people = byPersona('person');
   const services = byPersona('service');
   const agents = byPersona('agent');
@@ -290,17 +317,25 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           <div>
             <h2 class="font-serif text-display-sm">Principals</h2>
             <p class="mt-1 max-w-2xl text-sm text-ink-subtle">
-              Three kinds of actor: <span class="text-ink-muted">People</span> (humans who sign in),
-              {' '}
-              <span class="text-ink-muted">Services</span> (systems that pull data via the API), and
-              {' '}
-              <span class="text-ink-muted">Agents</span> (autonomous AI clients over MCP or the API).
-              Services and agents authenticate with scoped bearer tokens.
+              Three kinds of actor: <span class="text-ink-muted">People</span> (humans who sign in),{' '}
+              <span class="text-ink-muted">Services</span> (systems that pull data via the API), and{' '}
+              <span class="text-ink-muted">Agents</span> (autonomous AI clients over MCP or the
+              API). Services and agents authenticate with scoped bearer tokens.
             </p>
           </div>
-          <form method="post" action="/admin/access/agents" class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+          <form
+            method="post"
+            action="/admin/access/agents"
+            class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"
+          >
             <FormField fieldId="agent-name" label="New machine identity">
-              <Input id="agent-name" name="name" type="text" placeholder="researcher-bot" required />
+              <Input
+                id="agent-name"
+                name="name"
+                type="text"
+                placeholder="researcher-bot"
+                required
+              />
             </FormField>
             <FormField fieldId="agent-subtype" label="Type">
               <Select id="agent-subtype" name="subtype">
@@ -322,7 +357,13 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             <Input id="invite-name" name="name" type="text" placeholder="Jane Doe" required />
           </FormField>
           <FormField fieldId="invite-email" label="Email">
-            <Input id="invite-email" name="email" type="email" placeholder="jane@example.com" required />
+            <Input
+              id="invite-email"
+              name="email"
+              type="email"
+              placeholder="jane@example.com"
+              required
+            />
           </FormField>
           <FormField fieldId="invite-role" label="Initial role">
             <Select id="invite-role" name="role">
@@ -334,7 +375,12 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             </Select>
           </FormField>
           <FormField fieldId="invite-password" label="Password (optional)">
-            <Input id="invite-password" name="password" type="password" placeholder="blank → email an invite link" />
+            <Input
+              id="invite-password"
+              name="password"
+              type="password"
+              placeholder="blank → email an invite link"
+            />
           </FormField>
           <Button type="submit" variant="secondary" busy="$invbusy">
             Add person
@@ -385,7 +431,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             {audit.map((a) => (
               <TableRow>
                 <TableCell>
-                  <span class="font-mono text-xs text-ink-subtle">{a.createdAt.slice(0, 19).replace('T', ' ')}</span>
+                  <span class="font-mono text-xs text-ink-subtle">
+                    {a.createdAt.slice(0, 19).replace('T', ' ')}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <span class="font-mono text-xs">{a.principalId}</span>
@@ -396,7 +444,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                   <span class="font-mono text-xs">{a.resource}</span>
                 </TableCell>
                 <TableCell>
-                  <Badge tone={a.allowed ? 'success' : 'danger'}>{a.allowed ? 'allow' : 'deny'}</Badge>
+                  <Badge tone={a.allowed ? 'success' : 'danger'}>
+                    {a.allowed ? 'allow' : 'deny'}
+                  </Badge>
                 </TableCell>
               </TableRow>
             ))}

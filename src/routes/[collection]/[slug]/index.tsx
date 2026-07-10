@@ -85,7 +85,15 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     );
 
     return c.render(
-      <PublicShell settings={settings}>
+      <PublicShell
+        settings={settings}
+        // Masthead wayfinding: link to the public collection index — only when
+        // that index actually resolves (publicRead; lifecycle is implied for a
+        // page that itself rendered).
+        indexLink={
+          def.access?.publicRead ? { href: `/${def.slug}`, label: `More ${def.name}` } : undefined
+        }
+      >
         {content}
         {wants.shareBar ? <Script src="/src/client/share.ts" /> : null}
       </PublicShell>,

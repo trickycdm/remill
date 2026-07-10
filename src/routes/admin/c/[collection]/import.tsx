@@ -87,7 +87,9 @@ function ImportSummary({ result }: { result: ImportResult }) {
   return (
     <Card class="mt-6">
       <CardHeader>
-        <CardTitle as="h2">{result.dryRun ? 'Dry run — nothing was written' : 'Import complete'}</CardTitle>
+        <CardTitle as="h2">
+          {result.dryRun ? 'Dry run — nothing was written' : 'Import complete'}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <p class="text-sm text-ink">
@@ -144,11 +146,20 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   const file = body.file;
   if (!(file instanceof File)) throw new BadRequestError('No file provided.');
   if (file.size > MAX_IMPORT_BODY_BYTES) {
-    throw new BadRequestError('File exceeds the 10 MiB import limit — split it into smaller NDJSON files.');
+    throw new BadRequestError(
+      'File exceeds the 10 MiB import limit — split it into smaller NDJSON files.',
+    );
   }
-  const result = await importCollection(db, requirePrincipal(c), slug, await file.text(), nowIso(), {
-    dryRun: body.dryRun === '1',
-  });
+  const result = await importCollection(
+    db,
+    requirePrincipal(c),
+    slug,
+    await file.text(),
+    nowIso(),
+    {
+      dryRun: body.dryRun === '1',
+    },
+  );
   return c.render(
     <AdminShell user={getUser(c)} current="content">
       <ImportPage def={def} slug={slug} result={result} />

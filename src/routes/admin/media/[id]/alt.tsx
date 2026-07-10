@@ -12,6 +12,12 @@ const factory = createFactory<{ Bindings: Env }>();
 /** POST /admin/media/:id/alt — update alt text. */
 export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
   const body = await c.req.parseBody();
-  await updateAlt(getDb(c.env.DB), requirePrincipal(c), pathParam(c, 'id'), String(body.alt ?? ''), nowIso());
+  await updateAlt(
+    getDb(c.env.DB),
+    requirePrincipal(c),
+    pathParam(c, 'id'),
+    String(body.alt ?? ''),
+    nowIso(),
+  );
   return c.redirect('/admin/media', 303);
 });

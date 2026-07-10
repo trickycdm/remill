@@ -21,7 +21,13 @@ async function loadSingleton(c: Context<{ Bindings: Env }>) {
   const db = getDb(c.env.DB);
   const def = await getCollection(db, 'settings');
   if (!def) return { db, def: null, doc: undefined };
-  const { rows } = await listDocuments(db, requirePrincipal(c), 'settings', { pageSize: 1 }, nowIso());
+  const { rows } = await listDocuments(
+    db,
+    requirePrincipal(c),
+    'settings',
+    { pageSize: 1 },
+    nowIso(),
+  );
   return { db, def, doc: rows[0] };
 }
 
@@ -43,7 +49,10 @@ export const onRequestGet = factory.createHandlers(requireRole('admin'), async (
     return c.render(
       <AdminShell user={user} current="settings">
         <PageHeader title="Settings" description={description} />
-        <EmptyState title="Settings collection missing" description="Re-seed the database to restore it." />
+        <EmptyState
+          title="Settings collection missing"
+          description="Re-seed the database to restore it."
+        />
       </AdminShell>,
     );
   }
@@ -60,9 +69,8 @@ export const onRequestGet = factory.createHandlers(requireRole('admin'), async (
           <CardContent class="pt-4">
             <h2 class="text-sm font-medium text-ink">Search index</h2>
             <p class="mt-1 text-sm text-ink-muted">
-              Documents are indexed for full-text search on every save. Rebuild once after
-              deploying the search feature (pre-existing documents), or if results ever look
-              stale.
+              Documents are indexed for full-text search on every save. Rebuild once after deploying
+              the search feature (pre-existing documents), or if results ever look stale.
             </p>
             {rebuilt ? (
               <p class="mt-2 text-sm font-medium text-success" role="status">

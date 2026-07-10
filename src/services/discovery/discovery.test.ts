@@ -9,7 +9,13 @@ import { createTestD1 } from '@/test/d1';
 import { getDb, type Database } from '@/db/client';
 import * as collectionsService from '@/services/collections';
 import * as docs from '@/services/documents';
-import { recentPublishedDocs, allPublishedDocs, publicOverview, publicCollections } from '@/services/discovery';
+import {
+  recentPublishedDocs,
+  allPublishedDocs,
+  publicOverview,
+  publicCollections,
+  collectionIndex,
+} from '@/services/discovery';
 import { seedRoles, makePrincipal } from '@/test/access';
 import type { Principal } from '@/access';
 import type { CollectionDefinition } from '@/fields/types';
@@ -63,7 +69,13 @@ describe('discovery service (D35)', () => {
   });
 
   async function makePost(title: string, publish: boolean, at = NOW) {
-    const doc = await docs.createDocument(db, admin, 'posts', { title, body: `Body of ${title}` }, at);
+    const doc = await docs.createDocument(
+      db,
+      admin,
+      'posts',
+      { title, body: `Body of ${title}` },
+      at,
+    );
     if (publish) await docs.setPublished(db, admin, 'posts', doc.id, true, at);
     return doc;
   }
@@ -88,10 +100,32 @@ describe('discovery service (D35)', () => {
   });
 
   it('?collection narrowing 404s for private and lifecycle-none collections', async () => {
-    await expect(recentPublishedDocs(db, NOW, { collection: 'notes' })).rejects.toThrow(NotFoundError);
-    await expect(recentPublishedDocs(db, NOW, { collection: 'records' })).rejects.toThrow(NotFoundError);
-    await expect(recentPublishedDocs(db, NOW, { collection: 'ghost' })).rejects.toThrow(NotFoundError);
+    await expect(recentPublishedDocs(db, NOW, { collection: 'notes' })).rejects.toThrow(
+      NotFoundError,
+    );
+    await expect(recentPublishedDocs(db, NOW, { collection: 'records' })).rejects.toThrow(
+      NotFoundError,
+    );
+    await expect(recentPublishedDocs(db, NOW, { collection: 'ghost' })).rejects.toThrow(
+      NotFoundError,
+    );
     expect(await recentPublishedDocs(db, NOW, { collection: 'posts' })).toEqual([]);
+  });
+
+  it('collectionIndex: one public collection, published only, newest first; 404 otherwise', async () => {
+    await makePost('Old', true, '2026-07-01T00:00:00Z');
+    await makePost('New', true, '2026-07-08T00:00:00Z');
+    await makePost('Draft only', false);
+
+    const { def, docs: rows } = await collectionIndex(db, NOW, 'posts');
+    expect(def.slug).toBe('posts');
+    expect(rows.map((d) => d.title)).toEqual(['New', 'Old']);
+    expect(rows[0].path).toBe('/posts/new');
+
+    // The same indistinguishable 404 posture as the rest of discovery.
+    await expect(collectionIndex(db, NOW, 'notes')).rejects.toThrow(NotFoundError);
+    await expect(collectionIndex(db, NOW, 'records')).rejects.toThrow(NotFoundError);
+    await expect(collectionIndex(db, NOW, 'ghost')).rejects.toThrow(NotFoundError);
   });
 
   it('sitemap source lists every published public doc; homepage groups per collection', async () => {

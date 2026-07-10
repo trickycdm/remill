@@ -11,6 +11,12 @@ const factory = createFactory<{ Bindings: Env }>();
 
 /** POST /admin/media/:id/delete — delete (blocked if referenced by a document). */
 export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
-  await deleteMedia(getDb(c.env.DB), c.env.MEDIA, requirePrincipal(c), pathParam(c, 'id'), nowIso());
+  await deleteMedia(
+    getDb(c.env.DB),
+    c.env.MEDIA,
+    requirePrincipal(c),
+    pathParam(c, 'id'),
+    nowIso(),
+  );
   return c.redirect('/admin/media', 303);
 });
