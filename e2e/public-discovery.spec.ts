@@ -135,19 +135,30 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     // Exactly one h1 (the hero); the writing index is demoted below it.
     await expect(anonPage.getByRole('heading', { level: 1 })).toHaveCount(1);
 
-    // Primary CTA anchors to the agent quickstart, which shows the MCP endpoint.
-    const cta = anonPage.getByRole('link', { name: 'Connect an agent' });
-    await expect(cta).toHaveAttribute('href', '#connect');
+    // Primary CTA anchors to the deploy story (remill.org is single-tenant:
+    // a cold visitor's conversion is running their own, not signing in here).
+    const cta = anonPage.getByRole('link', { name: 'Run your own mill' });
+    await expect(cta).toHaveAttribute('href', '#run');
     await cta.click();
+    await expect(anonPage.getByRole('heading', { name: 'Run your own mill.' })).toBeInViewport();
+
+    // Secondary CTA anchors to the agent quickstart, which shows the MCP endpoint.
+    const connect = anonPage.getByRole('link', { name: 'Connect an agent' });
+    await expect(connect).toHaveAttribute('href', '#connect');
+    await connect.click();
     await expect(anonPage.getByRole('heading', { name: 'Connect an agent' })).toBeInViewport();
     await expect(anonPage.locator('#connect')).toContainText('/mcp');
 
-    // Secondary CTA anchors to the published writing index.
-    await expect(anonPage.getByRole('link', { name: 'Browse the writing' })).toHaveAttribute(
-      'href',
-      '#writing',
-    );
-    await expect(anonPage.locator('#writing')).toBeVisible();
+    // The who-strip names the customer between hero and proof.
+    await expect(
+      anonPage.getByRole('heading', { name: /citizen, not a shared key/ }),
+    ).toBeVisible();
+
+    // Footer carries the credibility links (exact: the run section also links
+    // the API reference with a longer label).
+    await expect(
+      anonPage.getByRole('link', { name: 'API reference', exact: true }),
+    ).toHaveAttribute('href', '/api/openapi.json');
 
     // The light-dark() token pairings must stay AA in the dark theme too.
     await anonPage.emulateMedia({ colorScheme: 'dark' });

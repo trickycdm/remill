@@ -8,8 +8,11 @@ import { nowIso } from '@/lib/now';
 import { MarketingShell } from '@/components/layouts/marketing-shell';
 import {
   MarketingHero,
+  WhoItsFor,
   EverySurface,
+  UseCases,
   TrustBento,
+  RunYourOwnMill,
   AgentQuickstart,
   PublishedIndex,
 } from '@/components/marketing';
@@ -30,11 +33,16 @@ export const onRequestGet = factory.createHandlers(async (c) => {
   const [sections, settings] = await Promise.all([publicOverview(db, nowIso()), getSettings(db)]);
   const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
 
+  // Narrative: promise → who it's for → proof → the jobs → the guarantee →
+  // get your own → wire the agent → the dogfood index.
   return c.render(
     <MarketingShell>
       <MarketingHero />
+      <WhoItsFor />
       <EverySurface />
+      <UseCases />
       <TrustBento />
+      <RunYourOwnMill />
       <AgentQuickstart baseUrl={baseUrl} />
       <PublishedIndex sections={sections} settings={settings} />
     </MarketingShell>,
