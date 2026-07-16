@@ -24,6 +24,7 @@ import {
   TableHeaderCell,
   TableCell,
   Badge,
+  Stamp,
   Input,
   Select,
   Button,
@@ -444,9 +445,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                   <span class="font-mono text-xs">{a.resource}</span>
                 </TableCell>
                 <TableCell>
-                  <Badge tone={a.allowed ? 'success' : 'danger'}>
-                    {a.allowed ? 'allow' : 'deny'}
-                  </Badge>
+                  {a.allowed ? (
+                    <Badge tone="success">allow</Badge>
+                  ) : (
+                    <Stamp tone="refuse">deny</Stamp>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

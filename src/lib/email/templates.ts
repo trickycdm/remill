@@ -4,10 +4,12 @@
  * inline-style land (clients strip <link>/<style>), so a renderer buys nothing.
  *
  * Every interpolation goes through `esc()` — team names and site names are
- * user-authored content. Colors echo the light-mode brand tokens from
- * src/tailwind.css `@theme` (email clients can't do light-dark()):
- * canvas #f2efe7 · card #fffdf8 · ink #1c1a16 · muted #56514a ·
- * border #e7e1d4 · accent #4b44a3 (white text).
+ * user-authored content. Colors mirror the LIGHT-mode Overprint tokens from
+ * src/tailwind.css `@theme` (email clients can't do light-dark(); keep this
+ * table in sync when the palette moves, D43): canvas #f6f1e3 · card #fffdf6 ·
+ * ink #23364a · muted #4a5c6e · footnote #566778 · border #ddd6c6 · accent
+ * fill #0078bf (white text) · accent link #00639c. Display headings render as
+ * bold sans (no webfonts in email; the grotesque register survives as weight).
  */
 
 export interface RenderedEmail {
@@ -20,10 +22,12 @@ function esc(v: string): string {
   return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-const SERIF = "Georgia, 'Iowan Old Style', Palatino, 'Times New Roman', serif";
 const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+// The display role in mail: the body sans at heavy weight (clients strip
+// webfonts, so Bricolage's register is carried by weight alone).
+const DISPLAY = SANS;
 
-/** The shared shell: canvas wash, serif masthead, white card, accent CTA. */
+/** The shared shell: canvas wash, bold masthead, cream card, accent CTA. */
 function emailLayout(opts: {
   siteName: string;
   title: string;
@@ -36,24 +40,24 @@ function emailLayout(opts: {
   const url = esc(opts.ctaUrl);
   return `<!doctype html>
 <html>
-<body style="margin:0;padding:0;background-color:#f2efe7;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f2efe7;padding:32px 16px;">
+<body style="margin:0;padding:0;background-color:#f6f1e3;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f6f1e3;padding:32px 16px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
-        <tr><td style="padding:0 8px 16px;font-family:${SERIF};font-size:20px;font-weight:600;color:#1c1a16;">${site}</td></tr>
-        <tr><td style="background-color:#fffdf8;border:1px solid #e7e1d4;border-radius:10px;padding:32px;">
-          <h1 style="margin:0 0 12px;font-family:${SERIF};font-size:24px;font-weight:600;color:#1c1a16;">${esc(opts.title)}</h1>
-          <div style="font-family:${SANS};font-size:15px;line-height:1.6;color:#56514a;">${opts.bodyHtml}</div>
+        <tr><td style="padding:0 8px 16px;font-family:${DISPLAY};font-size:20px;font-weight:700;color:#23364a;">${site}</td></tr>
+        <tr><td style="background-color:#fffdf6;border:1px solid #ddd6c6;border-radius:10px;padding:32px;">
+          <h1 style="margin:0 0 12px;font-family:${DISPLAY};font-size:24px;font-weight:700;color:#23364a;">${esc(opts.title)}</h1>
+          <div style="font-family:${SANS};font-size:15px;line-height:1.6;color:#4a5c6e;">${opts.bodyHtml}</div>
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px;">
-            <tr><td style="border-radius:7px;background-color:#4b44a3;">
+            <tr><td style="border-radius:7px;background-color:#0078bf;">
               <a href="${url}" style="display:inline-block;padding:10px 20px;font-family:${SANS};font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">${esc(opts.ctaLabel)}</a>
             </td></tr>
           </table>
-          <p style="margin:16px 0 0;font-family:${SANS};font-size:12px;line-height:1.5;color:#6c665a;">
-            Or copy this link: <span style="word-break:break-all;color:#4b44a3;">${url}</span>
+          <p style="margin:16px 0 0;font-family:${SANS};font-size:12px;line-height:1.5;color:#566778;">
+            Or copy this link: <span style="word-break:break-all;color:#00639c;">${url}</span>
           </p>
         </td></tr>
-        <tr><td style="padding:16px 8px 0;font-family:${SANS};font-size:12px;color:#6c665a;">${esc(opts.footNote)}</td></tr>
+        <tr><td style="padding:16px 8px 0;font-family:${SANS};font-size:12px;color:#566778;">${esc(opts.footNote)}</td></tr>
       </table>
     </td></tr>
   </table>

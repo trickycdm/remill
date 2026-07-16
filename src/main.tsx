@@ -144,13 +144,18 @@ loadRoutes(app);
 
 app.notFound((c) => {
   c.status(404);
+  // On-system 404 (DESIGN_SYSTEM.md): tokens + the display face, the state
+  // named in plain text (never colour alone), one path onward.
   return c.render(
-    <main class="flex min-h-screen items-center justify-center p-8">
-      <div class="text-center">
-        <h1 class="text-4xl font-bold">404</h1>
-        <p class="mt-2 opacity-70">Page not found</p>
-        <a href="/admin" class="mt-4 inline-block text-sm underline">
-          Go to admin
+    <main class="flex min-h-dvh items-center justify-center bg-canvas p-8 text-ink">
+      <div class="flex flex-col items-center gap-3 text-center">
+        <h1 class="rm-overprint-title font-display text-display-lg font-bold">404</h1>
+        <p class="text-ink-muted">There is no page at this address.</p>
+        <a
+          href="/"
+          class="mt-2 text-sm font-medium text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          Back to the front page
         </a>
       </div>
     </main>,
