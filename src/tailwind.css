@@ -304,13 +304,81 @@
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Marketing homepage — the one surface where the iris accent is a full colour
+   field (DESIGN_SYSTEM.md). Every colour below is mixed from tokens with
+   color-mix (never a new hex), so light/dark resolve for free via light-dark().
+   ───────────────────────────────────────────────────────────────────────────*/
+
+/* The hero field: solid accent plus two token-mixed radial washes for depth.
+   The white glow is capped at 12% and pinned to the top-right corner, away
+   from the text column, so white-on-iris copy never dips below AA. */
+.rm-hero-field {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: var(--color-accent);
+  background-image:
+    radial-gradient(
+      70rem 46rem at 88% -18%,
+      color-mix(in oklab, var(--color-accent) 88%, white),
+      transparent 62%
+    ),
+    radial-gradient(
+      54rem 40rem at -10% 116%,
+      color-mix(in oklab, var(--color-accent) 82%, black),
+      transparent 58%
+    );
+}
+
+/* Aurora drift: one blurred iris blob translating very slowly. Decorative
+   atmosphere only (transform-animated, filter static, pointer-events none);
+   it exists only under no-preference so reduced motion gets the plain field. */
+@media (prefers-reduced-motion: no-preference) {
+  .rm-hero-field::before {
+    content: '';
+    position: absolute;
+    top: -34%;
+    right: -12%;
+    width: 52rem;
+    height: 52rem;
+    border-radius: 50%;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in oklab, var(--color-accent) 55%, white),
+      transparent 70%
+    );
+    opacity: 0.22;
+    filter: blur(56px);
+    pointer-events: none;
+    animation: rm-aurora-drift 26s ease-in-out infinite alternate;
+  }
+}
+@keyframes rm-aurora-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-9rem, 5rem, 0) scale(1.18); }
+}
+
+/* Entrance stagger: each direct child rises in sequence (hero choreography).
+   `both` fill + the reduced-motion blanket below = instant final state when
+   motion is off. Capped at 6 children; later ones share the last delay. */
+.rm-stagger > * {
+  animation: rm-rise-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rm-stagger > :nth-child(2) { animation-delay: 90ms; }
+.rm-stagger > :nth-child(3) { animation-delay: 180ms; }
+.rm-stagger > :nth-child(4) { animation-delay: 270ms; }
+.rm-stagger > :nth-child(n + 5) { animation-delay: 360ms; }
+
 @media (prefers-reduced-motion: reduce) {
   .rm-anim-fade,
   .rm-anim-rise,
   .rm-anim-slide-right,
   .rm-anim-slide-left,
   .rm-anim-toast,
-  .rm-anim-spin {
+  .rm-anim-spin,
+  .rm-stagger > *,
+  .rm-hero-field::before {
     animation: none !important;
   }
   *,

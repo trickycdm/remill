@@ -25,7 +25,10 @@ export function MarketingShell({ children }: { children?: unknown }) {
         Skip to content
       </a>
 
-      <header class="border-b border-border">
+      {/* Sticky, blur-backed nav: sections scroll under it (anchored sections
+          carry scroll-mt-20 so headings never hide behind it). bg-canvas/85
+          keeps the token pairing AA in both themes; blur does the rest. */}
+      <header class="sticky top-0 z-40 border-b border-border bg-canvas/85 backdrop-blur-md">
         <nav
           aria-label="Main"
           class="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-6"

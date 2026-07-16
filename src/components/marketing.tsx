@@ -2,17 +2,20 @@
  * Marketing homepage sections (presentational, Hono JSX — precedent:
  * auth-shell.tsx). Composed by src/routes/index.tsx inside MarketingShell.
  *
- * Design notes (tasteskill v2 + DESIGN_SYSTEM.md): product-showcase-led,
- * narrative promise -> who it's for -> proof -> jobs -> guarantee -> run your
- * own -> connect -> dogfood writing. The one iris accent is used with
- * confidence as a real colour field (the hero band, the quickstart band,
- * tinted bento cells) — the "push it bold" direction, still 100% on-token.
+ * Design notes (tasteskill + DESIGN_SYSTEM.md): the "editorial-kinetic"
+ * revision — same narrative (promise -> who it's for -> proof -> jobs ->
+ * guarantee -> run your own -> connect -> dogfood writing), recomposed for
+ * visual energy. The iris accent is a real colour field with depth (the
+ * rm-hero-field gradient + aurora in tailwind.css); code panels are cut from
+ * five to the two that earn their place (the REST wire response and the MCP
+ * client config) and everything else the code used to say is shown instead
+ * with remill's own UI primitives: the hero activity vignette, the schema
+ * card, the tool-call card, the audit rows in the bento. Motion is CSS-only
+ * (entrance stagger, scroll-rise, hover lift), all reduced-motion-safe.
  * Exactly two mono-caps eyebrows page-wide (hero + quickstart); every section
- * uses a distinct layout family; every preview is remill's own UI primitives
- * rendering real markup, never a div-built fake screenshot. Zero em-dashes in
- * visible copy. The primary CTA is "Run your own mill" — remill.org is a
- * single-tenant instance, so a cold visitor's conversion is deploying their
- * own, never signing in here.
+ * uses a distinct layout family; zero em-dashes in visible copy. The primary
+ * CTA is "Run your own mill" — remill.org is a single-tenant instance, so a
+ * cold visitor's conversion is deploying their own, never signing in here.
  */
 
 import { Button } from '@/components/ui/button';
@@ -26,7 +29,19 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Bot, Braces, FileText, ShieldCheck } from '@/components/ui/icon';
+import {
+  ArrowRight,
+  Bot,
+  Boxes,
+  Braces,
+  CircleCheck,
+  DatabaseIcon,
+  FileText,
+  Globe,
+  Image,
+  PenNib,
+  ShieldCheck,
+} from '@/components/ui/icon';
 import { formatDate } from '@/lib/format-date';
 import type { SiteSettings } from '@/services/settings';
 import type { CollectionDefinition } from '@/fields/types';
@@ -47,61 +62,125 @@ const HERO_CTA_BASE =
 const HERO_CTA_PRIMARY = `${HERO_CTA_BASE} bg-surface-raised text-accent-text shadow-sm hover:bg-surface`;
 const HERO_CTA_SECONDARY = `${HERO_CTA_BASE} border border-accent-fg/50 text-accent-fg hover:bg-accent-fg/10`;
 
+/** One vignette row: icon + event + mono meta, the audit trail as hero art. */
+function VignetteRow({
+  icon,
+  title,
+  meta,
+  badge,
+}: {
+  icon: unknown;
+  title: string;
+  meta: string;
+  badge?: unknown;
+}) {
+  return (
+    <li class="flex items-center gap-3 py-3">
+      <span class="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-text">
+        {icon}
+      </span>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-medium text-ink">{title}</p>
+        <p class="font-mono text-xs text-ink-subtle">{meta}</p>
+      </div>
+      {badge}
+    </li>
+  );
+}
+
 /**
- * Editorial-manifesto hero on a full-bleed iris band. Left-aligned (no centre
- * bias); type is the visual (no external images — CSP). All copy is full white
- * on accent for guaranteed AA (white on accent is ~7.9:1 light / ~5.7:1 dark);
- * hierarchy comes from size and weight, never opacity.
+ * Asymmetric split hero on the iris field (rm-hero-field: token-mixed
+ * gradients + slow aurora, tailwind.css). Left: the promise, staggered in.
+ * Right: the product told as a story — an agent drafts overnight, a person
+ * presses publish — rendered with remill's real primitives on a paper card
+ * floating over the band. All copy directly on iris is full white for AA;
+ * hierarchy on the band comes from size and weight, never opacity.
  */
 export function MarketingHero() {
   return (
-    <section aria-label="Introduction" class="bg-accent text-accent-fg">
-      <div class="rm-anim-rise mx-auto flex w-full max-w-5xl flex-col items-start gap-6 px-6 pt-20 pb-20 sm:pt-24 sm:pb-28">
-        <div class="flex items-center gap-3">
-          <span aria-hidden="true" class="h-px w-8 bg-accent-fg/40" />
-          <span class="font-mono text-eyebrow font-medium tracking-[0.14em] text-accent-fg uppercase">
-            Content, milled
-          </span>
+    <section aria-label="Introduction" class="rm-hero-field text-accent-fg">
+      <div class="rm-stagger relative mx-auto grid w-full max-w-6xl gap-12 px-6 pt-16 pb-16 sm:pt-20 sm:pb-24 lg:grid-cols-[1fr_minmax(0,25rem)] lg:items-center lg:gap-16">
+        <div class="flex flex-col items-start gap-6">
+          <div class="flex items-center gap-3">
+            <span aria-hidden="true" class="h-px w-8 bg-accent-fg/40" />
+            <span class="font-mono text-eyebrow font-medium tracking-[0.14em] text-accent-fg uppercase">
+              Content, milled
+            </span>
+          </div>
+          <h1 class="max-w-3xl font-serif text-display sm:text-display-lg font-semibold text-balance text-accent-fg">
+            Content that works for humans, apps, and agents.
+          </h1>
+          <p class="max-w-xl text-lg leading-relaxed text-accent-fg">
+            A calm GUI for people, a clean API for apps, and permissioned MCP for agents.
+          </p>
+          <div class="mt-2 flex flex-wrap items-center gap-3">
+            <a href="#run" class={HERO_CTA_PRIMARY}>
+              Run your own mill
+            </a>
+            <a href="#connect" class={HERO_CTA_SECONDARY}>
+              Connect an agent
+            </a>
+          </div>
         </div>
-        <h1 class="max-w-3xl font-serif text-display sm:text-display-lg font-semibold text-balance text-accent-fg">
-          Content that works for humans, apps, and agents.
-        </h1>
-        <p class="max-w-xl text-lg leading-relaxed text-accent-fg">
-          A calm admin for people, a clean API for apps, and first-class, permissioned access for
-          agents.
-        </p>
-        <div class="mt-2 flex flex-wrap items-center gap-3">
-          <a href="#run" class={HERO_CTA_PRIMARY}>
-            Run your own mill
-          </a>
-          <a href="#connect" class={HERO_CTA_SECONDARY}>
-            Connect an agent
-          </a>
-        </div>
+
+        <figure aria-label="A draft moving through remill" class="relative w-full max-w-md">
+          <div
+            aria-hidden="true"
+            class="absolute -inset-3 hidden rounded-2xl border border-accent-fg/20 bg-accent-fg/10 lg:block lg:-rotate-2"
+          />
+          <div class="relative rounded-xl border border-border bg-surface-raised p-5 shadow-lg lg:rotate-1">
+            <ul class="rm-stagger flex flex-col divide-y divide-border">
+              <VignetteRow
+                icon={<Bot class="size-4" />}
+                title="Autumn release notes"
+                meta="create_essays · 02:14"
+                badge={<Badge tone="neutral">Draft</Badge>}
+              />
+              <VignetteRow
+                icon={<PenNib class="size-4" />}
+                title="You tightened the standfirst"
+                meta="edited · 09:12"
+              />
+              <VignetteRow
+                icon={<CircleCheck class="size-4" />}
+                title="You pressed publish"
+                meta="published · 09:31"
+                badge={<Badge tone="success">Published</Badge>}
+              />
+            </ul>
+            <figcaption class="flex items-center gap-2 border-t border-border pt-3 font-mono text-xs text-ink-subtle">
+              <Globe class="size-3.5 shrink-0" />
+              <span class="truncate">/essays/autumn-release-notes</span>
+            </figcaption>
+          </div>
+        </figure>
       </div>
     </section>
   );
 }
 
 /**
- * The who/why strip (the beat the first cut skipped): name the customer and the
- * problem BEFORE showing the mechanism. Quiet prose band, stacked, no eyebrow —
- * the sentence is the design.
+ * The who/why beat at manifesto scale: the sentence is the design, so it gets
+ * display type and room, with the two supporting paragraphs in an editorial
+ * two-column measure beneath.
  */
 export function WhoItsFor() {
   return (
     <section aria-labelledby="home-who" class="border-b border-border">
-      <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-6 py-16 sm:py-20">
-        <h2 id="home-who" class={`${SECTION_H2} max-w-3xl`}>
+      <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-20 sm:py-28">
+        <h2
+          id="home-who"
+          class="rm-scroll-rise max-w-4xl font-serif text-display sm:text-display-lg font-semibold text-balance text-ink"
+        >
           A backend where the AI is a citizen, not a shared key.
         </h2>
-        <div class="flex max-w-2xl flex-col gap-3 leading-relaxed text-ink-muted">
+        <div class="grid max-w-4xl gap-6 leading-relaxed text-ink-muted sm:grid-cols-2 sm:gap-10">
           <p>
             remill is for builders who let agents write. An agent here is a principal: its own
             identity, a scoped token, a least-privilege role, and an audit trail.
           </p>
           <p>
-            People get a calm admin. Apps get a clean REST API. Agents get MCP tools. Every write
+            People get a calm GUI. Apps get a clean REST API. Agents get MCP tools. Every write
             goes through the same validated, authorized pipeline.
           </p>
         </div>
@@ -110,10 +189,25 @@ export function WhoItsFor() {
   );
 }
 
-// Code / preview panels: real markup lifted off the canvas on a bordered
-// surface, keyboard-operable (WCAG 2.1.1, same treatment as the Table primitive).
+// The one code panel in the proof section: keyboard-operable region
+// (WCAG 2.1.1, same treatment as the Table primitive).
 const PANEL =
-  'overflow-x-auto rounded-lg border border-border bg-surface p-5 font-mono text-[13px] leading-relaxed text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'overflow-x-auto rounded-lg border border-border bg-surface p-5 font-mono text-[13px] leading-relaxed text-ink shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+/** Mono type chip for the schema card (field types, flags). */
+function TypeChip({ children }: { children?: unknown }) {
+  return (
+    <span class="rounded-sm border border-border bg-canvas px-1.5 py-0.5 font-mono text-xs text-ink-muted">
+      {children}
+    </span>
+  );
+}
+
+const SCHEMA_FIELDS: { label: string; chips: string[] }[] = [
+  { label: 'Title', chips: ['text', 'required'] },
+  { label: 'Slug', chips: ['slug'] },
+  { label: 'Body', chips: ['markdown'] },
+];
 
 const SURFACE_TABS = [
   { key: 'admin', label: 'Admin' },
@@ -136,17 +230,18 @@ const TABLIST_KEYDOWN = [
 ].join('; ');
 
 /**
- * The centrepiece: one real collection definition on the left, and a Datastar
- * segmented control on the right that swaps between the three audience-facing
- * surfaces remill generates from it (the admin list, the REST response, an MCP
- * tool call). Proves the six-surfaces idea AND the humans/apps/agents promise
- * in one interactive family. Pure client-side signal (no SSE); all three panels
- * render server-side, so it is axe-clean and degrades to the admin panel with
- * no JS. Datastar idioms per DATASTAR_PATTERNS.md (a): inline signal, string
- * ternary for the always-present aria-selected, display:none on hidden panels.
+ * The centrepiece: the collection definition rendered as a schema CARD (the
+ * product's own visual language, not raw JSON), and a Datastar segmented
+ * control that swaps between the three audience-facing surfaces remill
+ * generates from it: the real admin list, the REST wire response (the one
+ * code panel this section keeps), and the MCP call as a tool-call card.
+ * Pure client-side signal (no SSE); all three panels render server-side, so
+ * it is axe-clean and degrades to the admin panel with no JS. Datastar idioms
+ * per DATASTAR_PATTERNS.md (a): inline signal, string ternary for the
+ * always-present aria-selected, display:none on hidden panels.
  */
 export function EverySurface() {
-  // Both snippets mirror the real wire shapes (flat page/pageSize/total
+  // The REST snippet mirrors the real wire shape (flat page/pageSize/total
   // envelope from the list handler; doc_-prefixed nanoid ids) — the section's
   // promise is real markup, never a fake.
   const restResponse = `GET /api/c/essays?status=published
@@ -159,16 +254,9 @@ export function EverySurface() {
   ],
   "page": 1, "pageSize": 20, "total": 1
 }`;
-  const mcpCall = `tools/call  create_essays
-{
-  "title": "Autumn release notes",
-  "body": "## What shipped\\n..."
-}
-
-reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
 
   return (
-    <section aria-labelledby="home-surfaces" class="mx-auto w-full max-w-5xl px-6 py-20 sm:py-24">
+    <section aria-labelledby="home-surfaces" class="mx-auto w-full max-w-6xl px-6 py-20 sm:py-28">
       <div class="flex max-w-2xl flex-col gap-4">
         <h2 id="home-surfaces" class={SECTION_H2}>
           Define it once. It ships six ways.
@@ -180,23 +268,37 @@ reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
         </p>
       </div>
 
-      <div class="mt-10 grid gap-8 lg:grid-cols-2 lg:items-start">
-        {/* The one definition. */}
-        <div class="flex flex-col gap-3">
+      <div class="mt-12 grid gap-10 lg:grid-cols-[minmax(0,21rem)_1fr] lg:gap-12">
+        {/* The one definition, as a schema card. */}
+        <div class="rm-scroll-rise flex flex-col gap-3">
           <span class="text-sm font-medium text-ink-muted">One definition</span>
-          <pre tabindex={0} role="region" aria-label="Example collection definition" class={PANEL}>
-            <code>{`{
-  "slug": "essays",
-  "name": "Essays",
-  "fields": [
-    { "key": "title", "type": "text",
-      "required": true },
-    { "key": "slug", "type": "slug" },
-    { "key": "body", "type": "markdown" }
-  ],
-  "workflow": { "draftPublish": true }
-}`}</code>
-          </pre>
+          <div class="rounded-xl border border-border bg-surface shadow-sm">
+            <div class="flex items-baseline justify-between gap-3 border-b border-border px-5 py-4">
+              <span class="font-serif text-lg font-semibold tracking-tight text-ink">Essays</span>
+              <span class="font-mono text-xs text-ink-subtle">collection</span>
+            </div>
+            <ul class="flex flex-col divide-y divide-border px-5">
+              {SCHEMA_FIELDS.map((f) => (
+                <li class="flex items-center justify-between gap-3 py-3.5">
+                  <span class="text-sm font-medium text-ink">{f.label}</span>
+                  <span class="flex gap-1.5">
+                    {f.chips.map((chip) => (
+                      <TypeChip>{chip}</TypeChip>
+                    ))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div class="flex items-center gap-2 border-t border-border px-5 py-4">
+              <Badge tone="neutral">Draft</Badge>
+              <ArrowRight aria-hidden="true" class="size-3.5 text-ink-subtle" />
+              <Badge tone="success">Published</Badge>
+              <span class="ml-auto font-mono text-xs text-ink-subtle">workflow</span>
+            </div>
+          </div>
+          <p class="text-sm leading-relaxed text-ink-muted">
+            Written in the admin, or by an agent over MCP.
+          </p>
         </div>
 
         {/* Every surface — the Datastar segmented preview. */}
@@ -211,14 +313,14 @@ reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
               <style> to &quot;, which kills the rule; `true` is a CSS ident. */}
           <style>
             {
-              '[data-rm-tab][aria-selected=true]{border-color:var(--color-accent);color:var(--color-ink);font-weight:600;}'
+              '[data-rm-tab][aria-selected=true]{background:var(--color-surface-raised);color:var(--color-ink);font-weight:600;box-shadow:var(--shadow-xs);}'
             }
           </style>
           <span class="text-sm font-medium text-ink-muted">Every surface</span>
           <div
             role="tablist"
             aria-label="Preview the generated surface"
-            class="flex gap-1 border-b border-border"
+            class="inline-flex w-fit gap-1 rounded-lg border border-border bg-canvas p-1"
             data-on:keydown={TABLIST_KEYDOWN}
           >
             {SURFACE_TABS.map((t) => (
@@ -233,7 +335,7 @@ reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
                 data-attr:aria-selected={`$tab === '${t.key}' ? 'true' : 'false'`}
                 data-attr:tabindex={`$tab === '${t.key}' ? '0' : '-1'`}
                 data-on:click={`$tab = '${t.key}'`}
-                class="-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                class="rounded-md px-3.5 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 {t.label}
               </button>
@@ -247,7 +349,7 @@ reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
             tabindex={0}
             aria-labelledby="surface-tab-admin"
             data-show="$tab === 'admin'"
-            class="rounded-lg border border-border bg-surface p-4 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            class="rounded-xl border border-border bg-surface p-4 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <Table caption="The admin list view remill generates for an Essays collection">
               <TableHead>
@@ -296,7 +398,7 @@ reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
             </pre>
           </div>
 
-          {/* Agents: the same collection as MCP tools. */}
+          {/* Agents: the same collection as an MCP tool call, told as a card. */}
           <div
             id="surface-panel-agents"
             role="tabpanel"
@@ -304,9 +406,27 @@ reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
             data-show="$tab === 'agents'"
             style="display:none"
           >
-            <pre tabindex={0} role="region" aria-label="MCP tool call" class={PANEL}>
-              <code>{mcpCall}</code>
-            </pre>
+            <div class="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-sm">
+              <div class="flex items-center gap-2 border-b border-border pb-3">
+                <Bot class="size-4 text-accent-text" />
+                <code class="font-mono text-sm font-semibold text-ink">create_essays</code>
+                <span class="ml-auto font-mono text-xs text-ink-subtle">tools/call</span>
+              </div>
+              <dl class="flex flex-col gap-2 font-mono text-[13px] leading-relaxed">
+                <div class="flex gap-4">
+                  <dt class="w-10 shrink-0 text-ink-subtle">title</dt>
+                  <dd class="min-w-0 text-ink">"Autumn release notes"</dd>
+                </div>
+                <div class="flex gap-4">
+                  <dt class="w-10 shrink-0 text-ink-subtle">body</dt>
+                  <dd class="min-w-0 truncate text-ink">"## What shipped ..."</dd>
+                </div>
+              </dl>
+              <div class="flex items-center gap-3 border-t border-border pt-3">
+                <Badge tone="neutral">Draft</Badge>
+                <code class="font-mono text-xs text-ink-subtle">doc_b7Kp0dXr93Fh</code>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -316,20 +436,23 @@ reply  { "id": "doc_b7Kp0dXr93Fh", "status": "draft" }`;
 
 /** The jobs the platform is genuinely best at, told as second-person stories —
  *  scenarios, deliberately NOT dressed up as testimonials (no invented names). */
-const USE_CASES: { title: string; story: string }[] = [
+const USE_CASES: { icon: unknown; title: string; story: string }[] = [
   {
+    icon: <Bot class="size-5" />,
     title: 'Agent drafts, human publishes',
     story:
       'Your agent turns the changelog into release-note drafts overnight. You read them over ' +
       'coffee and press publish, a permission you kept for yourself.',
   },
   {
+    icon: <Braces class="size-5" />,
     title: 'A backend for agent products',
     story:
       'Give a support agent a token scoped to one collection. It files drafts over MCP; your ' +
       'app reads the same data over REST. Nothing else is exposed.',
   },
   {
+    icon: <PenNib class="size-5" />,
     title: 'Publishing you own',
     story:
       'Write on your own Worker. Public pages, RSS, scheduled posts, and expiring draft links ' +
@@ -337,7 +460,8 @@ const USE_CASES: { title: string; story: string }[] = [
   },
 ];
 
-/** Use cases as a two-column ledger (title | story), collapsing to a stack. */
+/** Use cases as an iconed editorial ledger (icon | title | story), collapsing
+ *  to a stack. Kept deliberately calm between the two showpiece sections. */
 export function UseCases() {
   return (
     <section aria-labelledby="home-jobs" class="border-t border-border">
@@ -347,7 +471,10 @@ export function UseCases() {
         </h2>
         <ul class="flex flex-col divide-y divide-border">
           {USE_CASES.map((u) => (
-            <li class="grid gap-2 py-6 first:pt-0 last:pb-0 sm:grid-cols-[16rem_1fr] sm:gap-8">
+            <li class="rm-scroll-rise grid gap-3 py-7 first:pt-0 last:pb-0 sm:grid-cols-[2.5rem_15rem_1fr] sm:gap-8">
+              <span class="flex size-10 items-center justify-center rounded-lg bg-accent-soft text-accent-text">
+                {u.icon}
+              </span>
               <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">{u.title}</h3>
               <p class="leading-relaxed text-ink-muted">{u.story}</p>
             </li>
@@ -358,12 +485,13 @@ export function UseCases() {
   );
 }
 
-const TRUST: { icon: unknown; lead: string; body: string; wide: boolean }[] = [
+const TRUST: { icon: unknown; lead: string; body: string; wide: boolean; visual?: boolean }[] = [
   {
     icon: <Bot class="size-6" />,
     lead: 'Agents are principals.',
     body: 'Own identity, scoped token, least-privilege role. Even a denial is recorded, attributed to the exact token that asked.',
     wide: true,
+    visual: true,
   },
   {
     icon: <Braces class="size-6" />,
@@ -385,8 +513,27 @@ const TRUST: { icon: unknown; lead: string; body: string; wide: boolean }[] = [
   },
 ];
 
-/** Bento grid: four cells, asymmetric spans for rhythm, iris-washed lead cells.
- *  The headline is the page's one falsifiable trust claim, promoted from a cell. */
+/** Two mock audit rows inside the principals cell: the falsifiable claim
+ *  ("even a denial is recorded") shown, not asserted. */
+function AuditRows() {
+  return (
+    <div class="mt-auto flex flex-col gap-2 rounded-lg border border-border bg-surface/80 p-3 font-mono text-xs">
+      <div class="flex items-center justify-between gap-3">
+        <span class="truncate text-ink-muted">create_essays · claude-code</span>
+        <Badge tone="success">allowed</Badge>
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <span class="truncate text-ink-muted">publish_essays · claude-code</span>
+        <Badge tone="danger">denied</Badge>
+      </div>
+    </div>
+  );
+}
+
+/** Bento grid: four cells, asymmetric spans for rhythm, three background
+ *  treatments (iris wash, iris gradient, paper) plus an embedded audit-row
+ *  visual so the grid is never text-only. The headline is the page's one
+ *  falsifiable trust claim, promoted from a cell. */
 export function TrustBento() {
   return (
     <section aria-labelledby="home-trust" class="border-t border-border">
@@ -403,12 +550,17 @@ export function TrustBento() {
           {TRUST.map((c) => (
             <li
               class={`rm-scroll-rise flex flex-col gap-3 rounded-xl border border-border p-6 ${
-                c.wide ? 'bg-accent-soft sm:col-span-2' : 'bg-surface shadow-sm sm:col-span-1'
+                c.wide
+                  ? c.visual
+                    ? 'bg-accent-soft sm:col-span-2'
+                    : 'bg-gradient-to-br from-accent-soft to-surface sm:col-span-2'
+                  : 'bg-surface shadow-sm sm:col-span-1'
               }`}
             >
               <span class="text-accent-text">{c.icon}</span>
               <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">{c.lead}</h3>
               <p class="leading-relaxed text-ink-muted">{c.body}</p>
+              {c.visual ? <AuditRows /> : null}
             </li>
           ))}
         </ul>
@@ -418,11 +570,27 @@ export function TrustBento() {
 }
 
 /** The pieces a mill is made of — concrete, not marketing abstractions. */
-const MILL_PIECES: { label: string; body: string }[] = [
-  { label: 'One Worker', body: 'The whole platform: admin, API, MCP, public pages.' },
-  { label: 'One D1 database', body: 'Schema as data; content, index, and audit trail.' },
-  { label: 'One R2 bucket', body: 'Media originals, streamed with range support.' },
-  { label: 'Your domain', body: 'Feeds, OG cards, and share links mint from it.' },
+const MILL_PIECES: { icon: unknown; label: string; body: string }[] = [
+  {
+    icon: <Boxes class="size-5" />,
+    label: 'One Worker',
+    body: 'The whole platform: admin, API, MCP, public pages.',
+  },
+  {
+    icon: <DatabaseIcon class="size-5" />,
+    label: 'One D1 database',
+    body: 'Schema as data; content, index, and audit trail.',
+  },
+  {
+    icon: <Image class="size-5" />,
+    label: 'One R2 bucket',
+    body: 'Media originals, streamed with range support.',
+  },
+  {
+    icon: <Globe class="size-5" />,
+    label: 'Your domain',
+    body: 'Feeds, OG cards, and share links mint from it.',
+  },
 ];
 
 /**
@@ -436,8 +604,8 @@ const MILL_PIECES: { label: string; body: string }[] = [
  */
 export function RunYourOwnMill() {
   return (
-    <section id="run" aria-labelledby="home-run" class="border-t border-border">
-      <div class="mx-auto grid w-full max-w-5xl gap-10 px-6 py-20 sm:py-24 lg:grid-cols-[1fr_20rem] lg:gap-16">
+    <section id="run" aria-labelledby="home-run" class="scroll-mt-20 border-t border-border">
+      <div class="mx-auto grid w-full max-w-5xl gap-10 px-6 py-20 sm:py-24 lg:grid-cols-[1fr_24rem] lg:gap-16">
         <div class="flex flex-col gap-4">
           <h2 id="home-run" class={SECTION_H2}>
             Run your own mill.
@@ -457,14 +625,15 @@ export function RunYourOwnMill() {
             </a>
           </p>
         </div>
-        <dl class="grid grid-cols-2 gap-x-6 gap-y-6 self-start lg:grid-cols-1">
+        <ul class="grid grid-cols-2 gap-4 self-start">
           {MILL_PIECES.map((p) => (
-            <div class="flex flex-col gap-1 border-t border-border pt-3">
-              <dt class="font-mono text-sm font-medium text-accent-text">{p.label}</dt>
-              <dd class="text-sm leading-relaxed text-ink-muted">{p.body}</dd>
-            </div>
+            <li class="rm-scroll-rise flex flex-col gap-2 rounded-xl border border-border bg-surface p-5">
+              <span class="text-accent-text">{p.icon}</span>
+              <span class="font-mono text-sm font-medium text-ink">{p.label}</span>
+              <span class="text-sm leading-relaxed text-ink-muted">{p.body}</span>
+            </li>
           ))}
-        </dl>
+        </ul>
       </div>
     </section>
   );
@@ -474,7 +643,21 @@ export function RunYourOwnMill() {
 const CODE_BLOCK =
   'overflow-x-auto rounded-lg border border-border bg-surface-raised p-4 font-mono text-[13px] leading-relaxed text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-/** Numbered steps + working code panels on an iris-washed band. Conversion target. */
+/** The tools a connected agent gets for an example collection — shown as
+ *  chips, not another code block. */
+const EXAMPLE_TOOLS = [
+  'list_essays',
+  'create_essays',
+  'search_essays',
+  'share_link_essays',
+  'publish_essays',
+] as const;
+
+/**
+ * Timeline quickstart on the iris-washed band: three markers on a connective
+ * rule, ONE code artifact (the MCP client config, with a copy button), and
+ * the generated tools shown as chips instead of a curl dump. Conversion target.
+ */
 export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
   const mcpConfig = `{
   "mcpServers": {
@@ -485,18 +668,14 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
     }
   }
 }`;
-  const curl = `curl -X POST ${baseUrl}/mcp \\
-  -H "Authorization: Bearer <token>" \\
-  -H "Content-Type: application/json" \\
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`;
 
   return (
     <section
       id="connect"
       aria-labelledby="home-connect"
-      class="border-y border-border bg-accent-soft"
+      class="scroll-mt-20 border-y border-border bg-accent-soft"
     >
-      <div class="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-20 sm:py-24">
+      <div class="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-20 sm:py-24">
         <div class="flex flex-col gap-3">
           {/* ink-muted, not ink-subtle: ink-subtle is only AA on canvas/surface,
               and dips below 4.5:1 on the accent-soft band in dark mode. */}
@@ -507,58 +686,84 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
             Connect an agent
           </h2>
         </div>
-        <ol class="flex flex-col gap-8">
-          <li class="flex flex-col gap-2">
-            <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">
-              <span
-                aria-hidden="true"
-                class="mr-2 font-mono text-base font-medium text-accent-text"
-              >
-                1
-              </span>
-              Mint a token
-            </h3>
-            <p class="leading-relaxed text-ink-muted">
-              Sign in and create a bearer token under Access. Scope it to just the collections your
-              agent should touch.
-            </p>
-          </li>
-          <li class="flex flex-col gap-3">
-            <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">
-              <span
-                aria-hidden="true"
-                class="mr-2 font-mono text-base font-medium text-accent-text"
-              >
-                2
-              </span>
-              Add remill to your MCP client
-            </h3>
-            <p class="leading-relaxed text-ink-muted">
-              remill speaks streamable HTTP JSON-RPC. Point any MCP client at the endpoint:
-            </p>
-            <pre
-              tabindex={0}
-              role="region"
-              aria-label="MCP client configuration"
-              class={CODE_BLOCK}
+        <ol class="relative flex flex-col gap-10 before:absolute before:inset-y-3 before:left-4 before:w-px before:bg-border-strong">
+          <li class="relative grid grid-cols-[2rem_1fr] gap-x-5">
+            <span
+              aria-hidden="true"
+              class="relative flex size-8 items-center justify-center rounded-full border border-border-strong bg-surface font-mono text-sm font-semibold text-accent-text"
             >
-              <code>{mcpConfig}</code>
-            </pre>
+              1
+            </span>
+            <div class="flex flex-col gap-2 pt-1">
+              <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">
+                Mint a token
+              </h3>
+              <p class="leading-relaxed text-ink-muted">
+                Sign in and create a bearer token under Access. Scope it to just the collections
+                your agent should touch.
+              </p>
+            </div>
           </li>
-          <li class="flex flex-col gap-3">
-            <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">
-              <span
-                aria-hidden="true"
-                class="mr-2 font-mono text-base font-medium text-accent-text"
-              >
-                3
-              </span>
-              Or call it raw
-            </h3>
-            <p class="leading-relaxed text-ink-muted">No SDK required:</p>
-            <pre tabindex={0} role="region" aria-label="curl example" class={CODE_BLOCK}>
-              <code>{curl}</code>
-            </pre>
+          <li class="relative grid grid-cols-[2rem_1fr] gap-x-5">
+            <span
+              aria-hidden="true"
+              class="relative flex size-8 items-center justify-center rounded-full border border-border-strong bg-surface font-mono text-sm font-semibold text-accent-text"
+            >
+              2
+            </span>
+            <div class="flex flex-col gap-3 pt-1">
+              <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">
+                Add remill to your MCP client
+              </h3>
+              <p class="leading-relaxed text-ink-muted">
+                remill speaks streamable HTTP JSON-RPC. Point any MCP client at the endpoint, or
+                call it raw; no SDK required.
+              </p>
+              <div class="relative" data-signals="{copied: false}">
+                <pre
+                  id="mcp-config-src"
+                  tabindex={0}
+                  role="region"
+                  aria-label="MCP client configuration"
+                  class={CODE_BLOCK}
+                >
+                  <code>{mcpConfig}</code>
+                </pre>
+                <button
+                  type="button"
+                  class="absolute top-2 right-2 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted shadow-xs transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  data-on:click="navigator.clipboard.writeText(document.getElementById('mcp-config-src').textContent); $copied = true; setTimeout(() => $copied = false, 1600)"
+                >
+                  <span data-show="!$copied">Copy</span>
+                  <span data-show="$copied" style="display:none">
+                    Copied
+                  </span>
+                </button>
+              </div>
+            </div>
+          </li>
+          <li class="relative grid grid-cols-[2rem_1fr] gap-x-5">
+            <span
+              aria-hidden="true"
+              class="relative flex size-8 items-center justify-center rounded-full border border-border-strong bg-surface font-mono text-sm font-semibold text-accent-text"
+            >
+              3
+            </span>
+            <div class="flex flex-col gap-3 pt-1">
+              <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">
+                Put it to work
+              </h3>
+              <p class="leading-relaxed text-ink-muted">
+                Every collection the token can see becomes a set of tools, gated by its grants:
+              </p>
+              <ul aria-label="Generated MCP tools" class="flex flex-wrap gap-2">
+                {EXAMPLE_TOOLS.map((t) => (
+                  <li class="rounded-md border border-border bg-surface px-2.5 py-1 font-mono text-xs text-ink">
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </li>
         </ol>
         <p class="border-t border-border pt-6 text-sm leading-relaxed text-ink-muted">
@@ -586,7 +791,7 @@ export function PublishedIndex({
     <section
       id="writing"
       aria-labelledby="home-writing"
-      class="mx-auto w-full max-w-5xl px-6 py-20 sm:py-24"
+      class="mx-auto w-full max-w-5xl scroll-mt-20 px-6 py-20 sm:py-24"
     >
       <h2 id="home-writing" class={SECTION_H2}>
         This site is a remill
