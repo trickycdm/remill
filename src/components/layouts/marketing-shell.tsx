@@ -15,6 +15,11 @@ import { Wordmark } from '@/components/auth-shell';
 const NAV_LINK =
   'text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
+// Links on the theme-fixed footer band (cyan on ink-navy, the dark theme's
+// own audited pairing; literals sanctioned only inside .rm-footer-band).
+const BAND_LINK =
+  'text-sm font-medium text-[#4dd8e6] transition-colors hover:text-[#71e2ec] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4dd8e6]';
+
 export function MarketingShell({ children }: { children?: unknown }) {
   return (
     <div class="flex min-h-dvh flex-col bg-canvas">
@@ -55,35 +60,41 @@ export function MarketingShell({ children }: { children?: unknown }) {
         {children}
       </main>
 
-      {/* The credibility layer (was one line deep, which read as abandoned).
-          TODO(release): add the repository + license links when the source
-          goes public. */}
-      <footer class="border-t border-border">
-        <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10 sm:flex-row sm:items-start sm:justify-between">
+      {/* The credibility layer, closed in the gig-poster register: the footer
+          band is theme-FIXED dark (.rm-footer-band, tailwind.css) so the page
+          signs off the same way in both themes. The colour literals below are
+          that band's own audited dark pairings (cream text, cyan links) —
+          sanctioned here only, because light-dark() tokens would flip against
+          the fixed background. TODO(release): add the repository + license
+          links when the source goes public. */}
+      <footer class="rm-footer-band">
+        <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-12 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex flex-col gap-1.5">
+            {/* Recolored by the .rm-footer-band scoped rules (a class override
+                would lose the same-property cascade to the base text-ink). */}
             <Wordmark />
-            <p class="text-xs text-ink-subtle">A lightweight, agent-native CMS.</p>
-            <p class="text-xs text-ink-subtle">
+            <p class="text-xs text-[#bcb9c4]">A lightweight, agent-native CMS.</p>
+            <p class="text-xs text-[#bcb9c4]">
               Live on Cloudflare Workers since July 2026. This site runs the product.
             </p>
           </div>
           <nav aria-label="Footer" class="grid grid-cols-2 gap-x-10 gap-y-3 sm:text-right">
-            <a href="/api/openapi.json" class={NAV_LINK}>
+            <a href="/api/openapi.json" class={BAND_LINK}>
               API reference
             </a>
-            <a href="#connect" class={NAV_LINK}>
+            <a href="#connect" class={BAND_LINK}>
               MCP endpoint
             </a>
-            <a href="/rss.xml" class={NAV_LINK}>
+            <a href="/rss.xml" class={BAND_LINK}>
               RSS
             </a>
-            <a href="/sitemap.xml" class={NAV_LINK}>
+            <a href="/sitemap.xml" class={BAND_LINK}>
               Sitemap
             </a>
-            <a href="#writing" class={NAV_LINK}>
+            <a href="#writing" class={BAND_LINK}>
               Writing
             </a>
-            <a href="/admin" class={NAV_LINK}>
+            <a href="/admin" class={BAND_LINK}>
               Sign in
             </a>
           </nav>

@@ -12,6 +12,7 @@ export * from '@/components/ui/control';
 export * from '@/components/ui/icon';
 export * from '@/components/ui/button';
 export * from '@/components/ui/badge';
+export * from '@/components/ui/stamp';
 export * from '@/components/ui/card';
 export * from '@/components/ui/page-header';
 export * from '@/components/ui/input';
