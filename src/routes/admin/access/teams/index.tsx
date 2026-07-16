@@ -66,7 +66,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       {/* Create */}
       <Card class="mb-8">
         <CardContent class="pt-6">
-          <h2 class="mb-3 font-serif text-display-sm">New team</h2>
+          <h2 class="mb-3 font-display text-display-sm">New team</h2>
           <form method="post" action="/admin/access/teams" class="flex flex-wrap items-end gap-3">
             <input type="hidden" name="op" value="create" />
             <FormField fieldId="team-name" label="Name">

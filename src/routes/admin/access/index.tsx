@@ -280,7 +280,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
       {/* Roles */}
       <section class="mb-10">
-        <h2 class="mb-3 font-serif text-display-sm">Roles</h2>
+        <h2 class="mb-3 font-display text-display-sm">Roles</h2>
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {roles.map((r) => (
             <Card>
@@ -315,7 +315,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       <section class="mb-10">
         <div class="mb-4 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 class="font-serif text-display-sm">Principals</h2>
+            <h2 class="font-display text-display-sm">Principals</h2>
             <p class="mt-1 max-w-2xl text-sm text-ink-subtle">
               Three kinds of actor: <span class="text-ink-muted">People</span> (humans who sign in),{' '}
               <span class="text-ink-muted">Services</span> (systems that pull data via the API), and{' '}
@@ -415,7 +415,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
       {/* Audit log */}
       <section>
-        <h2 class="mb-3 font-serif text-display-sm">Audit log</h2>
+        <h2 class="mb-3 font-display text-display-sm">Audit log</h2>
         <Table>
           <TableHead>
             <TableRow>

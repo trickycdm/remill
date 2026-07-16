@@ -28,7 +28,7 @@ export function CardTitle({
   class?: string;
 }): JSX.Element {
   return (
-    <As class={cx('font-serif text-lg leading-snug font-semibold tracking-tight text-ink', cls)}>
+    <As class={cx('font-display text-lg leading-snug font-semibold tracking-tight text-ink', cls)}>
       {children}
     </As>
   );

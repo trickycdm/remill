@@ -516,7 +516,7 @@ export function CollectionBuilder({
 
       {/* ── Fields ────────────────────────────────────────────────────────────── */}
       <fieldset class="flex flex-col gap-3 border-t border-border pt-6">
-        <legend class="font-serif text-lg font-semibold tracking-tight text-ink">Fields</legend>
+        <legend class="font-display text-lg font-semibold tracking-tight text-ink">Fields</legend>
         <p class="text-sm text-ink-muted">
           Each field defines one column of the document. A field must have a key and a type.
           Indexed fields are queryable and sortable; a unique field must also be indexed.

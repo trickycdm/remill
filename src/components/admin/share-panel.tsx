@@ -41,7 +41,7 @@ export function SharePanel({
   return (
     <Card class="mt-8">
       <CardContent class="pt-6">
-        <h2 class="mb-1 font-serif text-display-sm">Share</h2>
+        <h2 class="mb-1 font-display text-display-sm">Share</h2>
         <p class="mb-4 text-sm text-ink-subtle">
           Grant a specific person, service, agent, or role scoped access to this item — without changing
           their collection-wide role. Grants can expire.

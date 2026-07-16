@@ -13,7 +13,7 @@ export function BacklinksPanel({ backlinks }: { backlinks: Backlink[] }) {
   return (
     <Card class="mt-8">
       <CardContent class="pt-6">
-        <h2 class="font-serif text-lg font-semibold tracking-tight text-ink">Referenced by</h2>
+        <h2 class="font-display text-lg font-semibold tracking-tight text-ink">Referenced by</h2>
         <p class="mt-1 text-sm text-ink-muted">
           Documents that link to this one through a relation field.
         </p>

@@ -38,7 +38,7 @@ export function EmptyState({
         {icon ?? <Inbox class="size-6" />}
       </span>
       <div class="flex max-w-sm flex-col gap-1.5">
-        <h3 class="font-serif text-lg font-semibold tracking-tight text-ink">{title}</h3>
+        <h3 class="font-display text-lg font-semibold tracking-tight text-ink">{title}</h3>
         {description ? <p class="text-sm leading-relaxed text-ink-muted">{description}</p> : null}
       </div>
       {action ? <div class="mt-1">{action}</div> : null}

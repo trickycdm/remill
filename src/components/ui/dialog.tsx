@@ -52,7 +52,7 @@ export function Dialog({
         panel: `rm-anim-rise m-auto w-[calc(100vw-2rem)] ${SIZE[size]} rounded-xl border border-border bg-surface-raised p-0 text-ink shadow-lg backdrop:cursor-default`,
         body: 'flex max-h-[85vh] flex-col',
         header: 'flex items-start justify-between gap-4 px-6 pt-6 pb-2',
-        title: 'font-serif text-xl leading-snug font-semibold tracking-tight text-ink',
+        title: 'font-display text-xl leading-snug font-semibold tracking-tight text-ink',
         desc: 'text-sm leading-relaxed text-ink-muted',
         close:
           '-mr-1.5 -mt-1 flex size-8 shrink-0 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',

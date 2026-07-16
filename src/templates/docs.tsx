@@ -42,7 +42,7 @@ export const docsTemplate: RenderTemplate = {
               <FieldView field={sectionField} value={sectionValue} surface="public" />
             </p>
           ) : null}
-          <h1 class="font-serif text-3xl font-semibold leading-tight tracking-tight text-ink">
+          <h1 class="font-display text-3xl font-semibold leading-tight tracking-tight text-ink">
             {title}
           </h1>
         </header>
