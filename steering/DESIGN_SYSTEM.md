@@ -7,26 +7,38 @@
 > editors, list cells, tables) composes these primitives, so the design is
 > enforced at the primitive level and inherited for free.
 
-## The locked direction — "Ink & Paper"
+## The locked direction — "Overprint" (D43)
 
-remill is a **refined editorial typesetting workbench**, not a dashboard. It is a
-tool people write and publish in all day, so the personality is calm, legible, and
-precise — memorable through restraint, not decoration. The signatures:
+remill is a **print shop for the agent age**: a risograph two-ink identity on
+real paper stocks. It is a tool people write and publish in all day, so the
+working surfaces stay calm and legible; the pop is rationed to the moments
+that earn it. The signatures:
 
-- **Warm paper, warm ink.** Neutrals are warm (paper/espresso), never cold grey —
-  the one thing that separates remill from generic admin chrome. Light is ink on
-  paper; dark is a warm "reading lamp", not black.
-- **A serif masthead.** Page titles, card titles, and the `remill` wordmark are set
-  in a system book-serif — the editorial voice. Body/UI is a clean system sans.
-  Eyebrows, metadata, IDs, and timestamps are mono-caps — the "content tool" tell.
-- **One quiet accent: iris ink.** A muted blue-violet, like fountain-pen ink,
-  deliberately distinct in hue from all four status colours so "brand" never reads
-  as "status". Used sparingly in the admin: primary actions, active nav, focus,
-  selection. The **marketing homepage** is the one surface that uses it as a
-  full-bleed colour field (the hero band) — see Contrast for the rules that keep it AA.
-- **Hairlines over boxes.** Structure comes from generous whitespace and 1px rules,
-  not heavy shadows or fills. Radii are restrained; motion is subtle and always
-  reduced-motion-safe.
+- **Two stocks.** Light is cream paper; dark is the **gig-poster register**:
+  deep ink-navy stock where the same inks print brighter. One token set,
+  `light-dark()` throughout — never a second palette.
+- **Two inks plus their overlap.** The **working ink** (riso blue in light,
+  cyan in dark) is the everyday accent: actions, links, active nav, focus,
+  selection. The **pop ink** (fluoro pink) marks that *something happened*: a
+  denial, a publish moment, marketing pop (halftones, offset shadows, stamps)
+  — never a workhorse, never body text (see Contrast). Where the two inks
+  overprint they multiply to the **overlap violet** — the mark's colour at
+  small sizes (wordmark nib, favicon) and the continuity thread to the old
+  iris brand.
+- **A grotesque masthead.** Display headings and the wordmark are set in
+  **Bricolage Grotesque** (`font-display`, the one self-hosted webfont —
+  latin variable woff2, preloaded, swap). Body/UI is the system sans.
+  Eyebrows, metadata, IDs, and timestamps are mono-caps — the "content tool"
+  tell. Never misregister type: the overprint treatment belongs to the MARK
+  (≥40px) and display titles (`rm-overprint-title`), nothing else.
+- **Stamps mark events.** The `Stamp` primitive is the brand's icon-for-a-
+  state: PROOF/SIGN-OFF workflow gates, ALLOWED/DENIED decisions. The label
+  carries the meaning, the ink reinforces; tilt at most once per cluster,
+  and a screen full of stamps should be Badges instead.
+- **Hairlines over boxes.** Structure comes from whitespace and thin rules
+  (1px working rules; 1.5px working-ink panel borders on marketing
+  showpieces), not heavy shadows or fills. Radii are restrained; motion is
+  subtle and always reduced-motion-safe.
 
 **Light and dark from day one.** Every colour token carries both values in a single
 `light-dark()` declaration (see Theming). Both themes are AA-verified.
@@ -47,9 +59,12 @@ never raw hex. Need a colour? Reference the token name below.
 | `hover` | Subtle hover / pressed fill |
 | `ink` / `ink-muted` / `ink-subtle` | Primary / secondary / tertiary + placeholder text |
 | `border` / `border-strong` | Hairline rules / input & divider edges |
-| `accent` / `accent-hover` / `accent-fg` | Iris fill / fill hover / text on an accent fill (white) |
-| `accent-text` | Accent as link/label text on a surface (AA both themes) |
+| `accent` / `accent-hover` / `accent-fg` | Working-ink fill / fill hover / text ON an accent fill — **theme-aware** (white on blue in light, navy on cyan in dark), never use off a fill |
+| `accent-text` | Working ink as link/label text on a surface (AA both themes; darker than `accent` in light — the fill fails as body text) |
 | `accent-soft` | Tinted wash: active nav, selection |
+| `pop` | Pop-ink pink, **graphics / large-bold only** (below body AA by design): halftones, offset shadows, stamp borders |
+| `pop-text` / `pop-soft` | Pop ink as text (AA both themes) / its wash |
+| `overlap` | The two inks multiplied: the mark below 24px (nib, favicon), graphic-only |
 | `ring` / `overlay` | Focus ring / modal backdrop |
 | `success` `warning` `danger` `info` | Status **text** tone (AA on surface and on the matching `-soft`) |
 | `success-soft` … `info-soft` | Status background washes (badges, toasts, notices) |
@@ -57,17 +72,26 @@ never raw hex. Need a colour? Reference the token name below.
 
 **Contrast:** every text/background pairing meets WCAG 2.1 AA in both themes; base
 status tokens are text-safe, solids (`accent`, `danger-solid`) are tuned for AA
-white text. Non-obvious ratios are noted inline in `tailwind.css`.
+`accent-fg`/white text. `scripts/check-contrast.mjs` audits the full pairing table —
+run it whenever a token moves; non-obvious ratios are noted inline in `tailwind.css`.
 
-**Contrast on tinted / accent-fill backgrounds.** The AA guarantee above is tuned for
-text on `canvas`/`surface`. On a **tinted `-soft` wash** (`accent-soft`, the semantic
-`-soft`s), `text-ink-subtle` drops below 4.5:1 in dark mode — it is AA only on
-canvas/surface, so use `text-ink-muted` for meta text on tinted bands. On a **solid
-`accent` fill**, all text is `accent-fg` (white); build hierarchy with size/weight,
-never opacity, so nothing dips below AA. The accent-fill `Button` is invisible there —
-invert the primary CTA to a paper button (`bg-surface-raised` + `text-accent-text`) and
-force the focus ring white (`focus-visible:outline-accent-fg`), since the default iris
-ring vanishes on iris. Always axe any accent surface in **both** themes.
+**Contrast rules the palette encodes.**
+- **Fill vs text split**: `accent` is a FILL (pair with `accent-fg`, which is
+  theme-aware); `accent-text` is the text form. Never use the fill as body text
+  (light-mode blue is deliberately below 4.5:1 on cream) and never use
+  `accent-fg` off an accent fill (it is navy in dark).
+- **Pink is never body text**: `pop` is graphic/large-bold only; `pop-text` is
+  the text form. Never white text on a pop fill (2.3:1) — pop fills take no text.
+- **The hover fill is the darkest text-bearing background**: `ink-subtle` (and
+  everything darker) is tuned AA on `hover`, because axe evaluates hovered rows
+  (the pointer rests where the last click happened). Any new text-on-hover
+  pairing goes into the contrast script.
+- On a **tinted `-soft` wash**, use `text-ink-muted` (not `ink-subtle`) for
+  meta text. Build hierarchy with size/weight, never opacity.
+- **The footer band exception**: `.rm-footer-band` (marketing shell) is theme-
+  FIXED dark and carries its own literal pairings (cream text, cyan links) —
+  the one sanctioned literal-colour surface; do not reuse the pattern.
+- Always axe any new accent/pop surface in **both** themes.
 
 ### Theming mechanism
 
@@ -89,11 +113,13 @@ code, and never restate hex values.
 
 ## Typography
 
-Three roles, all high-quality **system stacks** — no external fonts (Workers/CSP +
-offline dev):
+Three roles; one self-hosted webfont for the display role, system stacks for the
+rest (same-origin `font-src 'self'`, vendored in `public/fonts/`, ~30KB latin
+variable woff2, preloaded in `src/layouts.tsx`, `font-display: swap`):
 
-- `font-serif` — editorial display: page `<h1>` (`text-display`), card/dialog
-  titles, the wordmark. Book-serif stack (Iowan/Palatino/Georgia fallbacks).
+- `font-display` — **Bricolage Grotesque**: page `<h1>` (`text-display`),
+  card/dialog titles, the wordmark. Falls back to the sans stack (a grotesque,
+  not a serif — the fallback must match the metric class).
 - `font-sans` — all UI and body text. System sans (SF/Segoe/Roboto fallbacks).
 - `font-mono` — eyebrows (`text-eyebrow`, mono-caps, wide tracking), table column
   heads, metadata, IDs, timestamps.
@@ -114,6 +140,11 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   ghost | danger | link`; `size`: `sm | md | lg | icon`. Badge/Toast `tone`:
   `neutral | accent | success | warning | danger | info`. Reuse this vocabulary in
   new components rather than inventing synonyms.
+- **Badge vs Stamp.** A `Badge` reports routine status anywhere. A `Stamp` marks
+  a REAL EVENT (a permission decision, a publish gate) and stays rare — `tone`:
+  `affirm | event | refuse` (the two pop tones render identically; the label
+  carries the valence), `tilt` at most once per cluster and never in dense
+  tables. Precedent: audit logs stamp only the denials; allows stay Badges.
 - **Datastar-friendly by construction.** Form controls (`Input`, `Select`,
   `Textarea`) pass any `data-*` / `aria-*` attribute straight through, so
   `<Input data-bind="title" />` and `<Select data-attr:disabled="$busy" />` work.
@@ -143,7 +174,7 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   workflow/access flags, boolean settings. `Checkbox` for an independent multi-option
   group. Both stay **native** (free keyboard/SR semantics; they POST their value).
 - **A native checkbox/toggle paints its check from `accent-color`, not `color`.**
-  Style the tick with `accent-accent` (the iris token) — `text-accent` sets `color`,
+  Style the tick with `accent-accent` (the working-ink token) — `text-accent` sets `color`,
   which a native checkbox ignores, so it silently rendered browser-default blue.
 - **No raw field keys in the UI.** Resolve a field's visible label with
   `fieldLabel(field)` (`src/lib/humanize.ts`) = `field.label ?? humanizeKey(field.key)`
@@ -169,7 +200,7 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   backlinks. Markdown prose styles live in `.rm-prose`; the dek in `.rm-standfirst`
   (`tailwind.css` `@layer components`) — token-driven, not a theme engine.
 - **PageHeader** — the masthead of a content region (optional breadcrumb + eyebrow
-  + serif `<h1>` + lede + actions slot). It **owns the space below its hairline**
+  + display `<h1>` + lede + actions slot). It **owns the space below its hairline**
   (`mb-8`) — pages never add an ad-hoc top margin to compensate. **Nav**, **Card**,
   **Table** as above.
 - **Breadcrumbs** (`ui/breadcrumb.tsx`) go in the PageHeader on depth-2+ pages
@@ -179,13 +210,13 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   (Publish), and an isolated destructive (Delete → `Dialog`, never native
   `confirm()`). The sidebar Save can drive the content form in the other column via
   `<button type="submit" form="editor-form">` association (no nested forms). Two
-  competing iris-accent primaries on one page is the smell to avoid.
+  competing working-ink primaries on one page is the smell to avoid.
 - **Spacing rhythm:** 4px base (Tailwind default scale); cards `gap`/padding in
   multiples of 4/5; page sections separated by `gap-6`+ and hairline rules.
 
 ## Empty, loading, and error patterns
 
-- **Empty:** `EmptyState` (icon + serif title + description + optional action) — an
+- **Empty:** `EmptyState` (icon + display title + description + optional action) — an
   empty screen must feel intentional. Used by every not-yet-built surface.
 - **Loading:** `aria-busy="true"` on the container; `Spinner` + `rm-anim-spin`;
   `Button busy` for in-flight form submits. Skeletons use a `surface` block.

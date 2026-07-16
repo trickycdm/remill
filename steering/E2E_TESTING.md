@@ -173,6 +173,15 @@ Accessible-name traps in THIS codebase (each cost a failed run, 2026-07-05/06/08
 `e2e/a11y/pages.spec.ts` runs `@axe-core/playwright` against every admin page and asserts zero
 violations. **Every new admin page is added to this sweep.** Aligns with A11Y_STANDARDS.md (WCAG 2.1 AA).
 
+**Axe must read RESTING colors, so reduced motion must actually reach the page.** The config sets
+`use.reducedMotion: 'reduce'`, but Playwright 1.61.1 silently drops it from default-fixture contexts
+(verified: present in `project.use`, absent from `context._options`; explicit
+`browser.newContext({ reducedMotion })` works fine). Without it, entrance animations run under axe and
+mid-fade alpha-blended colors fail contrast that passes at rest — the failures look real and are not.
+The workaround lives in `e2e/helpers/auth.ts` (`loginAsAdmin` emulates reduced motion; every admin
+spec routes through it), and manually-created contexts must pass `reducedMotion: 'reduce'` themselves
+(the public specs already do). Drop the workaround when upstream honours the config option again.
+
 ```ts
 for (const { name, path, auth } of pages) {
   test(`${name} has no a11y violations`, async ({ page, anonymousPage }) => {

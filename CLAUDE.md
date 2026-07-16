@@ -64,7 +64,10 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **MCP** — a direct streamable-HTTP JSON-RPC endpoint at `/mcp` (decision **D18**; not the
   `agents`-SDK `McpAgent`-on-a-Durable-Object once planned — that dep was removed).
 - **Zod 4** validation (generated from field descriptors); **Vitest 3** + **Playwright** (+ axe);
-  **nanoid** IDs; **Tailwind v4** CSS-first `@theme` tokens. **CodeMirror 6** powers the markdown
+  **nanoid** IDs; **Tailwind v4** CSS-first `@theme` tokens — the **"Overprint"** brand (D43):
+  two-ink risograph identity, self-hosted **Bricolage Grotesque** display face (`font-display`),
+  `Stamp` state markers, `scripts/check-contrast.mjs` as the palette's AA audit. **CodeMirror 6**
+  powers the markdown
   editor island and a native Dialog island powers the media picker (`src/client/`, D38 — Uppy/D12
   superseded); islands progressively enhance `data-bind` carriers and load only on the editor
   routes (DATASTAR_PATTERNS §g worked examples).

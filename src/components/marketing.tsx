@@ -561,7 +561,7 @@ function AuditRows() {
 }
 
 /** Bento grid: four cells, asymmetric spans for rhythm, three background
- *  treatments (iris wash, iris gradient, paper) plus an embedded audit-row
+ *  treatments (working-ink wash, pop gradient, paper) plus an embedded audit-row
  *  visual so the grid is never text-only. The headline is the page's one
  *  falsifiable trust claim, promoted from a cell. */
 export function TrustBento() {
@@ -697,7 +697,7 @@ function Coupon({ n, title, children }: { n: string; title: string; children?: u
 }
 
 /**
- * Coupon-strip quickstart on the iris-washed band: three perforated coupons
+ * Coupon-strip quickstart on the ink-washed band: three perforated coupons
  * in one ticket (dashed rules = the perforation), ONE code artifact (the MCP
  * client config, with a copy button), and the generated tools shown as chips
  * instead of a curl dump. Conversion target.

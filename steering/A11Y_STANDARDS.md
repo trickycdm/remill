@@ -89,10 +89,15 @@ announce it if the live region **exists in the initial server render**:
 ## Colour & contrast
 
 - Body text meets **4.5:1**; large text and UI components meet **3:1**. Contrast is verified against
-  the DESIGN_SYSTEM.md token pairings (both light and dark themes — remill ships both from day one).
+  the DESIGN_SYSTEM.md token pairings (both light and dark themes — remill ships both from day one);
+  `scripts/check-contrast.mjs` audits the promised pairings when a token moves.
 - **Never rely on colour alone.** Status (draft/published, allow/deny, error/success) always pairs the
   colour with a text label or icon.
-- Interactive states (hover, active, disabled, focus) stay distinguishable without colour.
+- **The pop ink is never body text.** Raw `pop` pink sits below body AA by design (graphics and
+  large-bold only); text uses `pop-text`. Pop fills never take text at all.
+- Interactive states (hover, active, disabled, focus) stay distinguishable without colour — and stay
+  AA: axe evaluates the HOVERED state of rows (the pointer rests where the last click happened), so
+  text inside hoverable rows must hold 4.5:1 on the `hover` fill, not just on canvas.
 
 ## Motion
 

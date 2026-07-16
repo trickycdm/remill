@@ -36,7 +36,7 @@ export function Toggle({ class: cls, ...rest }: ToggleProps): JSX.Element {
         class="peer absolute inset-0 z-10 m-0 cursor-pointer appearance-none rounded-full disabled:cursor-not-allowed"
         {...(rest as Record<string, unknown>)}
       />
-      {/* Track: neutral off, iris on. */}
+      {/* Track: neutral off, working ink on. */}
       <span
         aria-hidden="true"
         class="pointer-events-none absolute inset-0 rounded-full bg-border-strong transition-colors peer-checked:bg-accent peer-disabled:opacity-50 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring"
