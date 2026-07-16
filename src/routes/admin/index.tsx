@@ -14,6 +14,7 @@ import {
   CardContent,
   EmptyState,
   Badge,
+  Stamp,
 } from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -81,9 +82,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                 <ol class="divide-y divide-border text-sm">
                   {audit.map((a) => (
                     <li class="flex items-center gap-2 py-2 first:pt-0 last:pb-0">
-                      <Badge tone={a.allowed ? 'success' : 'danger'}>
-                        {a.allowed ? 'allow' : 'deny'}
-                      </Badge>
+                      {a.allowed ? (
+                        <Badge tone="success">allow</Badge>
+                      ) : (
+                        <Stamp tone="refuse">deny</Stamp>
+                      )}
                       <span class="text-ink">{a.action}</span>
                       <span class="min-w-0 flex-1 truncate font-mono text-xs text-ink-subtle">
                         {a.resource}

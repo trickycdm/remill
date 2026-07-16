@@ -13,8 +13,9 @@ describe('email templates (D20) — escaped, branded, link in html + text', () =
       expect(rendered.html).toContain(`href="${URL}"`);
       expect(rendered.text).toContain(URL);
       expect(rendered.subject.length).toBeGreaterThan(0);
-      // The brand accent drives the CTA button.
-      expect(rendered.html).toContain('#4b44a3');
+      // The working-ink accent drives the CTA button (the Overprint light
+      // palette, mirrored by hand — this pin is the drift tripwire, D43).
+      expect(rendered.html).toContain('#0078bf');
     }
   });
 
