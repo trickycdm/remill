@@ -2,21 +2,22 @@
  * Marketing homepage sections (presentational, Hono JSX — precedent:
  * auth-shell.tsx). Composed by src/routes/index.tsx inside MarketingShell.
  *
- * Design notes (DESIGN_SYSTEM.md, "Overprint"): the Pressrun revision — same
- * narrative (promise -> who it's for -> proof -> jobs -> guarantee -> run
- * your own -> connect -> dogfood writing), told in the print-shop language.
- * The hero sits ON the cream stock (no colour band): overprint title (blue
- * fill, misregistered pink pass), a pink halftone corner, and the activity
- * vignette with a second-pass backing. The proof section is a JOB TICKET
- * (hairline working-ink panels, PROOF -> SIGN-OFF workflow stamps); the
- * quickstart is a perforated COUPON strip; permission decisions are Stamps
- * (label carries meaning, ink reinforces). The two code panels that earn
- * their place stay (REST wire response, MCP client config). Motion is
- * CSS-only (entrance stagger, scroll-rise), reduced-motion-safe. Exactly two
- * mono-caps eyebrows page-wide (hero + quickstart); zero em-dashes in
- * visible copy. The primary CTA is "Run your own mill" — remill.org is a
- * single-tenant instance, so a cold visitor's conversion is deploying their
- * own, never signing in here.
+ * Design notes (DESIGN_SYSTEM.md, "Overprint"): the POSTER cut — the mock's
+ * structure, not just its skin. Sections separated by full-bleed perforation
+ * rules (rm-perf dashed working-ink), no tonal banding: promise (oversized
+ * overprint hero + activity vignette) -> manifesto (who it's for, offset
+ * second voice) -> the JOB TICKET (hairline panels, PROOF -> SIGN-OFF
+ * stamps, the six pressings as pills, the live surfaces tabs) -> the SETLIST
+ * (jobs as a numbered bill) -> the stamped audit ledger (the trust act) ->
+ * the COUPON quickstart -> the dogfood index -> the DARK CLOSING ACT: the
+ * #run band flips color-scheme via rm-dark-act and flows into the footer,
+ * signing the page off in the gig-poster register in both themes. The two
+ * code panels that earn their place stay (REST wire response, MCP client
+ * config). Motion is CSS-only (entrance stagger, scroll-rise),
+ * reduced-motion-safe. Exactly two mono-caps eyebrows page-wide (hero +
+ * quickstart); zero em-dashes in visible copy. The primary CTA is "Run your
+ * own mill" — remill.org is a single-tenant instance, so a cold visitor's
+ * conversion is deploying their own, never signing in here.
  */
 
 import { Button } from '@/components/ui/button';
@@ -110,12 +111,12 @@ function VignetteRow({
  */
 export function MarketingHero() {
   return (
-    <section aria-label="Introduction" class="relative overflow-hidden border-b border-border">
+    <section aria-label="Introduction" class="relative overflow-hidden">
       <div
         aria-hidden="true"
         class="rm-halftone -top-24 -right-24 hidden size-[26rem] lg:block"
       />
-      <div class="rm-stagger relative mx-auto grid w-full max-w-6xl gap-12 px-6 pt-16 pb-16 sm:pt-20 sm:pb-24 lg:grid-cols-[1fr_minmax(0,25rem)] lg:items-center lg:gap-16">
+      <div class="rm-stagger relative mx-auto grid w-full max-w-6xl gap-12 px-6 pt-16 pb-16 sm:pt-20 sm:pb-24 lg:grid-cols-[1.2fr_minmax(0,24rem)] lg:items-center lg:gap-16">
         <div class="flex flex-col items-start gap-6">
           <div class="flex items-center gap-3">
             <span aria-hidden="true" class="h-px w-8 bg-border-strong" />
@@ -123,7 +124,7 @@ export function MarketingHero() {
               Content, milled
             </span>
           </div>
-          <h1 class="rm-overprint-title max-w-3xl font-display text-display sm:text-display-lg font-bold text-balance">
+          <h1 class="rm-overprint-title max-w-3xl font-display text-display sm:text-display-lg font-bold text-balance lg:text-7xl lg:leading-[1.02] lg:tracking-[-0.035em]">
             Content that works for humans, apps, and agents.
           </h1>
           <p class="max-w-xl text-lg leading-relaxed text-ink-muted">
@@ -179,21 +180,21 @@ export function MarketingHero() {
 }
 
 /**
- * The who/why beat at manifesto scale: the sentence is the design, so it gets
- * display type and room, with the two supporting paragraphs in an editorial
- * two-column measure beneath.
+ * The who/why beat as a poster manifesto between perforation rules: the
+ * sentence gets the full display scale, the two supporting paragraphs sit
+ * offset to the right (the asymmetric second voice under the statement).
  */
 export function WhoItsFor() {
   return (
-    <section aria-labelledby="home-who" class="border-b border-border">
-      <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-20 sm:py-28">
+    <section aria-labelledby="home-who" class="rm-perf">
+      <div class="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-20 sm:py-28">
         <h2
           id="home-who"
-          class="rm-scroll-rise max-w-4xl font-display text-display sm:text-display-lg font-semibold text-balance text-ink"
+          class="rm-scroll-rise max-w-4xl font-display text-display sm:text-display-lg font-bold text-balance text-ink lg:text-6xl lg:leading-[1.05]"
         >
           A backend where the AI is a citizen, not a shared key.
         </h2>
-        <div class="grid max-w-4xl gap-6 leading-relaxed text-ink-muted sm:grid-cols-2 sm:gap-10">
+        <div class="grid max-w-2xl gap-5 leading-relaxed text-ink-muted lg:ml-[30%]">
           <p>
             remill is for builders who let agents write. An agent here is a principal: its own
             identity, a scoped token, a least-privilege role, and an audit trail.
@@ -276,7 +277,8 @@ export function EverySurface() {
 }`;
 
   return (
-    <section aria-labelledby="home-surfaces" class="mx-auto w-full max-w-6xl px-6 py-20 sm:py-28">
+    <section aria-labelledby="home-surfaces" class="rm-perf">
+      <div class="mx-auto w-full max-w-6xl px-6 py-20 sm:py-28">
       <div class="flex max-w-2xl flex-col gap-4">
         <h2 id="home-surfaces" class={SECTION_H2}>
           Define it once. It ships six ways.
@@ -319,6 +321,16 @@ export function EverySurface() {
               <ArrowRight aria-hidden="true" class="size-3.5 text-ink-subtle" />
               <Stamp tone="event">Sign-off</Stamp>
               <span class="ml-auto font-mono text-xs text-ink-subtle">workflow</span>
+            </div>
+            {/* The six pressings: what this one ticket runs onto. */}
+            <div class="border-pop/40 bg-pop-soft/30 flex flex-wrap gap-1.5 border-t-[1.5px] px-5 py-3.5">
+              {['storage', 'validation', 'admin list', 'edit form', 'REST API', 'MCP tools'].map(
+                (out) => (
+                  <span class="border-pop-text/50 text-pop-text rounded-full border-[1.5px] px-2.5 py-0.5 font-mono text-xs font-medium">
+                    {out}
+                  </span>
+                ),
+              )}
             </div>
           </div>
           <p class="text-sm leading-relaxed text-ink-muted">
@@ -456,6 +468,7 @@ export function EverySurface() {
           </div>
         </div>
       </div>
+      </div>
     </section>
   );
 }
@@ -486,111 +499,107 @@ const USE_CASES: { icon: unknown; title: string; story: string }[] = [
   },
 ];
 
-/** Use cases as an iconed editorial ledger (icon | title | story), collapsing
- *  to a stack. Kept deliberately calm between the two showpiece sections. */
+/** Use cases as the SETLIST (the gig-poster device): numbered bill rows with
+ *  display-scale titles and the story as the tail, dashed rules between —
+ *  the perforation echo at row scale. */
 export function UseCases() {
   return (
-    <section aria-labelledby="home-jobs" class="border-t border-border">
-      <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-20 sm:py-24">
+    <section aria-labelledby="home-jobs" class="rm-perf">
+      <div class="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-20 sm:py-24">
         <h2 id="home-jobs" class={SECTION_H2}>
           What the mill is for
         </h2>
-        <ul class="flex flex-col divide-y divide-border">
-          {USE_CASES.map((u) => (
-            <li class="rm-scroll-rise grid gap-3 py-7 first:pt-0 last:pb-0 sm:grid-cols-[2.5rem_15rem_1fr] sm:gap-8">
-              <span class="flex size-10 items-center justify-center rounded-lg bg-accent-soft text-accent-text">
-                {u.icon}
+        <ol class="flex flex-col">
+          {USE_CASES.map((u, i) => (
+            <li class="rm-scroll-rise grid items-baseline gap-2 border-t-[1.5px] border-dashed border-border-strong py-8 first:border-t-0 first:pt-2 last:pb-0 sm:grid-cols-[3rem_1fr_minmax(0,26rem)] sm:gap-6">
+              <span aria-hidden="true" class="text-pop-text font-mono text-sm font-bold">
+                {String(i + 1).padStart(2, '0')}
               </span>
-              <h3 class="font-display text-xl font-semibold tracking-tight text-ink">{u.title}</h3>
+              <h3 class="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+                {u.title}
+              </h3>
               <p class="leading-relaxed text-ink-muted">{u.story}</p>
             </li>
           ))}
-        </ul>
+        </ol>
       </div>
     </section>
   );
 }
 
-const TRUST: { icon: unknown; lead: string; body: string; wide: boolean; visual?: boolean }[] = [
-  {
-    icon: <Bot class="size-6" />,
-    lead: 'Agents are principals.',
-    body: 'Own identity, scoped token, least-privilege role. Even a denial is recorded, attributed to the exact token that asked.',
-    wide: true,
-    visual: true,
-  },
+const TRUST: { icon: unknown; lead: string; body: string }[] = [
   {
     icon: <Braces class="size-6" />,
     lead: 'An API you can build on.',
     body: 'Every collection is a JSON REST endpoint with bearer tokens, filter operators, and full-text search.',
-    wide: false,
   },
   {
     icon: <FileText class="size-6" />,
     lead: 'Publishing built in.',
     body: 'Public pages, RSS, sitemaps, and expiring share links ship with every collection. Schedule a post and remill publishes it.',
-    wide: false,
   },
   {
     icon: <ShieldCheck class="size-6" />,
     lead: 'Locked down by default.',
     body: 'Default-deny access, additive-only grants. Fields that were never declared are rejected before they reach storage.',
-    wide: true,
   },
 ];
 
-/** Two mock audit rows inside the principals cell: the falsifiable claim
- *  ("even a denial is recorded") shown, not asserted — and STAMPED, because a
- *  permission decision is exactly what the Stamp marks. One tilt, on the
- *  denial (the row the whole section is about). */
-function AuditRows() {
+/** One large audit decision, stamped: mono ledger line + the Stamp at poster
+ *  scale. The falsifiable claim shown, not asserted. */
+function AuditLine({
+  line,
+  stamp,
+  tone,
+  tilt,
+}: {
+  line: string;
+  stamp: string;
+  tone?: 'affirm' | 'event' | 'refuse';
+  tilt?: 'none' | 'up' | 'down';
+}) {
   return (
-    <div class="mt-auto flex flex-col gap-2.5 rounded-lg border border-border bg-surface/80 p-3 font-mono text-xs">
-      <div class="flex items-center justify-between gap-3">
-        <span class="truncate text-ink-muted">create_essays · claude-code</span>
-        <Stamp>Allowed</Stamp>
-      </div>
-      <div class="flex items-center justify-between gap-3">
-        <span class="truncate text-ink-muted">publish_essays · claude-code</span>
-        <Stamp tone="refuse" tilt="down">
-          Denied
-        </Stamp>
-      </div>
-    </div>
+    <li class="flex flex-wrap items-center gap-x-5 gap-y-2 border-t-[1.5px] border-dashed border-border-strong py-5 first:border-t-0 first:pt-0 last:pb-0">
+      <span class="min-w-0 flex-1 truncate font-mono text-sm text-ink-muted">{line}</span>
+      <Stamp tone={tone} tilt={tilt} class="px-3 py-1 text-sm">
+        {stamp}
+      </Stamp>
+    </li>
   );
 }
 
-/** Bento grid: four cells, asymmetric spans for rhythm, three background
- *  treatments (working-ink wash, pop gradient, paper) plus an embedded audit-row
- *  visual so the grid is never text-only. The headline is the page's one
- *  falsifiable trust claim, promoted from a cell. */
+/** The trust act: the falsifiable claim as the headline, the audit ledger
+ *  stamped at poster scale (the mock's floating-stamps moment, grounded in
+ *  real decisions), then the three remaining guarantees as one ticket row. */
 export function TrustBento() {
   return (
-    <section aria-labelledby="home-trust" class="border-t border-border">
-      <div class="mx-auto w-full max-w-5xl px-6 py-20 sm:py-24">
-        <h2 id="home-trust" class={`${SECTION_H2} max-w-3xl`}>
+    <section aria-labelledby="home-trust" class="rm-perf">
+      <div class="mx-auto w-full max-w-6xl px-6 py-20 sm:py-24">
+        <h2 id="home-trust" class={`${SECTION_H2} max-w-3xl lg:text-5xl lg:leading-[1.1]`}>
           Your agent can draft all night. Whether it publishes is up to you.
         </h2>
         <p class="mt-4 max-w-2xl leading-relaxed text-ink-muted">
           Access starts at deny: an agent holds exactly the permissions you grant, publish
           included. Every write, human or agent, runs through one authorized pipeline and lands in
-          the audit log under its own token.
+          the audit log under its own token. Even a denial is recorded, attributed to the exact
+          token that asked.
         </p>
-        <ul class="mt-8 grid gap-4 sm:grid-cols-3">
+        <ul class="mt-10 max-w-3xl">
+          <AuditLine line="02:14 · create_essays · claude-code" stamp="Allowed" />
+          <AuditLine
+            line="02:15 · publish_essays · claude-code"
+            stamp="Denied"
+            tone="refuse"
+            tilt="down"
+          />
+          <AuditLine line="09:31 · publish · you" stamp="Signed off" tone="event" />
+        </ul>
+        <ul class="mt-12 grid gap-4 sm:grid-cols-3">
           {TRUST.map((c) => (
-            <li
-              class={`rm-scroll-rise flex flex-col gap-3 rounded-xl border-[1.5px] p-6 ${
-                c.wide
-                  ? c.visual
-                    ? 'border-accent/60 bg-accent-soft sm:col-span-2'
-                    : 'border-pop/40 bg-gradient-to-br from-pop-soft/70 to-surface sm:col-span-2'
-                  : 'border-border bg-surface sm:col-span-1'
-              }`}
-            >
+            <li class="rm-scroll-rise flex flex-col gap-3 rounded-xl border-[1.5px] border-border bg-surface p-6">
               <span class="text-accent-text">{c.icon}</span>
               <h3 class="font-display text-xl font-semibold tracking-tight text-ink">{c.lead}</h3>
               <p class="leading-relaxed text-ink-muted">{c.body}</p>
-              {c.visual ? <AuditRows /> : null}
             </li>
           ))}
         </ul>
@@ -634,10 +643,14 @@ const MILL_PIECES: { icon: unknown; label: string; body: string }[] = [
  */
 export function RunYourOwnMill() {
   return (
-    <section id="run" aria-labelledby="home-run" class="scroll-mt-20 border-t border-border">
-      <div class="mx-auto grid w-full max-w-5xl gap-10 px-6 py-20 sm:py-24 lg:grid-cols-[1fr_24rem] lg:gap-16">
+    <section
+      id="run"
+      aria-labelledby="home-run"
+      class="rm-dark-act scroll-mt-20 bg-canvas text-ink"
+    >
+      <div class="mx-auto grid w-full max-w-6xl gap-10 px-6 py-20 sm:py-28 lg:grid-cols-[1fr_24rem] lg:gap-16">
         <div class="flex flex-col gap-4">
-          <h2 id="home-run" class={SECTION_H2}>
+          <h2 id="home-run" class={`${SECTION_H2} lg:text-6xl lg:leading-[1.05]`}>
             Run your own mill.
           </h2>
           <p class="max-w-2xl leading-relaxed text-ink-muted">
@@ -714,15 +727,9 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
 }`;
 
   return (
-    <section
-      id="connect"
-      aria-labelledby="home-connect"
-      class="scroll-mt-20 border-y border-border bg-accent-soft"
-    >
+    <section id="connect" aria-labelledby="home-connect" class="rm-perf scroll-mt-20">
       <div class="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-20 sm:py-24">
         <div class="flex flex-col gap-3">
-          {/* ink-muted, not ink-subtle: ink-subtle is only AA on canvas/surface,
-              and dips below 4.5:1 on the accent-soft band in dark mode. */}
           <span class="font-mono text-eyebrow font-medium tracking-[0.14em] text-ink-muted uppercase">
             For agents
           </span>
@@ -799,11 +806,8 @@ export function PublishedIndex({
 }) {
   const populated = sections.filter(({ docs }) => docs.length > 0);
   return (
-    <section
-      id="writing"
-      aria-labelledby="home-writing"
-      class="mx-auto w-full max-w-5xl scroll-mt-20 px-6 py-20 sm:py-24"
-    >
+    <section id="writing" aria-labelledby="home-writing" class="rm-perf scroll-mt-20">
+      <div class="mx-auto w-full max-w-6xl px-6 py-20 sm:py-24">
       <h2 id="home-writing" class={SECTION_H2}>
         This site is a remill
       </h2>
@@ -852,6 +856,7 @@ export function PublishedIndex({
           }
         />
       )}
+      </div>
     </section>
   );
 }

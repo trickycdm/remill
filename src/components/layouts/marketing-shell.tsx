@@ -15,10 +15,10 @@ import { Wordmark } from '@/components/auth-shell';
 const NAV_LINK =
   'text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-// Links on the theme-fixed footer band (cyan on ink-navy, the dark theme's
-// own audited pairing; literals sanctioned only inside .rm-footer-band).
+// Links inside the dark act (the footer band): plain accent-text — the
+// rm-dark-act scheme flip resolves it to the audited dark cyan in BOTH themes.
 const BAND_LINK =
-  'text-sm font-medium text-[#4dd8e6] transition-colors hover:text-[#71e2ec] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4dd8e6]';
+  'text-sm font-medium text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export function MarketingShell({ children }: { children?: unknown }) {
   return (
@@ -60,21 +60,19 @@ export function MarketingShell({ children }: { children?: unknown }) {
         {children}
       </main>
 
-      {/* The credibility layer, closed in the gig-poster register: the footer
-          band is theme-FIXED dark (.rm-footer-band, tailwind.css) so the page
-          signs off the same way in both themes. The colour literals below are
-          that band's own audited dark pairings (cream text, cyan links) —
-          sanctioned here only, because light-dark() tokens would flip against
-          the fixed background. TODO(release): add the repository + license
-          links when the source goes public. */}
-      <footer class="rm-footer-band">
-        <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-12 sm:flex-row sm:items-start sm:justify-between">
+      {/* The credibility layer, closed in the gig-poster register: rm-dark-act
+          flips this subtree onto the dark scheme, so every token here resolves
+          to its audited dark value in BOTH themes — the page signs off on navy
+          with zero literal colours. It sits flush under the marketing #run
+          band (also a dark act), forming one continuous close.
+          TODO(release): add the repository + license links when the source
+          goes public. */}
+      <footer class="rm-dark-act bg-canvas text-ink">
+        <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 border-t border-border px-6 py-12 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex flex-col gap-1.5">
-            {/* Recolored by the .rm-footer-band scoped rules (a class override
-                would lose the same-property cascade to the base text-ink). */}
             <Wordmark />
-            <p class="text-xs text-[#bcb9c4]">A lightweight, agent-native CMS.</p>
-            <p class="text-xs text-[#bcb9c4]">
+            <p class="text-xs text-ink-muted">A lightweight, agent-native CMS.</p>
+            <p class="text-xs text-ink-muted">
               Live on Cloudflare Workers since July 2026. This site runs the product.
             </p>
           </div>

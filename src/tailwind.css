@@ -370,21 +370,19 @@
   box-shadow: 3px 3px 0 var(--color-pop);
 }
 
-/* The footer band: theme-FIXED dark literals (ink-navy stock, cream text,
-   cyan links — the dark theme's own audited pairings), identical in light and
-   dark. The one sanctioned exception to light-dark() tokens; do not reuse. */
-.rm-footer-band {
-  background: #191c30;
-  color: #f2ecdd;
+/* Perforation rule: the page's section separator — a full-bleed dashed rule
+   in the working ink, the ticket-edge tell that replaces tonal banding. */
+.rm-perf {
+  border-top: 2px dashed color-mix(in oklab, var(--color-accent) 55%, transparent);
 }
-/* The wordmark on the band: cream label + the dark theme's overlap-violet nib,
-   whatever the page theme (utility overrides would lose the same-property
-   cascade to the component's base text-ink; a scoped element rule wins). */
-.rm-footer-band span {
-  color: #f2ecdd;
-}
-.rm-footer-band svg {
-  color: #a89cf0;
+
+/* The dark act: force an element subtree onto the dark scheme so every
+   light-dark() token inside resolves to its audited dark value, whatever the
+   page theme. The marketing close (the #run band + footer) uses this to sign
+   the page off in the gig-poster register with ZERO literal colours — in dark
+   mode it simply blends with the page. Pair with bg-canvas on the element. */
+.rm-dark-act {
+  color-scheme: dark;
 }
 
 /* Entrance stagger: each direct child rises in sequence (hero choreography).
