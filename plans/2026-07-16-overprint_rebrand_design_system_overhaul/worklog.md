@@ -16,3 +16,5 @@
 | 2026-07-16 18:13 | DONE | All 5 phases complete: PRs #23 #24 #25 #26 #27 (stacked, drafts after #24) |
 | 2026-07-16 19:10 | P5 | Total layout rework to the poster cut: rm-perf perforation rules replace tonal bands; manifesto who-strip; job ticket + six-pressings pills; setlist jobs; stamped audit ledger replaces bento; coupons on stock; page closes into rm-dark-act #run band (color-scheme flip, zero literals) flowing into the footer; footer literals removed |
 | 2026-07-16 19:11 | P5-VERIFY | 409/409 unit; targeted e2e on P5 surfaces 10/10 (axe light+dark); full-suite run degraded by machine load (78 login timeouts, no axe/contrast findings) — CI is the clean gate |
+| 2026-07-16 19:25 | SHIP | All 7 PRs merged to main (merge commits, sequential with mergeability polling); main verified 67/67 e2e + 409/409 unit; tagged v1.5.0; deploy workflow green |
+| 2026-07-16 19:27 | LIVE | remill.org verified: Overprint tokens + Bricolage (30KB woff2 200), violet favicon, theme-color metas, poster layout both themes; branches cleaned |
