@@ -11,6 +11,12 @@ export default tseslint.config(
     },
   },
   {
+    // Plain-JS node scripts (the TS scripts get their globals via the type
+    // checker; eslint's no-undef only fires on untyped .mjs).
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
+  },
+  {
     ignores: [
       'dist/',
       'node_modules/',
