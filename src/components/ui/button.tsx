@@ -1,7 +1,7 @@
 /**
  * Button — the primary action primitive.
  *
- * Variants: primary (iris accent fill), secondary (surface + hairline), ghost
+ * Variants: primary (working-ink fill), secondary (surface + hairline), ghost
  * (transparent), danger (destructive fill), link (inline text action).
  * Sizes: sm | md | lg | icon (square, icon-only — requires `aria-label`).
  *

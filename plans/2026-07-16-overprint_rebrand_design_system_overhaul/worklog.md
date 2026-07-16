@@ -12,3 +12,5 @@
 | 2026-07-16 17:39 | P2-VERIFY | 67/67 e2e clean-state, 409/409 unit (5 new), both-theme screenshots match the mock |
 | 2026-07-16 17:58 | P3 | 404 on-system (overprint 404, token colors); email palette mirrored to Overprint light (+ test pin -> #0078bf); deny rows stamped at 3 audit sites (allow stays Badge); reading templates: no churn needed post-P1 (verified via public-reading e2e + screenshots) |
 | 2026-07-16 17:59 | P3-VERIFY | 67/67 e2e clean-state, 409/409 unit |
+| 2026-07-16 18:12 | P4 | DESIGN_SYSTEM.md rewritten for Overprint (direction, token inventory, contrast rules, typography, Badge-vs-Stamp); A11Y +pink/hover rules; E2E_TESTING +Playwright 1.61.1 reducedMotion workaround note; TECH_DECISIONS D43; CLAUDE.md stack line; stale iris comments swept |
+| 2026-07-16 18:13 | DONE | All 5 phases complete: PRs #23 #24 #25 #26 #27 (stacked, drafts after #24) |
