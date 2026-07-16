@@ -70,9 +70,23 @@ export const RootLayout = jsxRenderer(
             <link rel="alternate" type="application/rss+xml" title={pageTitle} href={feedUrl} />
           ) : null}
 
-          {/* The pen-nib wordmark glyph in iris ink (dark-aware inside the SVG).
-            Served from public/ — self-hosted, CSP-clean. */}
+          {/* The pen-nib wordmark glyph in overlap violet (dark-aware inside
+            the SVG). Served from public/ — self-hosted, CSP-clean. */}
           <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+          {/* Browser chrome color matches the stock in each scheme. */}
+          <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f1e3" />
+          <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#191c30" />
+
+          {/* The display face (Bricolage Grotesque, vendored) is on every
+            page's first paint — preload it so headings never swap late. */}
+          <link
+            rel="preload"
+            href="/fonts/bricolage-grotesque-latin-wght.woff2"
+            as="font"
+            type="font/woff2"
+            crossorigin=""
+          />
 
           <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SNIPPET }} />
 

@@ -44,7 +44,7 @@ export const changelogTemplate: RenderTemplate = {
     return (
       <article class="flex flex-col gap-6">
         <header class="flex flex-col gap-3">
-          <h1 class="font-serif text-3xl font-semibold leading-tight tracking-tight text-ink">
+          <h1 class="font-display text-3xl font-semibold leading-tight tracking-tight text-ink">
             {title}
           </h1>
           {releaseDate || published || typeValue != null ? (

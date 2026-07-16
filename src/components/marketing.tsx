@@ -47,7 +47,7 @@ import type { SiteSettings } from '@/services/settings';
 import type { CollectionDefinition } from '@/fields/types';
 import type { DiscoveryDoc } from '@/services/discovery';
 
-const SECTION_H2 = 'font-serif text-display-sm sm:text-display font-semibold text-ink';
+const SECTION_H2 = 'font-display text-display-sm sm:text-display font-semibold text-ink';
 const LINK =
   'font-medium text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
@@ -107,7 +107,7 @@ export function MarketingHero() {
               Content, milled
             </span>
           </div>
-          <h1 class="max-w-3xl font-serif text-display sm:text-display-lg font-semibold text-balance text-accent-fg">
+          <h1 class="max-w-3xl font-display text-display sm:text-display-lg font-semibold text-balance text-accent-fg">
             Content that works for humans, apps, and agents.
           </h1>
           <p class="max-w-xl text-lg leading-relaxed text-accent-fg">
@@ -170,7 +170,7 @@ export function WhoItsFor() {
       <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-20 sm:py-28">
         <h2
           id="home-who"
-          class="rm-scroll-rise max-w-4xl font-serif text-display sm:text-display-lg font-semibold text-balance text-ink"
+          class="rm-scroll-rise max-w-4xl font-display text-display sm:text-display-lg font-semibold text-balance text-ink"
         >
           A backend where the AI is a citizen, not a shared key.
         </h2>
@@ -274,7 +274,7 @@ export function EverySurface() {
           <span class="text-sm font-medium text-ink-muted">One definition</span>
           <div class="rounded-xl border border-border bg-surface shadow-sm">
             <div class="flex items-baseline justify-between gap-3 border-b border-border px-5 py-4">
-              <span class="font-serif text-lg font-semibold tracking-tight text-ink">Essays</span>
+              <span class="font-display text-lg font-semibold tracking-tight text-ink">Essays</span>
               <span class="font-mono text-xs text-ink-subtle">collection</span>
             </div>
             <ul class="flex flex-col divide-y divide-border px-5">
@@ -475,7 +475,7 @@ export function UseCases() {
               <span class="flex size-10 items-center justify-center rounded-lg bg-accent-soft text-accent-text">
                 {u.icon}
               </span>
-              <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">{u.title}</h3>
+              <h3 class="font-display text-xl font-semibold tracking-tight text-ink">{u.title}</h3>
               <p class="leading-relaxed text-ink-muted">{u.story}</p>
             </li>
           ))}
@@ -558,7 +558,7 @@ export function TrustBento() {
               }`}
             >
               <span class="text-accent-text">{c.icon}</span>
-              <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">{c.lead}</h3>
+              <h3 class="font-display text-xl font-semibold tracking-tight text-ink">{c.lead}</h3>
               <p class="leading-relaxed text-ink-muted">{c.body}</p>
               {c.visual ? <AuditRows /> : null}
             </li>
@@ -695,7 +695,7 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
               1
             </span>
             <div class="flex flex-col gap-2 pt-1">
-              <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">
+              <h3 class="font-display text-xl font-semibold tracking-tight text-ink">
                 Mint a token
               </h3>
               <p class="leading-relaxed text-ink-muted">
@@ -712,7 +712,7 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
               2
             </span>
             <div class="flex flex-col gap-3 pt-1">
-              <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">
+              <h3 class="font-display text-xl font-semibold tracking-tight text-ink">
                 Add remill to your MCP client
               </h3>
               <p class="leading-relaxed text-ink-muted">
@@ -750,7 +750,7 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
               3
             </span>
             <div class="flex flex-col gap-3 pt-1">
-              <h3 class="font-serif text-xl font-semibold tracking-tight text-ink">
+              <h3 class="font-display text-xl font-semibold tracking-tight text-ink">
                 Put it to work
               </h3>
               <p class="leading-relaxed text-ink-muted">
@@ -808,7 +808,7 @@ export function PublishedIndex({
             <section aria-labelledby={`home-${def.slug}`}>
               <h3
                 id={`home-${def.slug}`}
-                class="font-serif text-2xl font-semibold tracking-tight text-ink"
+                class="font-display text-2xl font-semibold tracking-tight text-ink"
               >
                 {def.name}
               </h3>

@@ -40,7 +40,7 @@ export function PageHeader({
             {eyebrow}
           </span>
         ) : null}
-        <As class="font-serif text-display-sm font-semibold tracking-tight text-ink sm:text-display">
+        <As class="font-display text-display-sm font-semibold tracking-tight text-ink sm:text-display">
           {title}
         </As>
         {description ? (

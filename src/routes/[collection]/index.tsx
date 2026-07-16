@@ -36,7 +36,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       <PublicShell settings={settings}>
         <section class="flex flex-col gap-8">
           <header class="flex flex-col gap-2">
-            <h1 class="font-serif text-3xl font-semibold leading-tight tracking-tight text-ink">
+            <h1 class="font-display text-3xl font-semibold leading-tight tracking-tight text-ink">
               {def.name}
             </h1>
             <p class="text-sm text-ink-muted">
@@ -49,7 +49,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
                 <li class="flex flex-col gap-1">
                   <a
                     href={d.path}
-                    class="font-serif text-xl font-semibold text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-sm"
+                    class="font-display text-xl font-semibold text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-sm"
                   >
                     {d.title}
                   </a>

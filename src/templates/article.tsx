@@ -57,7 +57,7 @@ export const articleTemplate: RenderTemplate = {
         ) : null}
 
         <header class="flex flex-col gap-4">
-          <h1 class="font-serif text-4xl font-semibold leading-tight tracking-tight text-ink">
+          <h1 class="font-display text-4xl font-semibold leading-tight tracking-tight text-ink">
             {title}
           </h1>
           {published || ctx.readingMinutes ? (

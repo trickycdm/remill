@@ -49,7 +49,7 @@ export function DocumentView({
   return (
     <article class="flex flex-col gap-6">
       <header>
-        <h1 class="font-serif text-3xl font-semibold tracking-tight text-ink">{title}</h1>
+        <h1 class="font-display text-3xl font-semibold tracking-tight text-ink">{title}</h1>
         {hasLifecycle(def) && doc.publishedAt ? (
           <p class="mt-2 text-sm text-ink-subtle">
             <time datetime={doc.publishedAt}>{doc.publishedAt.slice(0, 10)}</time>

@@ -110,7 +110,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
       {/* Item grants */}
       <section class="mb-10">
-        <h2 class="mb-3 font-serif text-display-sm">Item grants</h2>
+        <h2 class="mb-3 font-display text-display-sm">Item grants</h2>
         {grants.length === 0 ? (
           <p class="text-sm text-ink-subtle">
             No per-document grants. Share a document from its edit page to add one.
@@ -176,7 +176,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
       {/* Token scopes */}
       <section>
-        <h2 class="mb-3 font-serif text-display-sm">Token scopes</h2>
+        <h2 class="mb-3 font-display text-display-sm">Token scopes</h2>
         {tokens.length === 0 ? (
           <p class="text-sm text-ink-subtle">No tokens issued.</p>
         ) : (

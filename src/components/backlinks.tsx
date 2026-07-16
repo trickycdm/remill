@@ -13,7 +13,7 @@ export function Backlinks({ backlinks, surface }: { backlinks: Backlink[]; surfa
     surface === 'public' ? `/${b.collection}/${b.id}` : `/admin/c/${b.collection}/${b.id}`;
   return (
     <section aria-labelledby="rm-backlinks-h" class="mt-4 border-t border-border pt-6">
-      <h2 id="rm-backlinks-h" class="font-serif text-lg font-semibold tracking-tight text-ink">
+      <h2 id="rm-backlinks-h" class="font-display text-lg font-semibold tracking-tight text-ink">
         Referenced by
       </h2>
       <ul class="mt-3 flex flex-col gap-2">

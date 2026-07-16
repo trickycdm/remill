@@ -1,12 +1,27 @@
 @import 'tailwindcss';
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   remill design tokens — "Ink & Paper"
+/* The one webfont: Bricolage Grotesque (OFL, vendored in public/fonts —
+   latin subset, variable wght 500-800, ~30KB). Display headings only; body
+   and mono stay system stacks. Served same-origin (CSP font-src 'self');
+   preloaded in src/layouts.tsx. */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('/fonts/bricolage-grotesque-latin-wght.woff2') format('woff2-variations');
+  font-weight: 500 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+2013-2014, U+2018-201D, U+2026;
+}
 
-   The single source of truth for the admin's visual language. DESIGN_SYSTEM.md
-   explains intent and usage; it never restates these values. Components consume
-   these tokens through Tailwind utilities (bg-surface, text-ink, border-border,
-   text-danger, …) — never raw hex.
+/* ═══════════════════════════════════════════════════════════════════════════
+   remill design tokens — "Overprint"
+
+   The single source of truth for the platform's visual language (D43). Two
+   inks on cream stock in light; the "gig poster" register (cyan + pink on
+   ink-navy) in dark. DESIGN_SYSTEM.md explains intent and usage; it never
+   restates these values. Components consume these tokens through Tailwind
+   utilities (bg-surface, text-ink, border-border, text-danger, …) — never
+   raw hex. scripts/check-contrast.mjs audits every promised pairing.
 
    ── Theming mechanism ───────────────────────────────────────────────────────
    Every colour token declares BOTH its light and dark value in one line via the
@@ -32,15 +47,13 @@
 
 @theme {
   /* ── Typography ────────────────────────────────────────────────────────────
-     Three roles, all from high-quality system stacks (no external fonts —
-     Workers/CSP + offline dev). Serif = editorial display + wordmark; sans =
-     UI/body; mono = eyebrows, metadata, IDs, timestamps, code. */
+     Three roles: display = Bricolage Grotesque (the one webfont, @font-face
+     above, sans fallback of a similar metric class); sans = UI/body; mono =
+     eyebrows, metadata, IDs, timestamps, code. */
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
     Arial, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
-  --font-serif:
-    'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', ui-serif,
-    Georgia, Cambria, 'Times New Roman', serif;
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
   --font-mono:
     ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono',
     monospace;
@@ -49,7 +62,7 @@
   --text-eyebrow: 0.6875rem; /* 11px mono-caps label */
   --text-eyebrow--line-height: 1;
   --text-eyebrow--letter-spacing: 0.14em;
-  --text-display: 2.25rem; /* serif page title */
+  --text-display: 2.25rem; /* display page title */
   --text-display--line-height: 1.08;
   --text-display--letter-spacing: -0.02em;
   --text-display-sm: 1.5rem;
@@ -57,61 +70,80 @@
   --text-display-sm--letter-spacing: -0.015em;
   --text-display-lg: 3.25rem; /* marketing hero headline */
   --text-display-lg--line-height: 1.05;
-  --text-display-lg--letter-spacing: -0.025em;
+  --text-display-lg--letter-spacing: -0.03em; /* grotesque tracks tighter than the old serif */
 
-  /* ── Neutrals — warm paper & ink ───────────────────────────────────────────
-     The editorial signature: warm (not cold-grey) paper in light, a warm
-     "reading-lamp" espresso in dark. */
-  --color-canvas: light-dark(#f2efe7, #16130f); /* app background */
-  --color-surface: light-dark(#fbf9f4, #1e1a15); /* cards, panels, bars */
-  --color-surface-raised: light-dark(#fffdf8, #26201a); /* dialogs, popovers, menus */
-  --color-hover: light-dark(#ece7dc, #2b241c); /* subtle hover / pressed fill */
+  /* ── Neutrals — cream stock / ink-navy stock ───────────────────────────────
+     Light is two-ink print on cream; dark is the "gig poster" register on
+     deep ink-navy. Text ink is a deep blue-slate, never pure black. */
+  --color-canvas: light-dark(#f6f1e3, #191c30); /* app background */
+  --color-surface: light-dark(#fbf8ee, #232741); /* cards, panels, bars */
+  --color-surface-raised: light-dark(#fffdf6, #2a2f4e); /* dialogs, popovers, menus */
+  --color-hover: light-dark(#ece5d2, #2e3452); /* subtle hover / pressed fill */
 
-  --color-ink: light-dark(#1c1a16, #ece6db); /* primary text — 7.8:1+ on surface */
-  --color-ink-muted: light-dark(#56514a, #b4aa9a); /* secondary text — 7.8:1 / 7.5:1 */
-  --color-ink-subtle: light-dark(#6c665a, #948a79); /* meta/placeholder — AA on the darkest paper: 5.0:1 on canvas, 5.4:1 on surface / 5.3:1 dark */
+  --color-ink: light-dark(#23364a, #f2ecdd); /* primary text — 11:1 / 12.4:1 on surface */
+  --color-ink-muted: light-dark(#4a5c6e, #bcb9c4); /* secondary text — 6.5:1 / 7.6:1 on surface */
+  --color-ink-subtle: light-dark(#566778, #a3a0b2); /* meta/placeholder — AA even on the hover fill (4.6:1 / 4.8:1), the darkest surface text can sit on (axe reads hovered rows) */
 
-  --color-border: light-dark(#e7e1d4, #322b22); /* hairline rules (non-text) */
-  --color-border-strong: light-dark(#d4ccbb, #453c30); /* input / divider edges */
+  --color-border: light-dark(#ddd6c6, #333858); /* hairline rules (non-text) */
+  --color-border-strong: light-dark(#c9c0aa, #454b6e); /* input / divider edges */
 
-  /* ── Accent — iris ink (muted blue-violet) ─────────────────────────────────
-     One memorable, calm accent: fountain-pen ink on paper. Deliberately
-     distinct in hue from all four semantics so status never reads as "brand". */
-  --color-accent: light-dark(#4b44a3, #6058c9); /* solid fill — white fg AA (7.9:1 / 5.7:1) */
-  --color-accent-hover: light-dark(#3b3488, #746cdb);
-  --color-accent-fg: #ffffff; /* text/icon on an accent fill */
-  --color-accent-text: light-dark(#4b44a3, #b3a9f5); /* accent as link/label text — 7.4:1 / 8.3:1 */
-  --color-accent-soft: light-dark(#e9e7f7, #2a2452); /* tinted wash: active nav, selection */
+  /* ── Working ink — riso blue (light) / cyan (dark) ─────────────────────────
+     The everyday accent: actions, links, active nav, focus, selection. The
+     FILL/TEXT split matters: `accent` is tuned for accent-fg text ON it;
+     `accent-text` is tuned to BE text on stock. accent-fg is theme-aware —
+     white on blue in light, navy on cyan in dark — so any accent fill is AA
+     in both themes without per-site overrides. */
+  --color-accent: light-dark(#0078bf, #4dd8e6); /* solid fill — accent-fg AA (4.7:1 / 9.3:1) */
+  --color-accent-hover: light-dark(#0069a8, #71e2ec);
+  --color-accent-fg: light-dark(#ffffff, #10233c); /* text/icon on an accent fill */
+  --color-accent-text: light-dark(#00639c, #4dd8e6); /* accent as link/label text — 5.7:1 / 9.8:1 */
+  --color-accent-soft: light-dark(#ddeaf3, #14364a); /* tinted wash: active nav, selection */
 
-  --color-ring: light-dark(#4b44a3, #8f86ea); /* focus ring — visible on paper & ink */
-  --color-overlay: light-dark(rgba(38, 32, 25, 0.42), rgba(8, 6, 4, 0.62)); /* modal backdrop */
+  /* ── Pop ink — fluoro pink (events only) ───────────────────────────────────
+     The second ink is an EVENT, not a workhorse: denials, publish moments,
+     marketing pop (halftones, offset shadows, stamps). `pop` is graphics /
+     large-bold ONLY (3.4:1 / 5.4:1 on canvas — below body AA by design);
+     `pop-text` is the text-safe form. Never white text on a pop fill. */
+  --color-pop: light-dark(#ef2c9b, #ff48b0);
+  --color-pop-text: light-dark(#b8156e, #ff77c4); /* pink as text — 5.5:1 / 6.0:1 */
+  --color-pop-soft: light-dark(#fbe3ef, #3d1a30); /* tinted wash for pop-text chips */
+
+  /* ── Overlap violet — the two inks multiplied ──────────────────────────────
+     Where blue and pink overprint: the mark at small sizes (wordmark nib,
+     favicon) and continuity accents. Graphic-only (6.2:1 / 6.9:1 on canvas). */
+  --color-overlap: light-dark(#5348b8, #a89cf0);
+
+  --color-ring: light-dark(#0078bf, #4dd8e6); /* focus ring — 4.2:1 / 9.8:1 vs canvas */
+  --color-overlay: light-dark(rgba(35, 42, 58, 0.45), rgba(6, 8, 18, 0.62)); /* modal backdrop */
 
   /* ── Semantic — success / warning / danger / info ──────────────────────────
      Base token = text-safe tone (AA on surface AND on its own -soft wash, both
      themes). `-soft` = tinted background for badges/toasts/inline notices.
-     Never rely on colour alone — components always pair colour with a label. */
-  --color-success: light-dark(#276b41, #5fca8a); /* text 6.2:1 / 8.5:1 on surface */
-  --color-success-soft: light-dark(#e6f2ea, #16341f);
-  --color-warning: light-dark(#8a5a10, #e0a94e); /* text 5.7:1 / 6.6:1 */
-  --color-warning-soft: light-dark(#f6ead2, #3a2a10);
-  --color-danger: light-dark(#b23124, #ef8377); /* text 5.8:1 / 6.1:1 */
-  --color-danger-soft: light-dark(#f8e2de, #3d1a15);
-  --color-danger-solid: light-dark(#b23124, #c03a2b); /* destructive fill — white fg AA (6.3:1 / 5.0:1) */
-  --color-info: light-dark(#0f6f86, #59b6d0); /* text 5.4:1 / 5.8:1 */
-  --color-info-soft: light-dark(#dcecf1, #10333d);
+     Danger stays RED — deliberately distinct from pop pink so a destructive
+     control never reads as brand pop (and vice versa). Never rely on colour
+     alone — components always pair colour with a label. */
+  --color-success: light-dark(#22703f, #5fca8a); /* text 5.7:1 / 7.2:1 on surface */
+  --color-success-soft: light-dark(#e2efe2, #143424);
+  --color-warning: light-dark(#8a5a10, #e0a94e); /* text 5.6:1 / 6.9:1 */
+  --color-warning-soft: light-dark(#f4e8cd, #3a2f18);
+  --color-danger: light-dark(#b02e21, #f08a7e); /* text 6.1:1 / 6.0:1 */
+  --color-danger-soft: light-dark(#f8e0da, #3f1c20);
+  --color-danger-solid: light-dark(#b02e21, #c03a2b); /* destructive fill — white fg AA (6.4:1 / 5.4:1) */
+  --color-info: light-dark(#0f6f86, #59b6d0); /* text 5.4:1 / 6.3:1 */
+  --color-info-soft: light-dark(#dcebee, #12333f);
 
-  /* ── Radii — restrained (editorial, not bubbly) ────────────────────────────*/
+  /* ── Radii — hairline card language ────────────────────────────────────────*/
   --radius-sm: 0.25rem; /* 4px  — chips, small controls */
   --radius-md: 0.4375rem; /* 7px  — buttons, inputs */
-  --radius-lg: 0.625rem; /* 10px — cards */
+  --radius-lg: 0.75rem; /* 12px — cards (Overprint panels) */
   --radius-xl: 0.875rem; /* 14px — large panels */
   --radius-2xl: 1.25rem; /* 20px — feature surfaces */
 
-  /* ── Shadows — warm-tinted, soft (depth without drama) ─────────────────────*/
-  --shadow-xs: 0 1px 2px rgba(40, 33, 24, 0.06);
-  --shadow-sm: 0 1px 3px rgba(40, 33, 24, 0.08), 0 1px 2px -1px rgba(40, 33, 24, 0.06);
-  --shadow-md: 0 6px 16px -4px rgba(40, 33, 24, 0.12), 0 2px 6px -2px rgba(40, 33, 24, 0.08);
-  --shadow-lg: 0 20px 40px -12px rgba(40, 33, 24, 0.22);
+  /* ── Shadows — cool-tinted, quiet (hairlines carry structure now) ──────────*/
+  --shadow-xs: 0 1px 2px rgba(25, 28, 48, 0.06);
+  --shadow-sm: 0 1px 3px rgba(25, 28, 48, 0.08), 0 1px 2px -1px rgba(25, 28, 48, 0.06);
+  --shadow-md: 0 5px 12px -4px rgba(25, 28, 48, 0.1), 0 2px 5px -2px rgba(25, 28, 48, 0.07);
+  --shadow-lg: 0 16px 32px -12px rgba(25, 28, 48, 0.18);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -187,7 +219,7 @@
   .rm-prose h2,
   .rm-prose h3,
   .rm-prose h4 {
-    font-family: var(--font-serif);
+    font-family: var(--font-display);
     font-weight: 600;
     letter-spacing: -0.015em;
     margin-block: 1.25em 0.5em;

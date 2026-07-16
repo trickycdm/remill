@@ -47,7 +47,7 @@ export function Drawer({
         panel: `fixed inset-y-0 top-0 bottom-0 m-0 h-dvh max-h-dvh w-[calc(100vw-3rem)] max-w-md border-border bg-surface-raised p-0 text-ink shadow-lg ${sideClass}`,
         body: 'flex h-full flex-col',
         header: 'flex items-start justify-between gap-4 border-b border-border px-5 py-4',
-        title: 'font-serif text-lg leading-snug font-semibold tracking-tight text-ink',
+        title: 'font-display text-lg leading-snug font-semibold tracking-tight text-ink',
         desc: 'text-sm text-ink-muted',
         close:
           '-mr-1 flex size-8 shrink-0 items-center justify-center rounded-md text-ink-subtle transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',

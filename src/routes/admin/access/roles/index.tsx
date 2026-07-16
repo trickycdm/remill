@@ -72,7 +72,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       {/* Create */}
       <Card class="mb-8">
         <CardContent class="pt-6">
-          <h2 class="mb-3 font-serif text-display-sm">New role</h2>
+          <h2 class="mb-3 font-display text-display-sm">New role</h2>
           <form method="post" action="/admin/access/roles" class="flex flex-col gap-4">
             <input type="hidden" name="op" value="create" />
             <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">

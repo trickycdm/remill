@@ -89,7 +89,7 @@ export function PublicShell({
 export function PublicNotFound() {
   return (
     <div class="py-16 text-center">
-      <h1 class="font-serif text-3xl font-semibold tracking-tight text-ink">Not found</h1>
+      <h1 class="font-display text-3xl font-semibold tracking-tight text-ink">Not found</h1>
       <p class="mt-3 text-ink-muted">This page doesn't exist or isn't public.</p>
     </div>
   );
