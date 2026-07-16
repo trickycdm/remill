@@ -88,9 +88,10 @@ run it whenever a token moves; non-obvious ratios are noted inline in `tailwind.
   pairing goes into the contrast script.
 - On a **tinted `-soft` wash**, use `text-ink-muted` (not `ink-subtle`) for
   meta text. Build hierarchy with size/weight, never opacity.
-- **The footer band exception**: `.rm-footer-band` (marketing shell) is theme-
-  FIXED dark and carries its own literal pairings (cream text, cyan links) —
-  the one sanctioned literal-colour surface; do not reuse the pattern.
+- **Dark acts flip the scheme, never the colours**: a section that must render
+  dark in both themes (the marketing close: the `#run` band + footer) sets
+  `.rm-dark-act` (`color-scheme: dark`) + `bg-canvas` — every `light-dark()`
+  token inside resolves to its audited dark value. No literal colours, ever.
 - Always axe any new accent/pop surface in **both** themes.
 
 ### Theming mechanism

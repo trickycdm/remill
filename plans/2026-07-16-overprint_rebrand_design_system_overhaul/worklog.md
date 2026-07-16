@@ -14,3 +14,5 @@
 | 2026-07-16 17:59 | P3-VERIFY | 67/67 e2e clean-state, 409/409 unit |
 | 2026-07-16 18:12 | P4 | DESIGN_SYSTEM.md rewritten for Overprint (direction, token inventory, contrast rules, typography, Badge-vs-Stamp); A11Y +pink/hover rules; E2E_TESTING +Playwright 1.61.1 reducedMotion workaround note; TECH_DECISIONS D43; CLAUDE.md stack line; stale iris comments swept |
 | 2026-07-16 18:13 | DONE | All 5 phases complete: PRs #23 #24 #25 #26 #27 (stacked, drafts after #24) |
+| 2026-07-16 19:10 | P5 | Total layout rework to the poster cut: rm-perf perforation rules replace tonal bands; manifesto who-strip; job ticket + six-pressings pills; setlist jobs; stamped audit ledger replaces bento; coupons on stock; page closes into rm-dark-act #run band (color-scheme flip, zero literals) flowing into the footer; footer literals removed |
+| 2026-07-16 19:11 | P5-VERIFY | 409/409 unit; targeted e2e on P5 surfaces 10/10 (axe light+dark); full-suite run degraded by machine load (78 login timeouts, no axe/contrast findings) — CI is the clean gate |

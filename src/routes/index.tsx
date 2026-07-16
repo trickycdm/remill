@@ -33,8 +33,9 @@ export const onRequestGet = factory.createHandlers(async (c) => {
   const [sections, settings] = await Promise.all([publicOverview(db, nowIso()), getSettings(db)]);
   const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
 
-  // Narrative: promise → who it's for → proof → the jobs → the guarantee →
-  // get your own → wire the agent → the dogfood index.
+  // Narrative (the poster cut): promise → who it's for → the job ticket →
+  // the setlist → the stamped guarantee → wire the agent → the dogfood index
+  // → the dark closing act (get your own), which flows into the footer.
   return c.render(
     <MarketingShell>
       <MarketingHero />
@@ -42,9 +43,9 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       <EverySurface />
       <UseCases />
       <TrustBento />
-      <RunYourOwnMill />
       <AgentQuickstart baseUrl={baseUrl} />
       <PublishedIndex sections={sections} settings={settings} />
+      <RunYourOwnMill />
     </MarketingShell>,
     {
       title: 'remill: content, milled',
