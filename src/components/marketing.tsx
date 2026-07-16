@@ -2,24 +2,26 @@
  * Marketing homepage sections (presentational, Hono JSX — precedent:
  * auth-shell.tsx). Composed by src/routes/index.tsx inside MarketingShell.
  *
- * Design notes (tasteskill + DESIGN_SYSTEM.md): the "editorial-kinetic"
- * revision — same narrative (promise -> who it's for -> proof -> jobs ->
- * guarantee -> run your own -> connect -> dogfood writing), recomposed for
- * visual energy. The iris accent is a real colour field with depth (the
- * rm-hero-field gradient + aurora in tailwind.css); code panels are cut from
- * five to the two that earn their place (the REST wire response and the MCP
- * client config) and everything else the code used to say is shown instead
- * with remill's own UI primitives: the hero activity vignette, the schema
- * card, the tool-call card, the audit rows in the bento. Motion is CSS-only
- * (entrance stagger, scroll-rise, hover lift), all reduced-motion-safe.
- * Exactly two mono-caps eyebrows page-wide (hero + quickstart); every section
- * uses a distinct layout family; zero em-dashes in visible copy. The primary
- * CTA is "Run your own mill" — remill.org is a single-tenant instance, so a
- * cold visitor's conversion is deploying their own, never signing in here.
+ * Design notes (DESIGN_SYSTEM.md, "Overprint"): the Pressrun revision — same
+ * narrative (promise -> who it's for -> proof -> jobs -> guarantee -> run
+ * your own -> connect -> dogfood writing), told in the print-shop language.
+ * The hero sits ON the cream stock (no colour band): overprint title (blue
+ * fill, misregistered pink pass), a pink halftone corner, and the activity
+ * vignette with a second-pass backing. The proof section is a JOB TICKET
+ * (hairline working-ink panels, PROOF -> SIGN-OFF workflow stamps); the
+ * quickstart is a perforated COUPON strip; permission decisions are Stamps
+ * (label carries meaning, ink reinforces). The two code panels that earn
+ * their place stay (REST wire response, MCP client config). Motion is
+ * CSS-only (entrance stagger, scroll-rise), reduced-motion-safe. Exactly two
+ * mono-caps eyebrows page-wide (hero + quickstart); zero em-dashes in
+ * visible copy. The primary CTA is "Run your own mill" — remill.org is a
+ * single-tenant instance, so a cold visitor's conversion is deploying their
+ * own, never signing in here.
  */
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Stamp } from '@/components/ui/stamp';
 import {
   Table,
   TableHead,
@@ -51,16 +53,27 @@ const SECTION_H2 = 'font-display text-display-sm sm:text-display font-semibold t
 const LINK =
   'font-medium text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-// Hero CTAs sit on the solid accent band, so the normal accent-fill Button is
-// invisible here: primary inverts to a paper button with iris-ink label, and
-// the focus ring is forced white so it stays visible on iris.
-// (outline-accent-fg only — adding outline-ring too would lose: Tailwind emits
-// .outline-ring AFTER .outline-accent-fg, and in light mode --color-ring equals
-// the band's --color-accent, making the ring invisible. DESIGN_SYSTEM.md.)
+// Hero CTAs sit on the plain stock (the band hero is gone), so the standard
+// ring token just works. Primary is the working ink with the pop offset
+// shadow (the one print flourish a CTA gets); secondary is a hairline.
 const HERO_CTA_BASE =
-  'inline-flex h-11 items-center justify-center rounded-md px-5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-fg active:translate-y-px';
-const HERO_CTA_PRIMARY = `${HERO_CTA_BASE} bg-surface-raised text-accent-text shadow-sm hover:bg-surface`;
-const HERO_CTA_SECONDARY = `${HERO_CTA_BASE} border border-accent-fg/50 text-accent-fg hover:bg-accent-fg/10`;
+  'inline-flex h-11 items-center justify-center rounded-md px-5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:translate-y-px';
+const HERO_CTA_PRIMARY = `${HERO_CTA_BASE} rm-offset-shadow bg-accent text-accent-fg hover:bg-accent-hover`;
+const HERO_CTA_SECONDARY = `${HERO_CTA_BASE} border-[1.5px] border-accent-text text-accent-text hover:bg-accent-soft`;
+
+/**
+ * The mark at display size: two passes, pop ink under, working ink over,
+ * misregistered by ~1.5px (DESIGN_SYSTEM.md: overprint at >=40px only; below
+ * 24px the mark is always single-ink overlap violet, see Wordmark).
+ */
+function OverprintNib({ class: cls = 'size-10' }: { class?: string }) {
+  return (
+    <span aria-hidden="true" class="relative inline-block">
+      <PenNib class={`${cls} absolute top-[1.5px] left-[1.5px] text-pop`} />
+      <PenNib class={`${cls} relative text-accent-text`} />
+    </span>
+  );
+}
 
 /** One vignette row: icon + event + mono meta, the audit trail as hero art. */
 function VignetteRow({
@@ -89,28 +102,31 @@ function VignetteRow({
 }
 
 /**
- * Asymmetric split hero on the iris field (rm-hero-field: token-mixed
- * gradients + slow aurora, tailwind.css). Left: the promise, staggered in.
- * Right: the product told as a story — an agent drafts overnight, a person
- * presses publish — rendered with remill's real primitives on a paper card
- * floating over the band. All copy directly on iris is full white for AA;
- * hierarchy on the band comes from size and weight, never opacity.
+ * Asymmetric split hero ON the stock (no colour band): overprint title, pink
+ * halftone corner texture behind the vignette, both print devices from
+ * tailwind.css. Left: the promise, staggered in. Right: the product told as
+ * a story — an agent drafts overnight, a person presses publish — rendered
+ * with remill's real primitives, backed by a misregistered second-pass panel.
  */
 export function MarketingHero() {
   return (
-    <section aria-label="Introduction" class="rm-hero-field text-accent-fg">
+    <section aria-label="Introduction" class="relative overflow-hidden border-b border-border">
+      <div
+        aria-hidden="true"
+        class="rm-halftone -top-24 -right-24 hidden size-[26rem] lg:block"
+      />
       <div class="rm-stagger relative mx-auto grid w-full max-w-6xl gap-12 px-6 pt-16 pb-16 sm:pt-20 sm:pb-24 lg:grid-cols-[1fr_minmax(0,25rem)] lg:items-center lg:gap-16">
         <div class="flex flex-col items-start gap-6">
           <div class="flex items-center gap-3">
-            <span aria-hidden="true" class="h-px w-8 bg-accent-fg/40" />
-            <span class="font-mono text-eyebrow font-medium tracking-[0.14em] text-accent-fg uppercase">
+            <span aria-hidden="true" class="h-px w-8 bg-border-strong" />
+            <span class="font-mono text-eyebrow font-medium tracking-[0.14em] text-accent-text uppercase">
               Content, milled
             </span>
           </div>
-          <h1 class="max-w-3xl font-display text-display sm:text-display-lg font-semibold text-balance text-accent-fg">
+          <h1 class="rm-overprint-title max-w-3xl font-display text-display sm:text-display-lg font-bold text-balance">
             Content that works for humans, apps, and agents.
           </h1>
-          <p class="max-w-xl text-lg leading-relaxed text-accent-fg">
+          <p class="max-w-xl text-lg leading-relaxed text-ink-muted">
             A calm GUI for people, a clean API for apps, and permissioned MCP for agents.
           </p>
           <div class="mt-2 flex flex-wrap items-center gap-3">
@@ -126,9 +142,12 @@ export function MarketingHero() {
         <figure aria-label="A draft moving through remill" class="relative w-full max-w-md">
           <div
             aria-hidden="true"
-            class="absolute -inset-3 hidden rounded-2xl border border-accent-fg/20 bg-accent-fg/10 lg:block lg:-rotate-2"
+            class="border-pop/50 bg-pop-soft/50 absolute -inset-3 hidden rounded-2xl border-[1.5px] lg:block lg:-rotate-2"
           />
-          <div class="relative rounded-xl border border-border bg-surface-raised p-5 shadow-lg lg:rotate-1">
+          <span class="absolute -top-5 -right-2 z-10 hidden rotate-6 lg:inline-block">
+            <OverprintNib class="size-11" />
+          </span>
+          <div class="border-accent/60 relative rounded-xl border-[1.5px] bg-surface-raised p-5 shadow-sm lg:rotate-1">
             <ul class="rm-stagger flex flex-col divide-y divide-border">
               <VignetteRow
                 icon={<Bot class="size-4" />}
@@ -190,14 +209,15 @@ export function WhoItsFor() {
 }
 
 // The one code panel in the proof section: keyboard-operable region
-// (WCAG 2.1.1, same treatment as the Table primitive).
+// (WCAG 2.1.1, same treatment as the Table primitive). Job-ticket hairline.
 const PANEL =
-  'overflow-x-auto rounded-lg border border-border bg-surface p-5 font-mono text-[13px] leading-relaxed text-ink shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'overflow-x-auto rounded-lg border-[1.5px] border-accent/60 bg-surface p-5 font-mono text-[13px] leading-relaxed text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-/** Mono type chip for the schema card (field types, flags). */
+/** Mono type chip for the job ticket (field types, flags) — thin outline in
+ *  the working ink, per the Overprint chip language. */
 function TypeChip({ children }: { children?: unknown }) {
   return (
-    <span class="rounded-sm border border-border bg-canvas px-1.5 py-0.5 font-mono text-xs text-ink-muted">
+    <span class="border-accent-text/50 text-accent-text rounded-sm border-[1.5px] px-1.5 py-0.5 font-mono text-xs font-medium">
       {children}
     </span>
   );
@@ -269,12 +289,17 @@ export function EverySurface() {
       </div>
 
       <div class="mt-12 grid gap-10 lg:grid-cols-[minmax(0,21rem)_1fr] lg:gap-12">
-        {/* The one definition, as a schema card. */}
+        {/* The one definition, as a JOB TICKET (hairline working-ink panel;
+            the workflow gate is stamped: a draft is a PROOF, publishing is
+            the SIGN-OFF — the same grantable permission the trust section
+            talks about). */}
         <div class="rm-scroll-rise flex flex-col gap-3">
           <span class="text-sm font-medium text-ink-muted">One definition</span>
-          <div class="rounded-xl border border-border bg-surface shadow-sm">
-            <div class="flex items-baseline justify-between gap-3 border-b border-border px-5 py-4">
-              <span class="font-display text-lg font-semibold tracking-tight text-ink">Essays</span>
+          <div class="border-accent/60 rounded-xl border-[1.5px] bg-surface">
+            <div class="border-accent/60 flex items-baseline justify-between gap-3 border-b-[1.5px] px-5 py-4">
+              <span class="font-display text-lg font-semibold tracking-tight text-ink">
+                Job &middot; Essays
+              </span>
               <span class="font-mono text-xs text-ink-subtle">collection</span>
             </div>
             <ul class="flex flex-col divide-y divide-border px-5">
@@ -290,14 +315,15 @@ export function EverySurface() {
               ))}
             </ul>
             <div class="flex items-center gap-2 border-t border-border px-5 py-4">
-              <Badge tone="neutral">Draft</Badge>
+              <Stamp>Proof</Stamp>
               <ArrowRight aria-hidden="true" class="size-3.5 text-ink-subtle" />
-              <Badge tone="success">Published</Badge>
+              <Stamp tone="event">Sign-off</Stamp>
               <span class="ml-auto font-mono text-xs text-ink-subtle">workflow</span>
             </div>
           </div>
           <p class="text-sm leading-relaxed text-ink-muted">
-            Written in the admin, or by an agent over MCP.
+            Written in the admin, or by an agent over MCP. Drafts are proofs; publishing is the
+            sign-off, a permission you grant.
           </p>
         </div>
 
@@ -349,7 +375,7 @@ export function EverySurface() {
             tabindex={0}
             aria-labelledby="surface-tab-admin"
             data-show="$tab === 'admin'"
-            class="rounded-xl border border-border bg-surface p-4 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            class="border-accent/60 rounded-xl border-[1.5px] bg-surface p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <Table caption="The admin list view remill generates for an Essays collection">
               <TableHead>
@@ -406,7 +432,7 @@ export function EverySurface() {
             data-show="$tab === 'agents'"
             style="display:none"
           >
-            <div class="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-sm">
+            <div class="border-accent/60 flex flex-col gap-4 rounded-xl border-[1.5px] bg-surface p-5">
               <div class="flex items-center gap-2 border-b border-border pb-3">
                 <Bot class="size-4 text-accent-text" />
                 <code class="font-mono text-sm font-semibold text-ink">create_essays</code>
@@ -514,17 +540,21 @@ const TRUST: { icon: unknown; lead: string; body: string; wide: boolean; visual?
 ];
 
 /** Two mock audit rows inside the principals cell: the falsifiable claim
- *  ("even a denial is recorded") shown, not asserted. */
+ *  ("even a denial is recorded") shown, not asserted — and STAMPED, because a
+ *  permission decision is exactly what the Stamp marks. One tilt, on the
+ *  denial (the row the whole section is about). */
 function AuditRows() {
   return (
-    <div class="mt-auto flex flex-col gap-2 rounded-lg border border-border bg-surface/80 p-3 font-mono text-xs">
+    <div class="mt-auto flex flex-col gap-2.5 rounded-lg border border-border bg-surface/80 p-3 font-mono text-xs">
       <div class="flex items-center justify-between gap-3">
         <span class="truncate text-ink-muted">create_essays · claude-code</span>
-        <Badge tone="success">allowed</Badge>
+        <Stamp>Allowed</Stamp>
       </div>
       <div class="flex items-center justify-between gap-3">
         <span class="truncate text-ink-muted">publish_essays · claude-code</span>
-        <Badge tone="danger">denied</Badge>
+        <Stamp tone="refuse" tilt="down">
+          Denied
+        </Stamp>
       </div>
     </div>
   );
@@ -549,12 +579,12 @@ export function TrustBento() {
         <ul class="mt-8 grid gap-4 sm:grid-cols-3">
           {TRUST.map((c) => (
             <li
-              class={`rm-scroll-rise flex flex-col gap-3 rounded-xl border border-border p-6 ${
+              class={`rm-scroll-rise flex flex-col gap-3 rounded-xl border-[1.5px] p-6 ${
                 c.wide
                   ? c.visual
-                    ? 'bg-accent-soft sm:col-span-2'
-                    : 'bg-gradient-to-br from-accent-soft to-surface sm:col-span-2'
-                  : 'bg-surface shadow-sm sm:col-span-1'
+                    ? 'border-accent/60 bg-accent-soft sm:col-span-2'
+                    : 'border-pop/40 bg-gradient-to-br from-pop-soft/70 to-surface sm:col-span-2'
+                  : 'border-border bg-surface sm:col-span-1'
               }`}
             >
               <span class="text-accent-text">{c.icon}</span>
@@ -653,10 +683,24 @@ const EXAMPLE_TOOLS = [
   'publish_essays',
 ] as const;
 
+/** One coupon of the quickstart strip: pop numeral, display heading, body. */
+function Coupon({ n, title, children }: { n: string; title: string; children?: unknown }) {
+  return (
+    <li class="relative flex flex-col gap-2 border-b-[1.5px] border-dashed border-border-strong p-6 last:border-b-0 sm:border-r-[1.5px] sm:border-b-0 sm:last:border-r-0">
+      <span aria-hidden="true" class="text-pop-text absolute top-4 right-5 font-mono text-lg font-bold">
+        {n}
+      </span>
+      <h3 class="pr-8 font-display text-xl font-semibold tracking-tight text-ink">{title}</h3>
+      {children}
+    </li>
+  );
+}
+
 /**
- * Timeline quickstart on the iris-washed band: three markers on a connective
- * rule, ONE code artifact (the MCP client config, with a copy button), and
- * the generated tools shown as chips instead of a curl dump. Conversion target.
+ * Coupon-strip quickstart on the iris-washed band: three perforated coupons
+ * in one ticket (dashed rules = the perforation), ONE code artifact (the MCP
+ * client config, with a copy button), and the generated tools shown as chips
+ * instead of a curl dump. Conversion target.
  */
 export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
   const mcpConfig = `{
@@ -675,7 +719,7 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
       aria-labelledby="home-connect"
       class="scroll-mt-20 border-y border-border bg-accent-soft"
     >
-      <div class="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-20 sm:py-24">
+      <div class="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-20 sm:py-24">
         <div class="flex flex-col gap-3">
           {/* ink-muted, not ink-subtle: ink-subtle is only AA on canvas/surface,
               and dips below 4.5:1 on the accent-soft band in dark mode. */}
@@ -686,87 +730,54 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
             Connect an agent
           </h2>
         </div>
-        <ol class="relative flex flex-col gap-10 before:absolute before:inset-y-3 before:left-4 before:w-px before:bg-border-strong">
-          <li class="relative grid grid-cols-[2rem_1fr] gap-x-5">
-            <span
-              aria-hidden="true"
-              class="relative flex size-8 items-center justify-center rounded-full border border-border-strong bg-surface font-mono text-sm font-semibold text-accent-text"
-            >
-              1
-            </span>
-            <div class="flex flex-col gap-2 pt-1">
-              <h3 class="font-display text-xl font-semibold tracking-tight text-ink">
-                Mint a token
-              </h3>
-              <p class="leading-relaxed text-ink-muted">
-                Sign in and create a bearer token under Access. Scope it to just the collections
-                your agent should touch.
-              </p>
+        <ol class="border-accent/60 grid overflow-hidden rounded-xl border-[1.5px] bg-surface sm:grid-cols-[1fr_1.7fr_1fr]">
+          <Coupon n="1" title="Mint a token">
+            <p class="text-sm leading-relaxed text-ink-muted">
+              Sign in and create a bearer token under Access. Scope it to just the collections
+              your agent should touch.
+            </p>
+          </Coupon>
+          <Coupon n="2" title="Add remill to your MCP client">
+            <p class="text-sm leading-relaxed text-ink-muted">
+              remill speaks streamable HTTP JSON-RPC. Point any MCP client at the endpoint, or
+              call it raw; no SDK required.
+            </p>
+            <div class="relative" data-signals="{copied: false}">
+              <pre
+                id="mcp-config-src"
+                tabindex={0}
+                role="region"
+                aria-label="MCP client configuration"
+                class={CODE_BLOCK}
+              >
+                <code>{mcpConfig}</code>
+              </pre>
+              <button
+                type="button"
+                class="absolute top-2 right-2 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted shadow-xs transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                data-on:click="navigator.clipboard.writeText(document.getElementById('mcp-config-src').textContent); $copied = true; setTimeout(() => $copied = false, 1600)"
+              >
+                <span data-show="!$copied">Copy</span>
+                <span data-show="$copied" style="display:none">
+                  Copied
+                </span>
+              </button>
             </div>
-          </li>
-          <li class="relative grid grid-cols-[2rem_1fr] gap-x-5">
-            <span
-              aria-hidden="true"
-              class="relative flex size-8 items-center justify-center rounded-full border border-border-strong bg-surface font-mono text-sm font-semibold text-accent-text"
-            >
-              2
-            </span>
-            <div class="flex flex-col gap-3 pt-1">
-              <h3 class="font-display text-xl font-semibold tracking-tight text-ink">
-                Add remill to your MCP client
-              </h3>
-              <p class="leading-relaxed text-ink-muted">
-                remill speaks streamable HTTP JSON-RPC. Point any MCP client at the endpoint, or
-                call it raw; no SDK required.
-              </p>
-              <div class="relative" data-signals="{copied: false}">
-                <pre
-                  id="mcp-config-src"
-                  tabindex={0}
-                  role="region"
-                  aria-label="MCP client configuration"
-                  class={CODE_BLOCK}
-                >
-                  <code>{mcpConfig}</code>
-                </pre>
-                <button
-                  type="button"
-                  class="absolute top-2 right-2 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted shadow-xs transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  data-on:click="navigator.clipboard.writeText(document.getElementById('mcp-config-src').textContent); $copied = true; setTimeout(() => $copied = false, 1600)"
-                >
-                  <span data-show="!$copied">Copy</span>
-                  <span data-show="$copied" style="display:none">
-                    Copied
-                  </span>
-                </button>
-              </div>
-            </div>
-          </li>
-          <li class="relative grid grid-cols-[2rem_1fr] gap-x-5">
-            <span
-              aria-hidden="true"
-              class="relative flex size-8 items-center justify-center rounded-full border border-border-strong bg-surface font-mono text-sm font-semibold text-accent-text"
-            >
-              3
-            </span>
-            <div class="flex flex-col gap-3 pt-1">
-              <h3 class="font-display text-xl font-semibold tracking-tight text-ink">
-                Put it to work
-              </h3>
-              <p class="leading-relaxed text-ink-muted">
-                Every collection the token can see becomes a set of tools, gated by its grants:
-              </p>
-              <ul aria-label="Generated MCP tools" class="flex flex-wrap gap-2">
-                {EXAMPLE_TOOLS.map((t) => (
-                  <li class="rounded-md border border-border bg-surface px-2.5 py-1 font-mono text-xs text-ink">
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </li>
+          </Coupon>
+          <Coupon n="3" title="Put it to work">
+            <p class="text-sm leading-relaxed text-ink-muted">
+              Every collection the token can see becomes a set of tools, gated by its grants:
+            </p>
+            <ul aria-label="Generated MCP tools" class="flex flex-wrap gap-2">
+              {EXAMPLE_TOOLS.map((t) => (
+                <li class="rounded-md border border-border bg-canvas px-2.5 py-1 font-mono text-xs text-ink">
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </Coupon>
         </ol>
-        <p class="border-t border-border pt-6 text-sm leading-relaxed text-ink-muted">
+        <p class="text-sm leading-relaxed text-ink-muted">
           remill is single-tenant and self-hosted on Cloudflare Workers. Deploy your own mill and
           the same steps apply.
         </p>

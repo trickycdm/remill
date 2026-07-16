@@ -7,3 +7,6 @@
 | 2026-07-16 17:05 | P1 | Tokens -> Overprint (theme-aware accent-fg), Bricolage @font-face+preload, font-serif->font-display codemod (22 files), favicon+wordmark -> overlap violet, theme-color metas |
 | 2026-07-16 17:05 | P1-FIX | ink-subtle retuned for hovered-row AA (axe reads hover state); found Playwright 1.61.1 dropping use.reducedMotion from default fixtures — worked around in e2e/helpers/auth.ts |
 | 2026-07-16 17:06 | P1-VERIFY | 67/67 e2e green on clean state (incl. all axe sweeps + dark), 404/404 unit, contrast audit all-pass, both-theme screenshots reviewed |
+| 2026-07-16 17:38 | P2 | Homepage recomposed to Pressrun: on-stock hero (overprint title, halftone, second-pass backing, nib chop), job ticket w/ PROOF->SIGN-OFF stamps, stamped audit rows, coupon quickstart, theme-fixed footer band; new ui/stamp.tsx (affirm/event/refuse) |
+| 2026-07-16 17:38 | P2-FIX | Footer wordmark: class override lost same-property cascade to text-ink; fixed with scoped .rm-footer-band rules |
+| 2026-07-16 17:39 | P2-VERIFY | 67/67 e2e clean-state, 409/409 unit (5 new), both-theme screenshots match the mock |

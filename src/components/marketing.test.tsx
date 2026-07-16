@@ -70,6 +70,23 @@ describe('homepage (marketing)', () => {
     expect(html).toMatch(/id="surface-tab-rest"[^>]*tabindex="-1"/);
   });
 
+  it('speaks the Overprint print-shop language: overprint title, stamps, coupons', async () => {
+    const res = await app.request('/', {}, env);
+    const html = await res.text();
+    // The hero headline carries the two-ink overprint treatment.
+    expect(html).toContain('rm-overprint-title');
+    // The workflow gate is stamped PROOF -> SIGN-OFF on the job ticket…
+    expect(html).toContain('Proof');
+    expect(html).toContain('Sign-off');
+    // …and the permission decisions are stamped in the trust bento (the label
+    // carries the meaning; the tilt marks at most one stamp per cluster).
+    expect(html).toContain('Allowed');
+    expect(html).toContain('Denied');
+    // The quickstart is the coupon strip (three steps, one ticket).
+    expect(html).toContain('Mint a token');
+    expect(html).toContain('Put it to work');
+  });
+
   it('emits the discovery head props (canonical, og, feed, favicon)', async () => {
     const res = await app.request('/', {}, env);
     const html = await res.text();

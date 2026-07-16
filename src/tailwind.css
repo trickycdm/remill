@@ -337,58 +337,54 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Marketing homepage — the one surface where the iris accent is a full colour
-   field (DESIGN_SYSTEM.md). Every colour below is mixed from tokens with
-   color-mix (never a new hex), so light/dark resolve for free via light-dark().
+   Marketing homepage — the Overprint print-shop devices (DESIGN_SYSTEM.md).
+   Every colour is a token or a token color-mix, except the footer band, which
+   is DELIBERATELY theme-fixed (the gig-poster register closes the page in
+   both themes).
    ───────────────────────────────────────────────────────────────────────────*/
 
-/* The hero field: solid accent plus two token-mixed radial washes for depth.
-   The white glow is capped at 12% and pinned to the top-right corner, away
-   from the text column, so white-on-iris copy never dips below AA. */
-.rm-hero-field {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  background-color: var(--color-accent);
-  background-image:
-    radial-gradient(
-      70rem 46rem at 88% -18%,
-      color-mix(in oklab, var(--color-accent) 88%, white),
-      transparent 62%
-    ),
-    radial-gradient(
-      54rem 40rem at -10% 116%,
-      color-mix(in oklab, var(--color-accent) 82%, black),
-      transparent 58%
-    );
+/* Halftone: a pink riso dot screen, decorative corner texture only. Kept off
+   the text column and faded with a mask so copy never sits on the dots. */
+.rm-halftone {
+  position: absolute;
+  pointer-events: none;
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--color-pop) 55%, transparent) 1.5px,
+    transparent 2px
+  );
+  background-size: 13px 13px;
+  mask-image: radial-gradient(closest-side, black, transparent);
+  opacity: 0.55;
 }
 
-/* Aurora drift: one blurred iris blob translating very slowly. Decorative
-   atmosphere only (transform-animated, filter static, pointer-events none);
-   it exists only under no-preference so reduced motion gets the plain field. */
-@media (prefers-reduced-motion: no-preference) {
-  .rm-hero-field::before {
-    content: '';
-    position: absolute;
-    top: -34%;
-    right: -12%;
-    width: 52rem;
-    height: 52rem;
-    border-radius: 50%;
-    background: radial-gradient(
-      closest-side,
-      color-mix(in oklab, var(--color-accent) 55%, white),
-      transparent 70%
-    );
-    opacity: 0.22;
-    filter: blur(56px);
-    pointer-events: none;
-    animation: rm-aurora-drift 26s ease-in-out infinite alternate;
-  }
+/* The overprint title: working-ink fill (axe reads the fill), pop-ink second
+   pass as a 2px misregistered shadow. Display sizes only — the misregister
+   turns to mud below ~40px (DESIGN_SYSTEM.md, the mark rules). */
+.rm-overprint-title {
+  color: var(--color-accent-text);
+  text-shadow: 2px 2px 0 color-mix(in oklab, var(--color-pop) 72%, transparent);
 }
-@keyframes rm-aurora-drift {
-  from { transform: translate3d(0, 0, 0) scale(1); }
-  to { transform: translate3d(-9rem, 5rem, 0) scale(1.18); }
+
+/* Offset print shadow for marketing pop elements (CTA pills, feature cards). */
+.rm-offset-shadow {
+  box-shadow: 3px 3px 0 var(--color-pop);
+}
+
+/* The footer band: theme-FIXED dark literals (ink-navy stock, cream text,
+   cyan links — the dark theme's own audited pairings), identical in light and
+   dark. The one sanctioned exception to light-dark() tokens; do not reuse. */
+.rm-footer-band {
+  background: #191c30;
+  color: #f2ecdd;
+}
+/* The wordmark on the band: cream label + the dark theme's overlap-violet nib,
+   whatever the page theme (utility overrides would lose the same-property
+   cascade to the component's base text-ink; a scoped element rule wins). */
+.rm-footer-band span {
+  color: #f2ecdd;
+}
+.rm-footer-band svg {
+  color: #a89cf0;
 }
 
 /* Entrance stagger: each direct child rises in sequence (hero choreography).
@@ -409,8 +405,7 @@
   .rm-anim-slide-left,
   .rm-anim-toast,
   .rm-anim-spin,
-  .rm-stagger > *,
-  .rm-hero-field::before {
+  .rm-stagger > * {
     animation: none !important;
   }
   *,
