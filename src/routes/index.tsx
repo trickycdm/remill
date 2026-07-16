@@ -50,7 +50,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       title: 'remill: content, milled',
       description:
         settings.siteDescription?.trim() ||
-        'A lightweight, agent-native CMS: a calm admin for people, a JSON API for apps, and first-class access for AI agents.',
+        'A lightweight, agent-native CMS: a GUI for people, a JSON API for apps, and permissioned MCP for AI agents.',
       canonical: `${baseUrl}/`,
       ogType: 'website',
       feedUrl: '/rss.xml',

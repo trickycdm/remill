@@ -385,6 +385,17 @@ export function Bot(props: IconProps) {
   );
 }
 
+/** lucide globe — your domain (marketing "pieces of a mill"). */
+export function Globe(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+      <path d="M2 12h20" />
+    </Svg>
+  );
+}
+
 /** lucide pen-tool — the wordmark accent glyph (writing / milling). */
 export function PenNib(props: IconProps) {
   return (
