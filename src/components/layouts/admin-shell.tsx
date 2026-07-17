@@ -29,6 +29,7 @@ import {
   FileText,
   Image,
   Inbox,
+  Waypoints,
   Boxes,
   ShieldCheck,
   Settings,
@@ -58,6 +59,7 @@ export const THEME_INIT_SNIPPET =
 const NAV_ITEMS: readonly NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/admin', icon: Dashboard },
   { key: 'content', label: 'Content', href: '/admin/c', icon: FileText },
+  { key: 'graph', label: 'Graph', href: '/admin/graph', icon: Waypoints },
   { key: 'shared', label: 'Shared with me', href: '/admin/shared', icon: Inbox },
   { key: 'media', label: 'Media', href: '/admin/media', icon: Image },
   { key: 'trash', label: 'Trash', href: '/admin/trash', icon: Trash },
@@ -80,6 +82,7 @@ const NAV_BY_ROLE: Record<string, readonly string[]> = {
   admin: [
     'dashboard',
     'content',
+    'graph',
     'shared',
     'media',
     'trash',
@@ -91,9 +94,9 @@ const NAV_BY_ROLE: Record<string, readonly string[]> = {
   ],
   // Trash shows for the roles that hold `delete` (the page itself scopes rows
   // to what the caller can actually act on; the system author role cannot delete).
-  editor: ['dashboard', 'content', 'shared', 'media', 'trash'],
-  author: ['dashboard', 'content', 'shared', 'media'],
-  reader: ['dashboard', 'content', 'shared', 'media'],
+  editor: ['dashboard', 'content', 'graph', 'shared', 'media', 'trash'],
+  author: ['dashboard', 'content', 'graph', 'shared', 'media'],
+  reader: ['dashboard', 'content', 'graph', 'shared', 'media'],
 };
 
 function visibleNav(role: string): readonly NavItem[] {

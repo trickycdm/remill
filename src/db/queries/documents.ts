@@ -644,3 +644,95 @@ export async function listRevisions(
     savedAt: r.savedAt,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Graph queries (D45) — the /admin/graph explorer's data plumbing.
+// ---------------------------------------------------------------------------
+
+export interface GraphNodeScope {
+  readonly collection: string;
+  /** A DECLARED field key (from titleFieldOf on the validated def) — bound as a
+   *  json_extract path parameter, never interpolated. */
+  readonly titleFieldKey?: string;
+  /** Compiled read predicate, applied IN-QUERY — never post-filter. */
+  readonly accessFilter?: SQL;
+  readonly limit: number;
+}
+
+export interface GraphNodeRow {
+  readonly id: string;
+  readonly status: 'draft' | 'published';
+  readonly publishAt: string | null;
+  readonly title: string | null;
+}
+
+/** Node metadata + ONE json_extract'd title per row — full `data_json` never
+ *  transfers out of D1 (the graph needs no content). Witness required. */
+export async function listGraphNodes(
+  db: Database,
+  scope: GraphNodeScope,
+  _grant: Grant,
+): Promise<GraphNodeRow[]> {
+  const pred = scope.accessFilter
+    ? and(eq(documents.collection, scope.collection), scope.accessFilter)!
+    : eq(documents.collection, scope.collection);
+  const title = scope.titleFieldKey
+    ? sql<string | null>`json_extract(${documents.dataJson}, ${'$.' + scope.titleFieldKey})`
+    : sql<string | null>`NULL`;
+  const rows = await db
+    .select({ id: documents.id, status: documents.status, publishAt: documents.publishAt, title })
+    .from(documents)
+    .where(pred)
+    .orderBy(desc(documents.createdAt))
+    .limit(scope.limit);
+  return rows.map((r) => ({
+    id: r.id,
+    status: r.status as 'draft' | 'published',
+    publishAt: r.publishAt,
+    title: r.title,
+  }));
+}
+
+export interface RelationPair {
+  readonly collection: string;
+  readonly fieldKey: string;
+}
+
+export interface EdgeRow {
+  readonly sourceId: string;
+  readonly sourceCollection: string;
+  readonly fieldKey: string;
+  readonly targetId: string;
+}
+
+/** Every relation edge site-wide in ONE scan of document_index over the given
+ *  (collection, field_key) pairs — covered by document_index_text_idx. Edges
+ *  exist only for `index: true` relation fields (toIndex writes them).
+ *
+ *  ACCESS-BLIND BY DESIGN: document_index has no status/owner columns, so this
+ *  cannot self-gate. SERVICE-ONLY — graphData() authorizes every collection,
+ *  builds the visible node set under compiled read filters, and drops any edge
+ *  whose endpoint is not in it (the backlinks invisible-never-a-leak posture).
+ *  The Grant witnesses prove the caller read-authorized each source collection. */
+export async function listAllEdges(
+  db: Database,
+  pairs: readonly RelationPair[],
+  limit: number,
+  _grants: readonly Grant[],
+): Promise<EdgeRow[]> {
+  if (!pairs.length) return [];
+  const preds = pairs.map(
+    (p) => and(eq(documentIndex.collection, p.collection), eq(documentIndex.fieldKey, p.fieldKey))!,
+  );
+  const rows = await db
+    .select({
+      sourceId: documentIndex.documentId,
+      sourceCollection: documentIndex.collection,
+      fieldKey: documentIndex.fieldKey,
+      targetId: documentIndex.valueText,
+    })
+    .from(documentIndex)
+    .where(and(or(...preds), sql`${documentIndex.valueText} IS NOT NULL`))
+    .limit(limit);
+  return rows.filter((r): r is EdgeRow & { targetId: string } => r.targetId !== null);
+}

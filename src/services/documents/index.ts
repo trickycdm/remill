@@ -1378,3 +1378,120 @@ export async function restoreRevision(
   if (!target) throw new NotFoundError(`Revision ${revision}`);
   return updateDocument(db, principal, collectionSlug, id, target.data, now);
 }
+
+// ---------------------------------------------------------------------------
+// The relation graph (D45) — nodes + edges for /admin/graph.
+// ---------------------------------------------------------------------------
+
+export const GRAPH_MAX_NODES = 1500;
+export const GRAPH_MAX_EDGES = 4000;
+
+export interface GraphNode {
+  readonly id: string;
+  readonly collection: string;
+  readonly title: string;
+  /** 'scheduled' is DERIVED: stored status 'draft' + a pending publishAt (D32). */
+  readonly status: 'draft' | 'published' | 'scheduled';
+}
+
+export interface GraphEdge {
+  readonly source: string;
+  readonly target: string;
+  readonly collection: string;
+  readonly fieldKey: string;
+}
+
+export interface GraphData {
+  readonly nodes: GraphNode[];
+  readonly edges: GraphEdge[];
+  /** Legend entries, definition order — only collections the caller can read. */
+  readonly collections: { readonly slug: string; readonly name: string }[];
+  /** True when either cap clipped the picture — the UI must say so. */
+  readonly truncated: boolean;
+}
+
+/** The whole visible relation graph for one principal. The contentOverview
+ *  scaffolding: read-scoped collections, permissions resolved ONCE, per-
+ *  collection authorize() + compiled read filter applied in-query. Edges come
+ *  from one access-blind document_index scan and are then intersected against
+ *  the visible node set — an item the caller can't read is simply absent, and
+ *  every edge touching it disappears with it (never a leak). Only `index: true`
+ *  relation fields produce edges (non-indexed relations have no index rows).
+ *  `caps` exists for tests; production callers use the defaults. */
+export async function graphData(
+  db: Database,
+  principal: Principal,
+  now: string,
+  caps: { readonly nodes: number; readonly edges: number } = {
+    nodes: GRAPH_MAX_NODES,
+    edges: GRAPH_MAX_EDGES,
+  },
+): Promise<GraphData> {
+  const defs = await listCollectionDefs(db);
+  const readable = await collectionsWithAction(db, principal, 'read');
+  const readableDefs = defs.filter(
+    (d) => (readable === '*' || readable.includes(d.slug)) && d.slug !== 'media',
+  );
+
+  const permissions = await getPrincipalPermissions(db, principal.id);
+  const nodes: GraphNode[] = [];
+  const grants: Grant[] = [];
+  let truncated = false;
+
+  for (const def of readableDefs) {
+    const budget = caps.nodes - nodes.length;
+    if (budget <= 0) {
+      truncated = true;
+      break;
+    }
+    const resolved: ResolvedAccess = { permissions, publicRead: def.access?.publicRead === true };
+    const grant = await authorize(db, principal, 'read', { collection: def.slug }, now, resolved);
+    grants.push(grant);
+    const rows = await dq.listGraphNodes(
+      db,
+      {
+        collection: def.slug,
+        titleFieldKey: titleFieldOf(def),
+        accessFilter: await compileReadFilter(db, principal, def.slug, now, resolved),
+        limit: budget + 1, // +1: detect clipping without a second count query
+      },
+      grant,
+    );
+    if (rows.length > budget) truncated = true;
+    for (const r of rows.slice(0, budget)) {
+      nodes.push({
+        id: r.id,
+        collection: def.slug,
+        title: typeof r.title === 'string' && r.title.trim() ? r.title : r.id,
+        status: r.status === 'draft' && r.publishAt ? 'scheduled' : r.status,
+      });
+    }
+  }
+
+  const pairs: dq.RelationPair[] = [];
+  for (const def of readableDefs) {
+    for (const f of def.fields) {
+      if (f.index && referencesOf(f)) pairs.push({ collection: def.slug, fieldKey: f.key });
+    }
+  }
+  const edgeRows = pairs.length ? await dq.listAllEdges(db, pairs, caps.edges + 1, grants) : [];
+  if (edgeRows.length > caps.edges) truncated = true;
+
+  const visible = new Set(nodes.map((n) => n.id));
+  const edges: GraphEdge[] = edgeRows
+    .slice(0, caps.edges)
+    .filter((e) => visible.has(e.sourceId) && visible.has(e.targetId))
+    .map((e) => ({
+      source: e.sourceId,
+      target: e.targetId,
+      collection: e.sourceCollection,
+      fieldKey: e.fieldKey,
+    }));
+
+  return {
+    nodes,
+    edges,
+    collections: readableDefs.map((d) => ({ slug: d.slug, name: d.name })),
+    truncated,
+  };
+}

@@ -54,6 +54,7 @@ import * as admin_account_index from './routes/admin/account';
 import * as admin_activity_index from './routes/admin/activity';
 import * as admin_c_index from './routes/admin/c';
 import * as admin_collections_index from './routes/admin/collections';
+import * as admin_graph_index from './routes/admin/graph';
 import * as admin_login_index from './routes/admin/login';
 import * as admin_logout from './routes/admin/logout';
 import * as admin_marketplace_index from './routes/admin/marketplace';
@@ -145,6 +146,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.get('/admin/activity', ...admin_activity_index.onRequestGet);
 	app.get('/admin/c', ...admin_c_index.onRequestGet);
 	app.get('/admin/collections', ...admin_collections_index.onRequestGet);
+	app.get('/admin/graph', ...admin_graph_index.onRequestGet);
 	app.get('/admin/login', ...admin_login_index.onRequestGet);
 	app.post('/admin/login', ...admin_login_index.onRequestPost);
 	app.post('/admin/logout', ...admin_logout.onRequestPost);
