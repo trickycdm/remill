@@ -16,7 +16,7 @@
 import type { CollectionDefinition } from '@/fields/types';
 import type { TemplateKey } from '@/templates/keys';
 
-export const PACK_KEYS = ['blog', 'changelog', 'portfolio', 'docs'] as const;
+export const PACK_KEYS = ['blog', 'changelog', 'portfolio', 'docs', 'prompts'] as const;
 export type PackKey = (typeof PACK_KEYS)[number];
 
 export function isPackKey(key: string): key is PackKey {
@@ -174,6 +174,55 @@ export const docsCollectionScaffold: CollectionDefinition = {
   template: 'docs',
 };
 
+/** Prompt-library scaffold: PRIVATE by default — deliberately no `access`
+ *  block, unlike every other pack. Prompts are working material, not published
+ *  pages; they reach readers via admin, authorized tokens, or explicit share
+ *  links, and the owner can flip `publicRead` later. The `variables` tags
+ *  field declares the `{{placeholder}}` names used in the body (advisory —
+ *  the body scan is the truth; see lib/prompt-shape.ts). */
+export const promptsCollectionScaffold: CollectionDefinition = {
+  slug: 'prompts',
+  name: 'Prompts',
+  shape: 'collection',
+  fields: [
+    { key: 'title', type: 'text', required: true, index: true, admin: { showInList: true } },
+    { key: 'slug', type: 'slug', config: { from: 'title' }, unique: true, index: true },
+    {
+      key: 'body',
+      type: 'markdown',
+      required: true,
+      admin: { help: 'The prompt text. Use {{variable}} placeholders for the parts that vary.' },
+    },
+    {
+      key: 'variables',
+      type: 'tags',
+      admin: {
+        help: 'Placeholder names used in the body, e.g. topic, audience — become MCP prompt arguments.',
+      },
+    },
+    {
+      key: 'model',
+      type: 'select',
+      index: true,
+      config: {
+        options: [
+          { value: 'any', label: 'Any model' },
+          { value: 'claude', label: 'Claude' },
+          { value: 'gpt', label: 'GPT' },
+          { value: 'gemini', label: 'Gemini' },
+          { value: 'other', label: 'Other' },
+        ],
+      },
+      admin: { help: 'Which model family this prompt is tuned for.' },
+    },
+    { key: 'tags', type: 'tags', index: true },
+    { key: 'notes', type: 'markdown', admin: { help: 'When and how to use this prompt.' } },
+    { key: 'example_output', type: 'markdown', admin: { help: 'A sample of good output.' } },
+  ],
+  workflow: { draftPublish: true },
+  template: 'prompt',
+};
+
 export const PACKS: Record<PackKey, Pack> = {
   blog: {
     key: 'blog',
@@ -210,6 +259,16 @@ export const PACKS: Record<PackKey, Pack> = {
       'self-referential related links that power backlinks both ways.',
     template: 'docs',
     collections: [docsCollectionScaffold],
+  },
+  prompts: {
+    key: 'prompts',
+    name: 'Prompt library',
+    description:
+      'A private-by-default prompt library: versioned prompt text with {{variable}} ' +
+      'placeholders, model hints, usage notes, and example output. Publish to your team, ' +
+      'not the web — share via tokens or share links.',
+    template: 'prompt',
+    collections: [promptsCollectionScaffold],
   },
 };
 
