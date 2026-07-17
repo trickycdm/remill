@@ -38,6 +38,7 @@ rendered public pages + share links.)
 > `/:collection` index pages, and a customer-focused homepage rework (plan:
 > [`plans/2026-07-09-content_packs_marketplace_homepage_fixes/`](plans/2026-07-09-content_packs_marketplace_homepage_fixes/)).
 > **v1.4.0 shipped 2026-07-10**: the author-centric Content home redesign (`/admin/c` with per-collection counts, freshness, and quick actions via a `contentOverview` service that reuses the compiled read filter, ensuring counts respect access grants).
+> **v1.6.0 shipped 2026-07-17** (plan: [`plans/2026-07-17-prompt_pack_and_nebulae_graph_explorer/`](plans/2026-07-17-prompt_pack_and_nebulae_graph_explorer/)): the prompts content pack (D42 pack #5 — private by default, shared via tokens/links), the MCP prompts primitive (D44 — agent-native prompt library in every client's picker), and the Nebulae graph explorer (D45 — `/admin/graph` 3D canvas galaxy with collection clusters and cross-collection relation arcs). A feature backlog now lives at `plans/BACKLOG.md`.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -111,14 +112,15 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **Templates** `src/templates/` — the render-template registry (the code side of the public
   reading surface); a collection selects a template by name via its `template` key (D41) and can
   pin slots explicitly via `bind` ({title/hero/lead}→field key — the escape hatch convention falls
-  back from). Four shipped templates — `article.tsx`, `changelog.tsx` (dated release entries,
+  back from). Five shipped templates — `article.tsx`, `changelog.tsx` (dated release entries,
   opts out of all article furniture), `portfolio.tsx` (media-first with a link-out), `docs.tsx`
-  (graph-forward doc pages) — each declaring `wants` capability flags that gate the share
+  (graph-forward doc pages), `prompt.tsx` (mono prompt panel with token-highlighted `{{variables}}`,
+  variable chips, model badge; D44/D45) — each declaring `wants` capability flags that gate the share
   island/reading time; `lib/conventions.ts` (parameterized hero/dek/body/meta binding heuristics);
   and `packs.ts` — the content-PACK registry (D42): a pack bundles a template with co-designed
   collection definition(s), installable from the admin **Marketplace** (`/admin/marketplace`),
   MCP `install_pack`, or `POST /api/packs/:key/install` — all through one `installPack` service.
-  Four packs ship: blog, changelog, portfolio, docs. Templates and packs are code; both
+  Five packs ship: blog, changelog, portfolio, docs, prompts (private by default). Templates and packs are code; both
   registries are closed (`keys.ts`, `packs.ts`).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
   (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
@@ -129,16 +131,19 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   links over MCP; public invite consumption at `src/routes/auth/set-password/[token].tsx`, team
   join links at `/auth/join/:token`, "Shared with me" at `/admin/shared`. Admin also surfaces activity
   log at `/admin/activity`, search at `/admin/search` (D28), recoverable delete at `/admin/trash` (D29),
-  revision diff viewer at `/admin/c/:collection/:id/revisions` (D39), and bulk actions at
-  `/admin/c/:collection/bulk` (D39).
-- **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts`); the one
+  revision diff viewer at `/admin/c/:collection/:id/revisions` (D39), bulk actions at
+  `/admin/c/:collection/bulk` (D39), and the Nebulae graph explorer at `/admin/graph` (D45 — 3D relation
+  universe with collection clusters and cross-collection flight paths).
+- **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts` + `prompts.ts`); the one
   module owning the MCP protocol surface (decision D18). Tools include `share_<slug>` (subjectKind
   principal|role|team), `share_link_<slug>` (D26 agent-mintable links), `list_teams` (D24), `search_<slug>`
   — `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
     (D34 parity), `schedule_<slug>` (D32 per-collection scheduled publishing), `poll_events` (D33 outbox
-    change feed), `list_audit` (audit log access), and the D42 marketplace trio — `list_templates` +
-    `list_packs` (ungated discovery) and `install_pack` (manage_schema) — so the agent flow
-    `list_packs → install_pack('blog') → create_articles → publish_articles` needs no schema design.
+    change feed), `list_audit` (audit log access), the D42 marketplace trio — `list_templates` +
+    `list_packs` (ungated discovery) and `install_pack` (manage_schema), and the D44 prompts primitive —
+    items of prompt-shaped collections (`template: 'prompt'`) surfaced as native MCP prompts (`prompts/list`,
+    `prompts/get`) with arguments derived from `{{variables}}` — so the agent flow
+    `list_packs → install_pack('prompts') → create_prompts → list_prompts` needs no schema design.
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
   Person/Service/Agent display persona), `email/` (`EmailTransport` — Resend + styled templates,
   D20 realized; console stub fallback), `base-url.ts` (resolveBaseUrl for minted links),
@@ -151,7 +156,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `layouts/public-shell.tsx` (read-only render), `share-bar.tsx` (reader share UI — copy-link +
   Web Share, D41), `backlinks.tsx` (relation backlinks list); **`src/client/`** browser islands:
   `init.ts` (global loader), `markdown-editor.ts` (CodeMirror 6, D38), `media-picker.ts` (dialog
-  picker, D38), `share.ts` (reader share Web Share API, D41).
+  picker, D38), `share.ts` (reader share Web Share API, D41), `graph.ts` (3D canvas galaxy, D45).
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
 operations go through services → queries. Cron jobs also call services only. All authorization goes through

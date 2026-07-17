@@ -46,6 +46,14 @@ hand-concatenate.
 form** for `data-bind` (`data-bind="intendedRole"`) and a **kebab key** for `data-computed`
 (`data-computed:goals-done` → reference as `$goalsDone`).
 
+**Gotcha — signal names derived from data must be sanitized to identifier form.** A hyphen in a
+signal name parses as SUBTRACTION (`$busy_prompt-library` → `$busy_prompt - library`), and the
+failure is silent: the expression never resolves, so a `data-attr:disabled` bound to it leaves the
+server-rendered attribute in place — the Marketplace install button shipped permanently disabled
+when the first hyphenated pack key landed (2026-07-17). Any signal name built from a data key
+(pack keys, slugs, field keys) must be sanitized (`key.replace(/-/g, '_')`) at the point of
+construction. (Related: nanoid ids can't be signal names at all — see worked example 3.)
+
 **Gotcha — a `data-computed` that reads another `data-computed` silently freezes.** A derived signal
 referencing only *base* signals updates correctly, but one referencing another computed signal freezes
 at its initial value when inputs change. **Inline the whole chain off the base signals** in each

@@ -21,6 +21,12 @@ you meet them.
   `src/test/fixtures.ts`. Setup (`src/test/setup.ts`) mocks `@/lib/logger` and env access so runs are
   deterministic and quiet.
 - Run: `bun run test:run` (CI/one-shot), `bun run test` (watch), `bun run e2e` (Playwright).
+- **Canvas-rendered UI must be verified by SCREENSHOT, not just assertions.** Unit tests, e2e
+  locators, and axe are all blind to what a canvas actually paints — the graph island passed every
+  gate while rendering entirely grey (unresolved `light-dark()` tokens, 2026-07-17); only a
+  Playwright screenshot read back by eye caught it. For any canvas/WebGL surface, capture a
+  screenshot of the real page (a throwaway spec is fine) and LOOK at it before calling the work
+  verified; re-capture after any change to color resolution or draw order.
 
 ## The D1 test harness (better-sqlite3)
 

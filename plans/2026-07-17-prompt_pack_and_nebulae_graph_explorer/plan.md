@@ -1,5 +1,9 @@
 # Prompt library pack + MCP prompts primitive + Nebulae graph explorer
 
+**Status: COMPLETE — 2026-07-17.** All three PRs merged to main: #30 (pack),
+#31 (MCP prompts primitive, D44), #32 (Nebulae graph, D45). Every gate green on
+merged main (tsc · eslint · 436 unit · e2e + axe). Shipped as v1.6.0.
+
 ## Context
 
 Brainstorm (2026-07-17) committed two features from `plans/BACKLOG.md`:
@@ -34,7 +38,7 @@ to this final version + append worklog rows as work proceeds.
 
 ---
 
-## PR 1 — `prompt` template + `prompt-library` pack
+## PR 1 — `prompt` template + `prompts` pack — **DONE** (#30)
 
 1. `src/templates/keys.ts` — add `'prompt'` to `TEMPLATE_KEYS` (exhaustive
    records force registry + packs updates; build enforces).
@@ -90,7 +94,7 @@ only** for body; variables via plain tags input) → publish → **anon context 
 
 ---
 
-## PR 2 — MCP `prompts` primitive
+## PR 2 — MCP `prompts` primitive — **DONE** (#31, D44)
 
 1. **`src/mcp/prompts.ts` (new)** — two functions:
    - `listPromptsForPrincipal(db, principal, now)` → `McpPromptDescriptor[]`
@@ -136,7 +140,7 @@ non-prompt collection → `-32602`; `doc_id` form resolves.
 
 ---
 
-## PR 3 — `/admin/graph` Nebulae explorer
+## PR 3 — `/admin/graph` Nebulae explorer — **DONE** (#32, D45)
 
 1. **`src/db/queries/documents.ts`** — two additions (service-only):
    - `listGraphNodes(db, scope: { collection, titleFieldKey?, accessFilter?,
@@ -223,3 +227,28 @@ token; optionally point Claude Code's MCP client at dev and check the picker.
 PR 3: drag/hover/click on seed data, both admin themes (plate stays dark), OS
 reduced-motion → static plate, lower cap in dev to see `truncated`. `/verify`
 before each commit.
+
+## Revision Log
+
+- 2026-07-17: Pack key `prompt-library` → `prompts` (RE-PLAN). The hyphen broke
+  the Marketplace's Datastar busy-signal (`busy_prompt-library` parses as
+  subtraction — install button permanently disabled). The route now sanitizes
+  signal names; the shorter key also matches the registry grain (docs/blog).
+- 2026-07-17: Island token resolution changed from `getPropertyValue` +
+  canvas-fillStyle normalization to a **probe element** — `light-dark()` custom
+  properties are returned UNRESOLVED by `getPropertyValue`, so every tint
+  rendered grey/black. Found by screenshot verification, not by any test.
+- 2026-07-17: Hover pick radius 14px → 26px (probe-tested: 14px was
+  effectively unhittable on sparse skies).
+- 2026-07-17: e2e title assertion scoped to the heading role (Playwright
+  strict-mode duplicate match — the known exact:true gotcha).
+
+## Open items (post-ship)
+
+- Cloudflare account is at its **max D1 databases** — per-PR preview deploys
+  failed on #31/#32 for quota, not code. Stale preview DBs need pruning.
+- Dirty persisted local e2e D1 required a `.wrangler/state/v3/d1` wipe before
+  each full run (3×) — the `e2e` script should probably wipe first (lesson
+  routed to /learn).
+- remill.org already-installed-`prompts` check before running `install_pack`
+  live (hard 409, no idempotency; MCP/REST accept a `{slug}` override).

@@ -112,6 +112,17 @@ library that builds its own DOM (CodeMirror is the precedent — its
 properties hold `light-dark()` values — never branch on `data-theme` in island
 code, and never restate hex values.
 
+**Exception — consumers that need CONCRETE color values (canvas/WebGL) cannot
+use `var()` and cannot use `getComputedStyle().getPropertyValue('--color-…')`
+either: custom properties return their `light-dark(…)` source UNRESOLVED, which
+every color parser rejects (the graph island shipped grey until a screenshot
+caught it, 2026-07-17).** Resolve through a probe element instead: set
+`probe.style.color = 'var(--color-…)'`, append it inside the target subtree,
+read `getComputedStyle(probe).color` — the browser resolves against that
+subtree's `color-scheme` (so an `.rm-dark-act` plate yields the audited dark
+value in both themes, no theme observer needed). Precedent:
+`resolveColor()` in `src/client/graph.ts`.
+
 ## Typography
 
 Three roles; one self-hosted webfont for the display role, system stacks for the
