@@ -339,4 +339,100 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     const shared = await getSharedDocument(db, grant!, NOW);
     expect(shared.doc.data.title).toBe('Linked from MCP');
   });
+
+  describe('prompts primitive (D44) — prompt-shaped collections as native MCP prompts', () => {
+    async function seedPrompt() {
+      const { createDocument, setPublished } = await import('@/services/documents');
+      await collectionsService.installPack(db, admin, 'prompts', NOW);
+      const doc = await createDocument(
+        db,
+        admin,
+        'prompts',
+        {
+          title: 'Release drafter',
+          body: 'Notes for {{version}} aimed at {{audience}}.',
+          variables: ['version'],
+          model: 'claude',
+          notes: 'Run after tagging.',
+        },
+        NOW,
+      );
+      await setPublished(db, admin, 'prompts', doc.id, true, NOW);
+      // A draft sibling that must never surface.
+      await createDocument(db, admin, 'prompts', { title: 'Half-baked', body: 'wip' }, NOW);
+      return doc;
+    }
+
+    it('initialize advertises the prompts capability', async () => {
+      const r = await mcp(editorToken, 'initialize', { protocolVersion: '2024-11-05' });
+      expect(r.body.result.capabilities.prompts).toBeTruthy();
+    });
+
+    it('prompts/list: published items with declared ∪ scanned arguments; drafts absent', async () => {
+      await seedPrompt();
+      const r = await mcp(readerToken, 'prompts/list');
+      const prompts = r.body.result.prompts as {
+        name: string;
+        description?: string;
+        arguments: { name: string; required: boolean }[];
+      }[];
+      expect(prompts).toHaveLength(1); // the draft never surfaces
+      expect(prompts[0].name).toBe('prompts/release-drafter');
+      expect(prompts[0].description).toContain('Release drafter');
+      // declared ['version'] first, then scanned-only 'audience'.
+      expect(prompts[0].arguments).toEqual([
+        { name: 'version', required: false },
+        { name: 'audience', required: false },
+      ]);
+    });
+
+    it('prompts/list is permission-filtered: anonymous and scope-masked tokens see []', async () => {
+      await seedPrompt();
+      const anon = await mcp(null, 'prompts/list');
+      expect(anon.body.result.prompts).toEqual([]);
+
+      // A reader-role agent whose TOKEN is masked to posts-only: role would
+      // allow, the scope mask must not.
+      const pid = await access.createAgent(db, admin, 'masked-bot', NOW);
+      await access.assignRole(db, admin, pid, 'reader', '*', NOW);
+      const masked = (
+        await access.issueToken(
+          db,
+          admin,
+          { principalId: pid, name: 't', scope: [{ collection: 'posts', action: 'read' }] },
+          NOW,
+        )
+      ).token;
+      const r = await mcp(masked, 'prompts/list');
+      expect(r.body.result.prompts).toEqual([]);
+    });
+
+    it('prompts/get interpolates arguments; missing args stay verbatim; $-patterns survive', async () => {
+      await seedPrompt();
+      const r = await mcp(readerToken, 'prompts/get', {
+        name: 'prompts/release-drafter',
+        arguments: { version: "$&1.2.3$'" },
+      });
+      const msg = r.body.result.messages[0];
+      expect(msg.role).toBe('user');
+      expect(msg.content.text).toBe("Notes for $&1.2.3$' aimed at {{audience}}.");
+      expect(r.body.result.description).toContain('Run after tagging.');
+    });
+
+    it('prompts/get resolves the doc_id name form', async () => {
+      const doc = await seedPrompt();
+      const r = await mcp(readerToken, 'prompts/get', { name: `prompts/${doc.id}` });
+      expect(r.body.result.messages[0].content.text).toContain('Notes for {{version}}');
+    });
+
+    it('prompts/get: unknown names, non-prompt collections, and drafts are ONE -32602 shape', async () => {
+      await seedPrompt();
+      const unknown = await mcp(readerToken, 'prompts/get', { name: 'prompts/nope' });
+      expect(unknown.body.error.code).toBe(-32602);
+      const nonPrompt = await mcp(readerToken, 'prompts/get', { name: 'posts/anything' });
+      expect(nonPrompt.body.error.code).toBe(-32602);
+      const malformed = await mcp(readerToken, 'prompts/get', { name: 'no-slash' });
+      expect(malformed.body.error.code).toBe(-32602);
+    });
+  });
 });

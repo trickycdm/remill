@@ -11,4 +11,5 @@
 | 2026-07-17 | PR 1 start | branch feat/prompt-library-pack created |
 | 2026-07-17 | RE-PLAN | pack key `prompt-library` → `prompts`: hyphen broke the Marketplace Datastar busy-signal (`busy_prompt-library` parses as subtraction, install button stuck disabled); also hardened the route to sanitize signal names |
 | 2026-07-17 | bug found | pre-existing: 6 e2e failures on dirty persisted D1 (reproduced on clean main); wiped .wrangler/state/v3/d1 → 68/68 pass |
-| 2026-07-17 | PR 1 done | template+pack+tests green: tsc, eslint, 425 unit, 68 e2e |
+| 2026-07-17 | PR 1 done | template+pack+tests green: tsc, eslint, 425 unit, 68 e2e; PR #30 |
+| 2026-07-17 | PR 2 done | MCP prompts primitive (prompts.ts + 2 handler cases + couldDo export), 6 new tests, steering Prompts bullet, D44 logged; dirty-D1 wipe needed again before e2e (2nd time — candidate for /learn) |

@@ -164,6 +164,17 @@ tokens** as REST.
     8 MiB (`MAX_MCP_BODY_BYTES`, ≈6 MiB effective file after base64); REST JSON stays 1 MiB;
     files beyond that use REST multipart `POST /api/media`.
   - Resources: published documents exposed as MCP resources for read-heavy clients.
+  - Prompts (D44): published items of PROMPT-SHAPED collections (`def.template === 'prompt'` —
+    the semantic marker, never a hard-coded slug) served via the native `prompts/list` /
+    `prompts/get` primitive. Names are `<collection>/<item-slug>` (`doc_…` id fallback);
+    arguments derive from the item's declared-∪-scanned `{{variables}}` (`lib/prompt-shape.ts`,
+    the same contract the `prompt` reading template renders); interpolation is split/join
+    (never `String.replace` — `$&`-safe), missing args stay verbatim (all args optional).
+    Discovery is permission-filtered via the same `couldDo` intersection as tools; reads go
+    through the document services (authorize + compiled filter). Single-page list (`cursor`
+    ignored, `nextCursor` omitted — spec-compliant). Unknown/unpublished/non-prompt/forbidden
+    all map to ONE `-32602` shape — no existence oracle. `listChanged` deliberately not
+    declared (no push channel; clients poll).
 - **`share_link_<slug>` (D26)** mints an anonymous share link for one document. Visibility and
   gating key on the `share_link` action — not `manage_access`, and not agent-refused. The grant is
   read-only (`actions: ['read']` hardcoded); `expiresAt` is REQUIRED and clamped to 30 days; the
