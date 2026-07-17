@@ -11,12 +11,14 @@ import { articleTemplate } from '@/templates/article';
 import { changelogTemplate } from '@/templates/changelog';
 import { portfolioTemplate } from '@/templates/portfolio';
 import { docsTemplate } from '@/templates/docs';
+import { promptTemplate } from '@/templates/prompt';
 
 const TEMPLATES: Record<TemplateKey, RenderTemplate> = {
   article: articleTemplate,
   changelog: changelogTemplate,
   portfolio: portfolioTemplate,
   docs: docsTemplate,
+  prompt: promptTemplate,
 };
 
 /** Resolve a collection's `template` key to its component, or undefined when the

@@ -18,9 +18,10 @@
 import type { Database } from '@/db/client';
 import type { Principal } from '@/access';
 import { buildToolsForPrincipal, type McpToolContext } from '@/mcp/tools';
+import { getPromptForPrincipal, listPromptsForPrincipal } from '@/mcp/prompts';
 import { listCollections } from '@/services/collections';
 import { getDocument, listDocuments } from '@/services/documents';
-import { AppError, ForbiddenError } from '@/lib/errors';
+import { AppError, ForbiddenError, NotFoundError } from '@/lib/errors';
 
 const PROTOCOL_VERSION = '2024-11-05';
 
@@ -52,7 +53,7 @@ export async function handleMcp(
     case 'initialize':
       return result(id, {
         protocolVersion: PROTOCOL_VERSION,
-        capabilities: { tools: {}, resources: {} },
+        capabilities: { tools: {}, resources: {}, prompts: {} },
         serverInfo: { name: 'remill', version: '1.0.0' },
       });
 
@@ -115,6 +116,33 @@ export async function handleMcp(
       if (!m) return error(id, -32602, 'Invalid resource uri');
       const doc = await getDocument(db, principal, m[1], m[2], now());
       return result(id, { contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(doc, null, 2) }] });
+    }
+
+    case 'prompts/list': {
+      // Published items of prompt-shaped collections (D44). Single-page: we
+      // ignore params.cursor and omit nextCursor — spec-compliant, and since we
+      // never issue cursors a client can never hold a valid one.
+      const prompts = await listPromptsForPrincipal(db, principal, now);
+      return result(id, { prompts });
+    }
+
+    case 'prompts/get': {
+      const name = String(params?.name ?? '');
+      const rawArgs = (params?.arguments ?? {}) as Record<string, unknown>;
+      const args = Object.fromEntries(
+        Object.entries(rawArgs).map(([k, v]) => [k, String(v)]),
+      );
+      try {
+        return result(id, await getPromptForPrincipal(db, principal, name, args, now));
+      } catch (err) {
+        // Unknown, unpublished, non-prompt, and forbidden are ONE shape — a
+        // prompt the principal can't see must not exist differently from one
+        // that doesn't exist (the tools/call FORBIDDEN posture).
+        if (err instanceof NotFoundError || err instanceof ForbiddenError) {
+          return error(id, -32602, `Unknown prompt: ${name}`);
+        }
+        throw err;
+      }
     }
 
     default:

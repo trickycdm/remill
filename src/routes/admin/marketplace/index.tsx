@@ -44,7 +44,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       />
       <div class="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {packs.map((p) => {
-          const busy = `busy_${p.key}`;
+          // Signal names must be identifier-safe — a hyphenated pack key would
+          // silently break the disabled/busy binding (parsed as subtraction).
+          const busy = `busy_${p.key.replace(/-/g, '_')}`;
           return (
             <Card class="flex flex-col">
               <CardHeader>

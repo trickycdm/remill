@@ -59,8 +59,10 @@ export interface McpToolContext {
 
 /** Whether `principal` could ever perform `action` on `collection` — for tool
  *  VISIBILITY. The handler re-authorizes per call (with conditions), so showing a
- *  conditionally-available tool is fine. Honors the token scope mask. */
-function couldDo(
+ *  conditionally-available tool is fine. Honors the token scope mask. Exported
+ *  for the prompts primitive (src/mcp/prompts.ts), which gates discovery with
+ *  the same intersection. */
+export function couldDo(
   perms: { collection: string; action: Action; condition: unknown }[],
   principal: Principal,
   action: Action,
