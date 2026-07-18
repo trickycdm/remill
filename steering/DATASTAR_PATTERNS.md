@@ -253,14 +253,20 @@ pattern as trash's `?restored=`.
 ## Script loading
 
 The Datastar client loads once from a pinned CDN URL in `src/layouts.tsx` (module script — CSP allows
-it). Vite-compiled islands live in `src/client/` and are included from a **route file**:
+it). Vite-compiled islands live in `src/client/` and are included from a route file or shared
+component:
 
 ```tsx
 <Script src="/src/client/markdown-editor.ts" />
 ```
 
-> `vite-ssr-components` only discovers `<Script>` tags in `src/routes/**` — keep them in route files,
-> not shared components.
+> `vite-ssr-components` only registers client entries from files matching the `ssrPlugin`
+> `entry.target` globs in `vite.config.ts` — currently `src/layouts.tsx`, `src/routes/**/*.tsx`, and
+> `src/components/**/*.tsx` (widened for GraphPanel, PR #33). A `<Script>` in an unscanned file
+> **silently drops the island from the production build**: dev serves it fine, prod 500s on the
+> manifest lookup (`Cannot read properties of undefined (reading 'css')`) — and only on pages whose
+> data actually renders the tag, so empty-state smoke checks miss it. If you add a Script tag
+> anywhere new, confirm the file matches a glob (and extend the globs, not the rule, if it doesn't).
 
 The **only** sanctioned `dangerouslySetInnerHTML` for JS is `jsonForScript` (`src/lib/json-for-script.ts`),
 used for `data-signals` payloads — it escapes for safe inline embedding. Never hand-concatenate

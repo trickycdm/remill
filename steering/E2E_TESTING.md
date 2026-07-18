@@ -146,6 +146,13 @@ Accessible-name traps in THIS codebase (each cost a failed run, 2026-07-05/06/08
   `getByRole('cell', { name: title })` matches BOTH the title cell and the checkbox cell. Title
   cell locators on selectable lists take `{ exact: true }` (same family as the row-scoped
   aria-label trap above).
+- **Sidebar-nav clicks scope to the nav landmark** — every admin spec lands on the dashboard,
+  which carries its own quick links (`Marketplace`, `Open the graph`, stat tiles named
+  `Collections`/`Documents`…), so a bare `page.getByRole('link', { name: 'Marketplace' })`
+  strict-violates the moment a page grows a same-named link (getByRole name matching is
+  case-insensitive substring; cost the graph + marketplace specs, 2026-07-18). Click nav via
+  `page.getByLabel('Admin sections').getByRole('link', { name: … })` — and treat any page-level
+  lookup of a name that also appears in the sidebar as a bug.
 
 ## Writing tests
 

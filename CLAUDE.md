@@ -39,6 +39,7 @@ rendered public pages + share links.)
 > [`plans/2026-07-09-content_packs_marketplace_homepage_fixes/`](plans/2026-07-09-content_packs_marketplace_homepage_fixes/)).
 > **v1.4.0 shipped 2026-07-10**: the author-centric Content home redesign (`/admin/c` with per-collection counts, freshness, and quick actions via a `contentOverview` service that reuses the compiled read filter, ensuring counts respect access grants).
 > **v1.6.0 shipped 2026-07-17** (plan: [`plans/2026-07-17-prompt_pack_and_nebulae_graph_explorer/`](plans/2026-07-17-prompt_pack_and_nebulae_graph_explorer/)): the prompts content pack (D42 pack #5 — private by default, shared via tokens/links), the MCP prompts primitive (D44 — agent-native prompt library in every client's picker), and the Nebulae graph explorer (D45 — `/admin/graph` 3D canvas galaxy with collection clusters and cross-collection relation arcs). A feature backlog now lives at `plans/BACKLOG.md`.
+> Post-v1.6.0 fix round (PR #33): the /admin dashboard is now graph-first, rendering the Nebulae graph as its hero via a shared `GraphPanel` component; the collection builder layout is aligned with name/slug identity and behavior sections.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -154,7 +155,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   (LCS line diff for revision compare view, D39), `reading-time.ts` (word-count estimate, D41), `relative-time.ts` (compact "x ago" freshness, deterministic);
   **`src/components/`** Hono JSX with `field-view.tsx` (ViewComponent), `document-view.tsx`,
   `layouts/public-shell.tsx` (read-only render), `share-bar.tsx` (reader share UI — copy-link +
-  Web Share, D41), `backlinks.tsx` (relation backlinks list); **`src/client/`** browser islands:
+  Web Share, D41), `backlinks.tsx` (relation backlinks list), `admin/graph-panel.tsx` (shared GraphPanel wiring the D45 island for both /admin dashboard hero and /admin/graph, with accessible fallback summary); **`src/client/`** browser islands:
   `init.ts` (global loader), `markdown-editor.ts` (CodeMirror 6, D38), `media-picker.ts` (dialog
   picker, D38), `share.ts` (reader share Web Share API, D41), `graph.ts` (3D canvas galaxy, D45).
 
