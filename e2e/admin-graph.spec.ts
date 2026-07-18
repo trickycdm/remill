@@ -15,8 +15,9 @@ test.describe('Admin graph — the Nebulae relation explorer (D45)', () => {
   }) => {
     await loginAsAdmin(page);
 
-    // Reachable from the sidebar nav.
-    await page.getByRole('link', { name: 'Graph' }).click();
+    // Reachable from the sidebar nav (scoped: the dashboard's own "Open the
+    // graph" link would otherwise collide under strict mode).
+    await page.getByLabel('Admin sections').getByRole('link', { name: 'Graph' }).click();
     await page.waitForURL('**/admin/graph');
     await expect(page.getByRole('heading', { name: 'Graph' })).toBeVisible();
 

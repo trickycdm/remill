@@ -7,7 +7,11 @@ import path from 'path';
 export default defineConfig({
   plugins: [
     cloudflare(),
-    ssrPlugin({ entry: { target: ['src/layouts.tsx', 'src/routes/**/*.tsx'] } }),
+    // Components are scanned too: shared panels may own their island's <Script>
+    // (GraphPanel carries /src/client/graph.ts for both /admin and /admin/graph).
+    ssrPlugin({
+      entry: { target: ['src/layouts.tsx', 'src/routes/**/*.tsx', 'src/components/**/*.tsx'] },
+    }),
     tailwindcss(),
   ],
   publicDir: 'public',

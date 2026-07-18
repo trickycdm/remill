@@ -434,8 +434,13 @@ export function CollectionBuilder({
       data-on:submit={`@post('${action}', {contentType: 'form'})`}
     >
       {/* ── Identity ──────────────────────────────────────────────────────────── */}
-      <div class="grid gap-5 sm:grid-cols-2">
-        <FormField fieldId="col-name" label="Name" required>
+      <div class="grid items-start gap-5 sm:grid-cols-2">
+        <FormField
+          fieldId="col-name"
+          label="Name"
+          required
+          description="Shown across the admin, the API, and public pages."
+        >
           <Input id="col-name" name="name" value={def?.name} placeholder="Projects" required />
         </FormField>
         <FormField
@@ -457,29 +462,31 @@ export function CollectionBuilder({
         </FormField>
       </div>
 
-      <div class="grid gap-5 sm:grid-cols-2">
-        <FormField
-          fieldId="col-shape"
-          label="Shape"
-          description={isProtected ? 'A protected collection cannot change its shape.' : 'A collection has many documents; a singleton has exactly one.'}
-        >
-          <Select id="col-shape" name="shape" disabled={isProtected}>
-            <option value="collection" selected={def?.shape !== 'singleton'}>
-              collection
-            </option>
-            <option value="singleton" selected={def?.shape === 'singleton'}>
-              singleton
-            </option>
-          </Select>
-          {isProtected ? <input type="hidden" name="shape" value={def?.shape} /> : null}
-        </FormField>
-
-        <fieldset class="flex flex-col gap-3">
-          <legend class="text-sm font-medium text-ink">Options</legend>
+      {/* ── Behaviour ─────────────────────────────────────────────────────────── */}
+      <fieldset class="flex flex-col gap-4 border-t border-border pt-6">
+        <legend class="float-left w-full font-display text-lg font-semibold tracking-tight text-ink">
+          Behaviour
+        </legend>
+        <div class="grid items-start gap-5 sm:grid-cols-2">
+          <FormField
+            fieldId="col-shape"
+            label="Shape"
+            description={isProtected ? 'A protected collection cannot change its shape.' : 'A collection has many documents; a singleton has exactly one.'}
+          >
+            <Select id="col-shape" name="shape" disabled={isProtected}>
+              <option value="collection" selected={def?.shape !== 'singleton'}>
+                collection
+              </option>
+              <option value="singleton" selected={def?.shape === 'singleton'}>
+                singleton
+              </option>
+            </Select>
+            {isProtected ? <input type="hidden" name="shape" value={def?.shape} /> : null}
+          </FormField>
           <FormField
             fieldId="col-lifecycle"
             label="Lifecycle"
-            description="Draft & publish for authored content; none for record-like data (no status, no publish step)."
+            description="Draft & publish for authored content; none for record-like data."
           >
             <Select id="col-lifecycle" name="workflow_lifecycle">
               <option value="publish" selected={lifecycleValueOf(def) === 'publish'}>
@@ -493,14 +500,10 @@ export function CollectionBuilder({
               </option>
             </Select>
           </FormField>
-          <label class="flex items-center gap-2.5 text-sm text-ink-muted">
-            <Toggle name="access_public_read" checked={def?.access?.publicRead} />
-            Public read access
-          </label>
           <FormField
             fieldId="col-render-mode"
             label="Public rendering"
-            description="Branded page renders inside the site shell; raw HTML page serves the first html field as a standalone document (needs an html field)."
+            description="Branded page renders inside the site shell; raw HTML serves the first html field as a standalone document."
           >
             <Select id="col-render-mode" name="render_mode">
               <option value="shell" selected={def?.renderMode !== 'raw'}>
@@ -511,12 +514,24 @@ export function CollectionBuilder({
               </option>
             </Select>
           </FormField>
-        </fieldset>
-      </div>
+          <div class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium text-ink">Access</span>
+            <p class="text-[13px] leading-normal text-ink-muted">
+              Anyone can read published documents without signing in.
+            </p>
+            <label class="flex min-h-9 items-center gap-2.5 text-sm text-ink-muted">
+              <Toggle name="access_public_read" checked={def?.access?.publicRead} />
+              Public read access
+            </label>
+          </div>
+        </div>
+      </fieldset>
 
       {/* ── Fields ────────────────────────────────────────────────────────────── */}
       <fieldset class="flex flex-col gap-3 border-t border-border pt-6">
-        <legend class="font-display text-lg font-semibold tracking-tight text-ink">Fields</legend>
+        <legend class="float-left w-full font-display text-lg font-semibold tracking-tight text-ink">
+          Fields
+        </legend>
         <p class="text-sm text-ink-muted">
           Each field defines one column of the document. A field must have a key and a type.
           Indexed fields are queryable and sortable; a unique field must also be indexed.
