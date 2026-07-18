@@ -19,8 +19,9 @@ test.describe('Marketplace — the content-pack surface (D42)', () => {
   }) => {
     await loginAsAdmin(page);
 
-    // Reachable from the sidebar nav.
-    await page.getByRole('link', { name: 'Marketplace' }).click();
+    // Reachable from the sidebar nav (scoped: the dashboard header's
+    // Marketplace quick action would otherwise collide under strict mode).
+    await page.getByLabel('Admin sections').getByRole('link', { name: 'Marketplace' }).click();
     await page.waitForURL('**/admin/marketplace');
 
     // The blog pack card: name, template, target collection, installed badge.
