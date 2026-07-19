@@ -39,8 +39,9 @@ describe('prompts pack scaffold', () => {
     expect(PACKS.prompts.template).toBe('prompt');
   });
 
-  it('is PRIVATE by default — the one pack with no publicRead (privacy pin)', () => {
+  it('is PRIVATE by default — the one pack pinning access.private (D46 privacy pin)', () => {
     expect(promptsCollectionScaffold.access?.publicRead).toBeFalsy();
+    expect(promptsCollectionScaffold.access?.private).toBe(true);
   });
 
   it('resolves title by convention; body fields are markdown; chips fields present', () => {

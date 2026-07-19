@@ -18,6 +18,10 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     const slug = page.getByLabel('Slug', { exact: false }).first();
     if (await slug.isEditable()) await slug.fill('widgets');
 
+    // Mark it Private (D46) — the round-trip below guards the parser, which
+    // rebuilds `access` wholesale from the form.
+    await page.getByLabel('Visibility').selectOption('private');
+
     // First field row: key + type. Field 0 inputs are named field_0_*.
     await page.locator('[name="field_0_key"]').fill('name');
     await page.locator('[name="field_0_type"]').selectOption('text');
@@ -29,6 +33,9 @@ test.describe('Phase 4 — schema builder + access UI', () => {
 
     // Landed on the new collection's edit page.
     await expect(page).toHaveURL(/\/admin\/collections\/widgets/);
+
+    // The Private choice survived the save (parser + storage round-trip).
+    await expect(page.getByLabel('Visibility')).toHaveValue('private');
 
     // The collection now appears in the content picker; author a doc.
     await page.goto('/admin/c/widgets/new');

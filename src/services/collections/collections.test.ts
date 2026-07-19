@@ -198,7 +198,7 @@ describe('collections service — definition validation', () => {
     ).toBe(true);
 
     // Installed status flips.
-    const statuses = await svc.listPackStatuses(db);
+    const statuses = await svc.listPackStatuses(db, admin);
     expect(statuses.find((p) => p.key === 'blog')?.installed).toBe(true);
   });
 
@@ -457,6 +457,89 @@ describe('collections service — discovery projection (SEC-5) + access/workflow
         NOW,
       ),
     ).rejects.toBeInstanceOf(InputValidationError);
+  });
+
+  it('D46: rejects the contradictory private+publicRead combo; private alone round-trips', async () => {
+    await expect(
+      svc.createCollection(
+        db,
+        admin,
+        { ...posts, slug: 'both', access: { publicRead: true, private: true } },
+        NOW,
+      ),
+    ).rejects.toBeInstanceOf(InputValidationError);
+
+    await svc.createCollection(db, admin, { ...posts, slug: 'secret', access: { private: true } }, NOW);
+    expect((await svc.getCollection(db, 'secret'))?.access).toEqual({ private: true });
+  });
+
+  it('D46: a private collection is OMITTED from discovery for principals without read on it', async () => {
+    await svc.createCollection(db, admin, { ...posts, slug: 'secret', access: { private: true } }, NOW);
+
+    // Anonymous: not merely projected — absent entirely, from list and get alike.
+    const anonList = await svc.listCollectionsForDiscovery(db, anon);
+    expect(anonList.some((c) => c.slug === 'secret')).toBe(false);
+    expect(anonList.some((c) => c.slug === 'posts')).toBe(true);
+    expect(await svc.getCollectionForDiscovery(db, anon, 'secret')).toBeNull();
+
+    // A reader whose role is scoped to ANOTHER collection: same as anonymous.
+    const postsReader = await makePrincipal(db, NOW, {
+      id: 'prn_postsreader',
+      role: 'reader',
+      collection: 'posts',
+    });
+    expect(
+      (await svc.listCollectionsForDiscovery(db, postsReader)).some((c) => c.slug === 'secret'),
+    ).toBe(false);
+
+    // A reader scoped to the private collection sees it — as the public view.
+    const secretReader = await makePrincipal(db, NOW, {
+      id: 'prn_secretreader',
+      role: 'reader',
+      collection: 'secret',
+    });
+    const seen = (await svc.listCollectionsForDiscovery(db, secretReader)).find(
+      (c) => c.slug === 'secret',
+    )!;
+    expect(seen).toBeDefined();
+    expect((seen as unknown as Record<string, unknown>).access).toBeUndefined();
+
+    // A schema manager sees the full definition, private flag included.
+    const full = (await svc.listCollectionsForDiscovery(db, admin)).find(
+      (c) => c.slug === 'secret',
+    )!;
+    expect((full as unknown as Record<string, unknown>).access).toEqual({ private: true });
+    expect(await svc.getCollectionForDiscovery(db, admin, 'secret')).not.toBeNull();
+
+    // listDiscoverableCollections (the OpenAPI feed) applies the same rule.
+    expect((await svc.listDiscoverableCollections(db, anon)).some((c) => c.slug === 'secret')).toBe(
+      false,
+    );
+    expect((await svc.listDiscoverableCollections(db, admin)).some((c) => c.slug === 'secret')).toBe(
+      true,
+    );
+  });
+
+  it('D46: a wildcard-role reader with a token scope masked to another collection cannot discover private', async () => {
+    await svc.createCollection(db, admin, { ...posts, slug: 'secret', access: { private: true } }, NOW);
+    const maskedAgent = await makePrincipal(db, NOW, {
+      id: 'prn_maskedagent',
+      kind: 'agent',
+      role: 'reader',
+      surface: 'mcp',
+      tokenScope: [{ collection: 'posts', action: 'read' }],
+    });
+    expect(
+      (await svc.listCollectionsForDiscovery(db, maskedAgent)).some((c) => c.slug === 'secret'),
+    ).toBe(false);
+  });
+
+  it('D46: pack installed-status is caller-scoped — a private pack collection reads uninstalled to anonymous', async () => {
+    await svc.installPack(db, admin, 'prompts', NOW);
+    const asAdmin = await svc.listPackStatuses(db, admin);
+    expect(asAdmin.find((p) => p.key === 'prompts')?.installed).toBe(true);
+    const asAnon = await svc.listPackStatuses(db, anon);
+    expect(asAnon.find((p) => p.key === 'prompts')?.installed).toBe(false);
   });
 
   // (The former "SEC-6 accepts a role→actions map" test was removed: that map was

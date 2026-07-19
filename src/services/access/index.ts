@@ -63,6 +63,16 @@ export async function collectionsWithAction(
   action: Action,
 ): Promise<'*' | string[]> {
   const perms = await roleQ.getPrincipalPermissions(db, principal.id);
+  return collectionsWithActionFrom(perms, principal, action);
+}
+
+/** The pure half of `collectionsWithAction` — for callers that already hold the
+ *  principal's resolved permissions (TD-3: resolve once, derive many). */
+export function collectionsWithActionFrom(
+  perms: readonly roleQ.EffectivePermission[],
+  principal: Principal,
+  action: Action,
+): '*' | string[] {
   const matching = perms.filter((p) => p.action === action);
   if (matching.some((p) => p.collection === '*')) {
     // A wildcard role grant is still narrowed by a scoped token (a mask never widens).

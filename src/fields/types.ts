@@ -54,10 +54,16 @@ export interface CollectionDefinition {
    *  (docs born published, status affordances suppressed — record-like data).
    *  The two are contradictory together and rejected on write. */
   readonly workflow?: { readonly draftPublish?: boolean; readonly lifecycle?: 'publish' | 'none' };
-  // `publicRead` is the ONLY collection-level access knob. Collection-scoped
-  // permissions live in `role_permissions` (the authorizer's single source);
-  // an inline role→action map is rejected on write (see collections service).
-  readonly access?: { readonly publicRead?: boolean };
+  // The TWO collection-level access knobs, mutually exclusive (rejected together
+  // on write). `publicRead` lets anyone read published documents. `private`
+  // (D46) removes the collection from every DISCOVERY surface — REST/MCP
+  // collection list+get, OpenAPI paths, pack installed-status — for principals
+  // without `manage_schema` or a role/token-scope `read` on it (item grants
+  // deliberately don't confer discovery, matching MCP tool visibility). Content
+  // access is untouched: documents were already deny-by-default. Collection-
+  // scoped permissions live in `role_permissions` (the authorizer's single
+  // source); an inline role→action map is rejected on write (collections service).
+  readonly access?: { readonly publicRead?: boolean; readonly private?: boolean };
   /** How the public routes render documents (D27). Default/absent = 'shell'
    *  (branded PublicShell). 'raw' = the collection's FIRST `html` field IS the
    *  page — returned as a full standalone document (no shell, no design-system

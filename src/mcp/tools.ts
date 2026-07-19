@@ -150,7 +150,7 @@ export async function buildToolsForPrincipal(
       'template). Shows what each install would create and whether it already exists. Install with ' +
       'install_pack.',
     inputSchema: { type: 'object', properties: {} },
-    handler: async () => collectionsService.listPackStatuses(db),
+    handler: async () => collectionsService.listPackStatuses(db, principal),
   });
   if (couldDo(perms, principal, 'manage_schema', '*', false)) {
     tools.push({
@@ -160,7 +160,10 @@ export async function buildToolsForPrincipal(
         'Field keys are lowercase snake_case (^[a-z][a-z0-9_]*$). A slug field is indexed by default so it ' +
         'serves the pretty public URL; set index:true on any relation field you want backlinks or filtering on. ' +
         'Optional `template` selects a designed public reading page (see list_templates) and `bind` pins its ' +
-        'title/hero/lead slots to specific fields; for a ready-made shape, prefer install_pack.',
+        'title/hero/lead slots to specific fields; for a ready-made shape, prefer install_pack. ' +
+        'Optional `access` sets visibility: {publicRead: true} lets anyone read published documents; ' +
+        '{private: true} hides the collection from discovery (list_collections, the REST API index, ' +
+        'OpenAPI) for principals without read access. The two are mutually exclusive.',
       inputSchema: {
         type: 'object',
         properties: { definition: { type: 'object' } },
@@ -197,7 +200,9 @@ export async function buildToolsForPrincipal(
     });
     tools.push({
       name: 'update_collection',
-      description: 'Modify an existing content type.',
+      description:
+        'Modify an existing content type. The definition replaces the stored one and follows the ' +
+        'create_collection contract (including `access`: publicRead/private, mutually exclusive).',
       inputSchema: {
         type: 'object',
         properties: { slug: { type: 'string' }, definition: { type: 'object' } },

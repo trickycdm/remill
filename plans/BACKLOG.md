@@ -46,3 +46,10 @@ ideas stay here until promoted. Brainstormed 2026-07-17.
   security design (rate limits, honeypot, quarantine lifecycle). Not first.
 - **MCP `resources` primitive** — expose published content as MCP resources, same D18
   ownership argument as prompts.
+- **Builder form drops `template` + `bind` on save** — `parseCollectionForm`
+  (`src/components/admin/collection-builder.tsx`) rebuilds the whole definition from the
+  posted fields and never reads `template`/`bind`, so `updateCollectionRow` overwrites
+  those columns with null. Editing e.g. the `articles` collection in the admin builder
+  silently strips its reading template. Fix: carry template/bind through the form (hidden
+  inputs or a picker) or merge onto the stored def instead of replacing. Surfaced during
+  D46; the private-collection work touched the same wholesale-rebuild pattern.

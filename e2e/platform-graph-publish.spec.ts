@@ -96,7 +96,7 @@ test.describe.serial('Roadmap — relations, graph, lifecycle, publish & share',
     await page.getByLabel(/^Name/).fill('Notes');
     await page.getByLabel(/^Slug/).fill('notes');
     await page.getByLabel('Lifecycle').selectOption('draft');
-    await page.getByLabel('Public read access').check();
+    await page.getByLabel('Visibility').selectOption('public');
     await page.getByLabel('Key for field 1', { exact: true }).fill('title');
     await page.getByLabel('Required for field 1', { exact: true }).check();
     await page.getByLabel('Indexed for field 1', { exact: true }).check();

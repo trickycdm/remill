@@ -277,4 +277,53 @@ describe('REST API — integration through the Hono app', () => {
     expect(r.json.paths['/api/c/posts']).toBeTruthy();
     expect(r.json.components.schemas.posts.properties.title).toBeTruthy();
   });
+
+  it('D46: a private collection vanishes from anonymous discovery, /api/collections/:slug, and OpenAPI', async () => {
+    const created = await req('/api/collections', {
+      method: 'POST',
+      headers: { ...auth(adminToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: 'secret',
+        name: 'Secret',
+        shape: 'collection',
+        fields: [{ key: 'title', type: 'text', required: true, index: true }],
+        access: { private: true },
+      }),
+    });
+    expect(created.status).toBe(201);
+
+    // Anonymous list omits it entirely; the single-get 404s (indistinguishable
+    // from nonexistent); an admin bearer sees the full definition.
+    const anonList = await req('/api/collections');
+    expect(anonList.json.data.some((c: { slug: string }) => c.slug === 'secret')).toBe(false);
+    expect((await req('/api/collections/secret')).status).toBe(404);
+    const adminGet = await req('/api/collections/secret', { headers: auth(adminToken) });
+    expect(adminGet.status).toBe(200);
+    expect(adminGet.json.data.access).toEqual({ private: true });
+
+    // OpenAPI is caller-scoped: anonymous has neither the paths nor the schema;
+    // an admin bearer widens the document.
+    const anonApi = await req('/api/openapi.json');
+    expect(anonApi.json.paths['/api/c/secret']).toBeUndefined();
+    expect(anonApi.json.components.schemas.secret).toBeUndefined();
+    expect(anonApi.json.paths['/api/c/posts']).toBeTruthy(); // non-private unaffected
+    const adminApi = await req('/api/openapi.json', { headers: auth(adminToken) });
+    expect(adminApi.json.paths['/api/c/secret']).toBeTruthy();
+    expect(adminApi.json.components.schemas.secret).toBeTruthy();
+
+    // Pack installed-status is caller-scoped (prompts pack ships private, D46).
+    const install = await req('/api/packs/prompts/install', {
+      method: 'POST',
+      headers: auth(adminToken),
+    });
+    expect(install.status).toBe(201);
+    const anonPacks = await req('/api/packs');
+    expect(anonPacks.json.data.find((p: { key: string }) => p.key === 'prompts').installed).toBe(
+      false,
+    );
+    const adminPacks = await req('/api/packs', { headers: auth(adminToken) });
+    expect(adminPacks.json.data.find((p: { key: string }) => p.key === 'prompts').installed).toBe(
+      true,
+    );
+  });
 });

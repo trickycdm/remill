@@ -254,6 +254,57 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(posts?.workflow).toBeUndefined();
   });
 
+  it('D46: a private collection is invisible over MCP to anonymous and to wrongly-scoped tokens', async () => {
+    await collectionsService.createCollection(
+      db,
+      admin,
+      { ...POSTS, slug: 'secret', name: 'Secret', access: { private: true } },
+      NOW,
+    );
+
+    const slugsFor = async (token: string | null) =>
+      (
+        JSON.parse(
+          (await mcp(token, 'tools/call', { name: 'list_collections' })).body.result.content[0]
+            .text,
+        ) as { slug: string }[]
+      ).map((c) => c.slug);
+
+    // Anonymous: absent from list_collections and no generated tools for it.
+    expect(await slugsFor(null)).not.toContain('secret');
+    const anonTools = toolNames(await mcp(null, 'tools/list'));
+    expect(anonTools.some((t) => t.endsWith('_secret'))).toBe(false);
+
+    // A reader token is role-wide ('*' assignment) so it CAN discover it; an
+    // admin token sees the full definition path. The interesting negative is a
+    // scoped agent: wildcard reader role masked by a posts-only token scope.
+    const maskedPid = await access.createAgent(db, admin, 'masked-bot', NOW);
+    await access.assignRole(db, admin, maskedPid, 'reader', '*', NOW);
+    const maskedToken = (
+      await access.issueToken(
+        db,
+        admin,
+        { principalId: maskedPid, name: 't', scope: [{ collection: 'posts', action: 'read' }] },
+        NOW,
+      )
+    ).token;
+    expect(await slugsFor(maskedToken)).not.toContain('secret');
+
+    const adminToken = await tokenFor('schema-bot', 'admin');
+    expect(await slugsFor(adminToken)).toContain('secret');
+
+    // Pack installed-status is caller-scoped the same way (D46).
+    await collectionsService.installPack(db, admin, 'prompts', NOW);
+    const installedFor = async (token: string | null) =>
+      (
+        JSON.parse(
+          (await mcp(token, 'tools/call', { name: 'list_packs' })).body.result.content[0].text,
+        ) as { key: string; installed: boolean }[]
+      ).find((p) => p.key === 'prompts')?.installed;
+    expect(await installedFor(adminToken)).toBe(true);
+    expect(await installedFor(null)).toBe(false);
+  });
+
   it('share_<slug> supports team subjects; list_teams resolves names (manage_access only)', async () => {
     const adminToken = await tokenFor('sharer-bot', 'admin');
     const teamId = await access.createTeam(db, admin, { name: 'Tech team' }, NOW);

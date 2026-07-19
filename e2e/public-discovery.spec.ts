@@ -30,7 +30,7 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
       await page.getByLabel(/^Name/).fill('Stories');
       await page.getByLabel(/^Slug/).fill('stories');
       await page.getByLabel('Lifecycle').selectOption('draft');
-      await page.getByLabel('Public read access').check();
+      await page.getByLabel('Visibility').selectOption('public');
       await page.getByLabel('Key for field 1', { exact: true }).fill('title');
       await page.getByLabel('Required for field 1', { exact: true }).check();
       await page.getByLabel('Indexed for field 1', { exact: true }).check();

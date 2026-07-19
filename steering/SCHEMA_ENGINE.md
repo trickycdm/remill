@@ -34,7 +34,10 @@ FieldType contract against all six surfaces before merging.
 - **Declarative flags live behind CLOSED Zod shapes.** `workflow` and `access` are validated by
   `strictObject`s in the collections service (SEC-6) — a NEW flag is **rejected on write** until
   `WORKFLOW_SCHEMA`/`ACCESS_SCHEMA` (and the `CollectionDefinition` type) are extended first. That
-  extension is step one of adding any flag, not an afterthought (B4 precedent).
+  extension is step one of adding any flag, not an afterthought (B4 precedent). `access` carries two
+  mutually-exclusive flags: `publicRead` (anonymous read of published docs) and `private` (D46 —
+  hide the collection from every discovery surface for principals without `manage_schema` or a
+  role/scope read; see ACCESS_CONTROL.md).
 - **Lifecycle modes (B4).** `workflow` has three states: `{draftPublish: true}` (authored content —
   born draft, explicit publish step), absent/default (born published, publish/unpublish available),
   and `{lifecycle: 'none'}` (record-like data — born published, and the status column, status
@@ -148,7 +151,7 @@ Rules:
     { "key": "tags",   "type": "tags",      "index": true }
   ],
   "workflow": { "draftPublish": true },     // declarative behaviors, not code hooks
-  "access": { "publicRead": true },         // sugar: anonymous may read published docs
+  "access": { "publicRead": true },         // publicRead XOR private (D46) — anon read vs hide-from-discovery
   "renderMode": "shell"                     // 'shell' (default) | 'raw' — see render mode (D27)
 }
 ```
