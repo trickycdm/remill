@@ -81,11 +81,25 @@ can touch what." When you add a new grant kind or scope mechanism, it must show 
 team grants render with their resolved team names, not opaque ids.
 
 Media rides collection permissions (upload = `create` on the `media` collection). A collection's
-`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`. **`publicRead`
-is the only collection-level access field** — collection-scoped permissions are expressed with
-`role_permissions` + collection-scoped `principal_roles`, the single mechanism the authorizer consumes.
-An inline `access: { <role>: [actions] }` map is rejected on write (it was once stored and silently
-ignored — a removed security smell).
+`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`. Its
+sibling `access.private` (D46) governs **discovery visibility**, not content: a private collection
+is omitted from every discovery surface (REST/MCP collection list+get, `/api/openapi.json` paths,
+pack installed-status) for principals who hold neither `manage_schema` nor a **role/token-scope
+`read`** on it. Item grants deliberately do NOT confer discovery — an item-grant-only principal
+reaches its document via `/s/:token` or "Shared with me", never by enumerating the collection
+(matching MCP tool visibility, which also ignores item grants). `publicRead` and `private` are the
+**two** collection-level access fields and are **mutually exclusive** (rejected together on write);
+neither changes document authorization, which was already deny-by-default. Collection-scoped
+permissions are still expressed only with `role_permissions` + collection-scoped `principal_roles`,
+the single mechanism the authorizer consumes. An inline `access: { <role>: [actions] }` map is
+rejected on write (it was once stored and silently ignored — a removed security smell).
+
+The capability rule lives in ONE place — `canDiscover` in `services/collections`, fed by
+`collectionsWithActionFrom` (the pure half of `collectionsWithAction`, so discovery resolves the
+principal's permissions once and derives both `manage_schema` and the readable set — TD-3). Every
+discovery surface routes through `listCollectionsForDiscovery` / `getCollectionForDiscovery` /
+`listDiscoverableCollections`; a hidden collection returns `null`/absent, indistinguishable from
+nonexistent, so discovery is no enumeration oracle.
 
 ## Tables (fixed, Drizzle-migrated)
 

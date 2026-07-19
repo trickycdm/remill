@@ -68,6 +68,13 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   set exactly.
 - **publicRead**: a collection with `access.publicRead` allows the `anonymous` principal to GET
   **published** documents only. Drafts are never visible to anonymous, ever.
+- **private (D46)**: `access.private` (mutually exclusive with `publicRead`) removes the collection
+  from every **discovery** surface — `GET /api/collections[/:slug]`, MCP `list_collections`,
+  `/api/openapi.json` paths+schemas, and pack `installed`-status (`list_packs` / `GET /api/packs`) —
+  for callers without `manage_schema` or a role/token-scope `read` on it. `GET /api/collections/:slug`
+  404s (indistinguishable from nonexistent — no enumeration oracle); the OpenAPI doc and pack status
+  are **caller-scoped** (resolve the requesting principal, then `listDiscoverableCollections`). Content
+  access is unchanged — private collections were already deny-by-default for anonymous.
 - **Relation read-expansion (B2)**: document reads (get + list, REST and MCP alike) attach a
   `relations` object BESIDE `data` — `{ [fieldKey]: { id, title, collection } | [...] }` — resolving
   each referencing field's id(s) to the target's display title (`titleField` config, else the
@@ -125,7 +132,10 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
   Static (non-generated) endpoints like `/api/trash` must be hand-added in `staticPaths()`
-  (src/lib/openapi.ts) — the generator only iterates collections.
+  (src/lib/openapi.ts) — the generator only iterates collections. `generateOpenApi(defs, baseUrl)`
+  is a pure function BELOW the services layer: the route resolves the requesting principal and passes
+  `listDiscoverableCollections`, so the document is caller-scoped (private collections omitted for
+  callers who can't discover them, D46) — never call it with the raw `listCollections`.
 - **Rate-limit headers** are stubbed in v1 (`X-RateLimit-*` present, not enforced). Wire real limits
   post-v1.
 

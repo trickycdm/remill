@@ -8,6 +8,8 @@ import { AppError, ForbiddenError } from '@/lib/errors';
 import { dsRedirect, dsError } from '@/lib/datastar-response';
 import { getDb } from '@/db/client';
 import { generateOpenApi } from '@/lib/openapi';
+import { resolvePrincipal } from '@/lib/api-auth';
+import { listDiscoverableCollections } from '@/services/collections';
 import { rssXml, sitemapXml, robotsTxt } from '@/lib/feeds';
 import { recentPublishedDocs, allPublishedDocs } from '@/services/discovery';
 import { getSettings } from '@/services/settings';
@@ -97,8 +99,13 @@ app.onError((err, c) => {
 // (they sit outside PROTECTED_PREFIXES — an intentional classification,
 // SECURITY_STANDARDS.md).
 app.get('/api/openapi.json', async (c) => {
-  const doc = await generateOpenApi(getDb(c.env.DB), c.env.BASE_URL ?? '');
-  return c.json(doc);
+  // The document is caller-scoped (D46): anonymous callers get the static paths
+  // plus non-private collections; a bearer token widens it to whatever that
+  // principal may discover. Same resolver as every REST route.
+  const db = getDb(c.env.DB);
+  const principal = await resolvePrincipal(db, c, 'rest', nowIso());
+  const defs = await listDiscoverableCollections(db, principal);
+  return c.json(generateOpenApi(defs, c.env.BASE_URL ?? ''));
 });
 
 app.get('/rss.xml', async (c) => {

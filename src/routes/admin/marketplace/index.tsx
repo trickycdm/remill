@@ -34,7 +34,7 @@ const factory = createFactory<{ Bindings: Env }>();
 
 export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
-  const packs = await listPackStatuses(getDb(c.env.DB));
+  const packs = await listPackStatuses(getDb(c.env.DB), requirePrincipal(c));
 
   return c.render(
     <AdminShell user={user} current="marketplace">

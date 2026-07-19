@@ -31,7 +31,7 @@
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import { listFieldTypeKeys, isIndexable } from '@/fields/registry';
 import { jsonForScript } from '@/lib/json-for-script';
-import { Button, Input, Select, Checkbox, Toggle, FormField, Plus, Trash } from '@/components/ui';
+import { Button, Input, Select, Checkbox, FormField, Plus, Trash } from '@/components/ui';
 
 type RawBody = Record<string, string | File | (string | File)[]>;
 
@@ -126,6 +126,9 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
   // Lifecycle select (B4): 'draft' → draft/publish workflow; 'none' → no publish
   // lifecycle (record-like data); 'publish' (default) → born published.
   const lifecycle = firstString(body.workflow_lifecycle);
+  // Visibility select (D46): 'public' → publicRead; 'private' → hidden from
+  // discovery; 'default' → neither (discoverable, permission-gated content).
+  const visibility = firstString(body.access_visibility);
   return {
     slug: firstString(body.slug).trim(),
     name: firstString(body.name).trim(),
@@ -137,7 +140,12 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
         : lifecycle === 'none'
           ? { lifecycle: 'none' }
           : undefined,
-    access: 'access_public_read' in body ? { publicRead: true } : undefined,
+    access:
+      visibility === 'public'
+        ? { publicRead: true }
+        : visibility === 'private'
+          ? { private: true }
+          : undefined,
     renderMode: firstString(body.render_mode) === 'raw' ? 'raw' : undefined,
   };
 }
@@ -146,6 +154,13 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
 function lifecycleValueOf(def: CollectionDefinition | undefined): 'draft' | 'publish' | 'none' {
   if (def?.workflow?.lifecycle === 'none') return 'none';
   return def?.workflow?.draftPublish ? 'draft' : 'publish';
+}
+
+/** The builder's 3-way visibility value (D46). One select keeps the
+ *  contradictory private+publicRead combo unrepresentable in the UI. */
+function visibilityValueOf(def: CollectionDefinition | undefined): 'public' | 'default' | 'private' {
+  if (def?.access?.private) return 'private';
+  return def?.access?.publicRead ? 'public' : 'default';
 }
 
 /** The per-row `select` options editor. A fixed pool of `maxOptions` value+label
@@ -514,16 +529,23 @@ export function CollectionBuilder({
               </option>
             </Select>
           </FormField>
-          <div class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium text-ink">Access</span>
-            <p class="text-[13px] leading-normal text-ink-muted">
-              Anyone can read published documents without signing in.
-            </p>
-            <label class="flex min-h-9 items-center gap-2.5 text-sm text-ink-muted">
-              <Toggle name="access_public_read" checked={def?.access?.publicRead} />
-              Public read access
-            </label>
-          </div>
+          <FormField
+            fieldId="col-visibility"
+            label="Visibility"
+            description="Public: anyone can read published documents. Discoverable: listed in the API, content needs permission. Private: hidden entirely from anyone without access."
+          >
+            <Select id="col-visibility" name="access_visibility">
+              <option value="default" selected={visibilityValueOf(def) === 'default'}>
+                Discoverable
+              </option>
+              <option value="public" selected={visibilityValueOf(def) === 'public'}>
+                Public
+              </option>
+              <option value="private" selected={visibilityValueOf(def) === 'private'}>
+                Private
+              </option>
+            </Select>
+          </FormField>
         </div>
       </fieldset>
 

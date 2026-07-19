@@ -6,8 +6,6 @@
  * appear immediately.
  */
 
-import type { Database } from '@/db/client';
-import { listCollections } from '@/db/queries/collections';
 import { jsonSchemaFor } from '@/fields/registry';
 import { hasLifecycle } from '@/lib/lifecycle';
 import type { CollectionDefinition, JSONSchema } from '@/fields/types';
@@ -284,11 +282,13 @@ function staticPaths(): Record<string, unknown> {
   };
 }
 
-export async function generateOpenApi(
-  db: Database,
+/** `defs` are supplied by the caller (the route resolves the requesting
+ *  principal and passes its DISCOVERABLE collections, D46) — this module stays
+ *  below the services layer and never reads the DB itself. */
+export function generateOpenApi(
+  defs: readonly CollectionDefinition[],
   baseUrl: string,
-): Promise<Record<string, unknown>> {
-  const defs = await listCollections(db);
+): Record<string, unknown> {
   const paths: Record<string, unknown> = staticPaths();
   const schemas: Record<string, JSONSchema> = {};
   for (const def of defs) {

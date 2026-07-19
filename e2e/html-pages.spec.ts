@@ -39,7 +39,7 @@ test.describe.serial('HTML pages — raw renderMode, vendored charts, CSP toggle
     await page.goto('/admin/collections/new');
     await page.getByLabel(/^Name/).fill('Pages');
     await page.getByLabel(/^Slug/).fill(SLUG);
-    await page.getByLabel('Public read access').check();
+    await page.getByLabel('Visibility').selectOption('public');
     await page.getByLabel('Public rendering').selectOption('raw');
     await page.getByLabel('Key for field 1', { exact: true }).fill('title');
     await page.getByLabel('Indexed for field 1', { exact: true }).check();

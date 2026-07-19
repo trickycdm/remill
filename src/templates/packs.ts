@@ -174,16 +174,18 @@ export const docsCollectionScaffold: CollectionDefinition = {
   template: 'docs',
 };
 
-/** Prompt-library scaffold: PRIVATE by default — deliberately no `access`
- *  block, unlike every other pack. Prompts are working material, not published
- *  pages; they reach readers via admin, authorized tokens, or explicit share
- *  links, and the owner can flip `publicRead` later. The `variables` tags
- *  field declares the `{{placeholder}}` names used in the body (advisory —
- *  the body scan is the truth; see lib/prompt-shape.ts). */
+/** Prompt-library scaffold: PRIVATE by default — the explicit `access.private`
+ *  pin (D46), unlike every other pack. Prompts are working material, not
+ *  published pages; the collection is hidden from discovery for anyone without
+ *  read access, and its items reach readers via admin, authorized tokens, or
+ *  explicit share links. The owner can switch visibility later in the builder.
+ *  The `variables` tags field declares the `{{placeholder}}` names used in the
+ *  body (advisory — the body scan is the truth; see lib/prompt-shape.ts). */
 export const promptsCollectionScaffold: CollectionDefinition = {
   slug: 'prompts',
   name: 'Prompts',
   shape: 'collection',
+  access: { private: true },
   fields: [
     { key: 'title', type: 'text', required: true, index: true, admin: { showInList: true } },
     { key: 'slug', type: 'slug', config: { from: 'title' }, unique: true, index: true },

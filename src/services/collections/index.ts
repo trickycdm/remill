@@ -15,7 +15,8 @@ import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import { requireFieldType, isIndexable, isMultiValued } from '@/fields/registry';
 import * as q from '@/db/queries/collections';
 import { authorize, type Principal } from '@/access';
-import { getPrincipalPermissions } from '@/db/queries/roles';
+import { getPrincipalPermissions, type EffectivePermission } from '@/db/queries/roles';
+import { collectionsWithActionFrom } from '@/services/access';
 import { InputValidationError, NotFoundError, ConflictError, ForbiddenError } from '@/lib/errors';
 import { RESERVED_FIELD_KEYS, RESERVED_COLLECTION_SLUGS } from '@/config/constants';
 import { TEMPLATE_KEYS, isTemplateKey } from '@/templates/keys';
@@ -38,7 +39,10 @@ const WORKFLOW_SCHEMA = z.strictObject({
   // published and the status affordances are suppressed on every surface.
   lifecycle: z.enum(['publish', 'none']).optional(),
 });
-const ACCESS_SCHEMA = z.strictObject({ publicRead: z.boolean().optional() });
+const ACCESS_SCHEMA = z.strictObject({
+  publicRead: z.boolean().optional(),
+  private: z.boolean().optional(),
+});
 // Explicit render bindings (templates' escape hatch when convention would guess
 // wrong). CLOSED shape like workflow/access; slot-appropriate field types are
 // checked below against the actual field list.
@@ -166,6 +170,11 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
           message: iss.message,
         });
       }
+    } else if (r.data.private && r.data.publicRead) {
+      issues.push({
+        path: 'access',
+        message: 'private and publicRead are contradictory — pick one.',
+      });
     }
   }
   if (input.renderMode !== undefined) {
@@ -269,17 +278,22 @@ export interface PackStatus {
   readonly installed: boolean;
 }
 
-/** Discovery view of the pack registry (ungated, SEC-5 posture: pack metadata
- *  is code, and `installed` reveals nothing `list_collections` doesn't). */
-export async function listPackStatuses(db: Database): Promise<PackStatus[]> {
-  const existing = new Set((await q.listCollections(db)).map((c) => c.slug));
+/** Discovery view of the pack registry (SEC-5 posture: pack metadata is code,
+ *  and `installed` reveals nothing `list_collections` doesn't — which since D46
+ *  means it is caller-scoped: a pack whose collection the caller can't discover
+ *  reads `installed: false`, indistinguishable from truly not installed. Anyone
+ *  who could disprove that via `install_pack` holds `manage_schema` and
+ *  therefore sees the truth anyway). */
+export async function listPackStatuses(db: Database, principal: Principal): Promise<PackStatus[]> {
+  const defs = await listDiscoverableCollections(db, principal);
+  const visible = new Set(defs.map((c) => c.slug));
   return Object.values(PACKS).map((p) => ({
     key: p.key,
     name: p.name,
     description: p.description,
     template: p.template,
     collections: p.collections.map((c) => ({ slug: c.slug, name: c.name })),
-    installed: p.collections.every((c) => existing.has(c.slug)),
+    installed: p.collections.every((c) => visible.has(c.slug)),
   }));
 }
 
@@ -425,23 +439,36 @@ function toPublicView(def: CollectionDefinition): PublicCollectionView {
  *  gate: schema managers author these definitions, so they see them whole. This is
  *  a read-only capability check for projection selection — NOT an authorize()
  *  decision (discovery itself is public), so it is deliberately un-audited. */
-async function canSeeInternals(db: Database, principal: Principal): Promise<boolean> {
-  const perms = await getPrincipalPermissions(db, principal.id);
+function canSeeInternals(perms: readonly EffectivePermission[]): boolean {
   return perms.some((p) => p.action === 'manage_schema');
 }
 
+/** Whether a definition appears in discovery at all (D46). A `private` collection
+ *  is visible only to principals with a role/token-scope `read` on it (item
+ *  grants deliberately don't confer discovery — matching MCP tool visibility);
+ *  `manage_schema` holders are handled before this check. */
+function canDiscover(def: CollectionDefinition, readable: '*' | string[]): boolean {
+  return def.access?.private !== true || readable === '*' || readable.includes(def.slug);
+}
+
 /** List collections for discovery: full definitions for schema managers, the
- *  public-safe projection for everyone else (including anonymous). */
+ *  public-safe projection for everyone else (including anonymous) — with
+ *  `private` collections omitted for principals who can't read them (D46).
+ *  Permissions are resolved ONCE and both checks derive from them (TD-3). */
 export async function listCollectionsForDiscovery(
   db: Database,
   principal: Principal,
 ): Promise<CollectionDefinition[] | PublicCollectionView[]> {
   const defs = await q.listCollections(db);
-  if (await canSeeInternals(db, principal)) return defs;
-  return defs.map(toPublicView);
+  const perms = await getPrincipalPermissions(db, principal.id);
+  if (canSeeInternals(perms)) return defs;
+  const readable = collectionsWithActionFrom(perms, principal, 'read');
+  return defs.filter((d) => canDiscover(d, readable)).map(toPublicView);
 }
 
-/** Get one collection for discovery, projected per the caller's capability. */
+/** Get one collection for discovery, projected per the caller's capability. A
+ *  hidden `private` collection returns null — indistinguishable from
+ *  nonexistent, so discovery is no enumeration oracle (D46). */
 export async function getCollectionForDiscovery(
   db: Database,
   principal: Principal,
@@ -449,6 +476,22 @@ export async function getCollectionForDiscovery(
 ): Promise<CollectionDefinition | PublicCollectionView | null> {
   const def = await q.getCollection(db, slug);
   if (!def) return null;
-  if (await canSeeInternals(db, principal)) return def;
+  const perms = await getPrincipalPermissions(db, principal.id);
+  if (canSeeInternals(perms)) return def;
+  if (!canDiscover(def, collectionsWithActionFrom(perms, principal, 'read'))) return null;
   return toPublicView(def);
+}
+
+/** The FULL definitions the principal may discover — the same rule as the
+ *  projected surfaces, without the projection. For surface GENERATION (the
+ *  OpenAPI document); never return its output to a caller raw. */
+export async function listDiscoverableCollections(
+  db: Database,
+  principal: Principal,
+): Promise<CollectionDefinition[]> {
+  const defs = await q.listCollections(db);
+  const perms = await getPrincipalPermissions(db, principal.id);
+  if (canSeeInternals(perms)) return defs;
+  const readable = collectionsWithActionFrom(perms, principal, 'read');
+  return defs.filter((d) => canDiscover(d, readable));
 }
