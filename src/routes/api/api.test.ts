@@ -326,4 +326,65 @@ describe('REST API — integration through the Hono app', () => {
       true,
     );
   });
+
+  it('D47 text renders: ?render= returns text/markdown; unknown render 422s; plain GET unchanged', async () => {
+    const install = await req('/api/packs/collab/install', {
+      method: 'POST',
+      headers: auth(adminToken),
+    });
+    expect(install.status).toBe(201);
+
+    const mkTask = await req('/api/c/tasks', {
+      method: 'POST',
+      headers: { ...auth(adminToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'CSV export', goal: 'Ship the export.' }),
+    });
+    expect(mkTask.status).toBe(201);
+    const mkWarp = await req('/api/c/warps', {
+      method: 'POST',
+      headers: { ...auth(adminToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Session 1',
+        task: mkTask.json.data.id,
+        state: 'Happy path works.',
+        open_questions: '- locale?',
+        next_action: 'Wire the button.',
+      }),
+    });
+    expect(mkWarp.status).toBe(201);
+    const warpId = mkWarp.json.data.id as string;
+
+    // The render arm returns raw markdown, not JSON (req() would choke — go direct).
+    const res = await app.request(
+      `/api/c/warps/${warpId}?render=implementer&budget=500`,
+      { headers: auth(adminToken) },
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/markdown');
+    const md = await res.text();
+    expect(md.startsWith('# Session 1')).toBe(true);
+    expect(md).toContain('\n## Next action');
+
+    // Unknown render → the standard 422 listing what IS available.
+    const bad = await req(`/api/c/warps/${warpId}?render=bogus`, { headers: auth(adminToken) });
+    expect(bad.status).toBe(422);
+    expect(JSON.stringify(bad.json.details)).toContain('reviewer, implementer');
+
+    // A render name on a template WITHOUT renders is the same loud 422.
+    const mkPost = await req('/api/c/posts', {
+      method: 'POST',
+      headers: { ...auth(adminToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Plain post' }),
+    });
+    const noRenders = await req(`/api/c/posts/${mkPost.json.data.id}?render=reviewer`, {
+      headers: auth(adminToken),
+    });
+    expect(noRenders.status).toBe(422);
+
+    // Without ?render= the JSON read is byte-for-byte the old behavior.
+    const plain = await req(`/api/c/warps/${warpId}`, { headers: auth(adminToken) });
+    expect(plain.status).toBe(200);
+    expect(plain.json.data.id).toBe(warpId);
+  });
 });

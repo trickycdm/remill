@@ -6,7 +6,15 @@
  * exhaustiveness check — add a key here, then wire it there.
  */
 
-export const TEMPLATE_KEYS = ['article', 'changelog', 'portfolio', 'docs', 'prompt'] as const;
+export const TEMPLATE_KEYS = [
+  'article',
+  'changelog',
+  'portfolio',
+  'docs',
+  'prompt',
+  'warp',
+  'status',
+] as const;
 
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 

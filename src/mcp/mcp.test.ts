@@ -183,6 +183,81 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(again.body.result.isError).toBe(true);
   });
 
+  it('D47 collab + text renders: render args advertised only where declared; markdown comes back literal', async () => {
+    const adminToken = await tokenFor('collab-admin', 'admin');
+    const installed = await mcp(adminToken, 'tools/call', {
+      name: 'install_pack',
+      arguments: { pack: 'collab' },
+    });
+    expect(installed.body.result.isError).toBeFalsy();
+
+    // Only render-declaring collections (template 'warp') advertise the args.
+    type ToolRow = {
+      name: string;
+      inputSchema: { properties: Record<string, { enum?: string[] } | undefined> };
+    };
+    const tools = (await mcp(adminToken, 'tools/list')).body.result.tools as ToolRow[];
+    expect(tools.find((t) => t.name === 'get_warps')?.inputSchema.properties.render?.enum).toEqual(
+      ['reviewer', 'implementer'],
+    );
+    expect(tools.find((t) => t.name === 'get_posts')?.inputSchema.properties.render).toBeUndefined();
+    // lifecycle:'none' working data — no publish ceremony offered.
+    expect(tools.map((t) => t.name)).not.toContain('publish_tasks');
+
+    const task = await mcp(adminToken, 'tools/call', {
+      name: 'create_tasks',
+      arguments: { title: 'CSV export', goal: 'Ship the export.', stage: 'building' },
+    });
+    const taskId = JSON.parse(task.body.result.content[0].text).id as string;
+
+    // The 422 beat: a lazy warp (no open questions) is rejected at write time.
+    const lazy = await mcp(adminToken, 'tools/call', {
+      name: 'create_warps',
+      arguments: { title: 'Lazy', task: taskId, state: 'stuff', next_action: 'more stuff' },
+    });
+    expect(lazy.body.result.isError).toBe(true);
+    expect(lazy.body.result.content[0].text).toContain('open_questions');
+
+    const warp = await mcp(adminToken, 'tools/call', {
+      name: 'create_warps',
+      arguments: {
+        title: 'Session 1',
+        task: taskId,
+        written_as: 'implementer',
+        state: 'Streaming export works on the happy path.',
+        open_questions: '- viewer locale or invoice locale?',
+        next_action: 'Wire the UI button.',
+        code: { branch: 'feat/csv-export' },
+      },
+    });
+    const warpId = JSON.parse(warp.body.result.content[0].text).id as string;
+
+    // A render comes back as LITERAL markdown — no JSON quoting (D47 passthrough).
+    const rendered = await mcp(adminToken, 'tools/call', {
+      name: 'get_warps',
+      arguments: { id: warpId, render: 'implementer', budget: 500 },
+    });
+    const text = rendered.body.result.content[0].text as string;
+    expect(text.startsWith('# Session 1')).toBe(true);
+    expect(text).toContain('\n## Next action');
+    expect(text).toContain('CSV export'); // the owning task, expanded by title
+
+    // Unknown render → structured 422 listing what IS available.
+    const bad = await mcp(adminToken, 'tools/call', {
+      name: 'get_warps',
+      arguments: { id: warpId, render: 'bogus' },
+    });
+    expect(bad.body.result.isError).toBe(true);
+    expect(bad.body.result.content[0].text).toContain('reviewer, implementer');
+
+    // Without `render`, the plain JSON read is unchanged.
+    const plain = await mcp(adminToken, 'tools/call', {
+      name: 'get_warps',
+      arguments: { id: warpId },
+    });
+    expect(JSON.parse(plain.body.result.content[0].text).id).toBe(warpId);
+  });
+
   it('AGENTIC GOVERNANCE: an author drafts but cannot publish — denial is structured and audited', async () => {
     // Author creates a draft via the generated tool (allowed).
     const create = await mcp(authorToken, 'tools/call', {

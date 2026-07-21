@@ -8,6 +8,7 @@
 
 import { jsonSchemaFor } from '@/fields/registry';
 import { hasLifecycle } from '@/lib/lifecycle';
+import { rendersFor } from '@/templates/renders';
 import type { CollectionDefinition, JSONSchema } from '@/fields/types';
 
 function documentSchema(def: CollectionDefinition): JSONSchema {
@@ -32,6 +33,8 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
   const listItem = { type: 'object', properties: { data: ref } };
   // lifecycle:'none' collections advertise no status filter and no publish path (B4).
   const lifecycle = hasLifecycle(def);
+  // Collections whose template declares text renders advertise ?render=/&budget= (D47).
+  const renders = rendersFor(def.template);
   return {
     [`/api/c/${def.slug}`]: {
       get: {
@@ -83,6 +86,25 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
       get: {
         tags: [tag],
         summary: `Get a ${def.name}`,
+        ...(renders.length
+          ? {
+              parameters: [
+                {
+                  name: 'render',
+                  in: 'query',
+                  schema: { type: 'string', enum: [...renders] },
+                  description:
+                    'Named text render (D47) — returns a role-tailored text/markdown brief instead of JSON.',
+                },
+                {
+                  name: 'budget',
+                  in: 'query',
+                  schema: { type: 'integer' },
+                  description: 'Approximate token cap for the render.',
+                },
+              ],
+            }
+          : {}),
         responses: { '200': { description: 'The document' } },
       },
       patch: {

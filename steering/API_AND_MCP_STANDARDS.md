@@ -147,7 +147,12 @@ tokens** as REST.
 
 - **Tools are generated per collection** from field descriptors (surface 6), not hand-listed:
   - Per collection: `list_<slug>` (accepts a `filters` array `{field, op?, value}`, D28),
-    `search_<slug>` (full-text, read-gated, plain-text snippets, D28), `get_<slug>`,
+    `search_<slug>` (full-text, read-gated, plain-text snippets, D28), `get_<slug>` (when the
+    collection's template declares text renders — D47 — it also accepts `render` (enum of the
+    declared names) + `budget` (≈ token cap) and returns LITERAL markdown via the `McpTextResult`
+    transport passthrough, never JSON-quoted; REST parity: `GET /api/c/:c/:id?render=&budget=` →
+    `text/markdown`, params advertised in OpenAPI; unknown render → the standard 422 listing the
+    available names),
     `backlinks_<slug>` (reverse links, read-gated), `revisions_<slug>` (read-gated, D34),
     `restore_<slug>` (update-gated — restoring a revision IS an update, D34),
     `create_<slug>`, `update_<slug>`, `delete_<slug>` (delete-gated; moves to trash,

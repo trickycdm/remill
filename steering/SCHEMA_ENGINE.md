@@ -59,6 +59,14 @@ FieldType contract against all six surfaces before merging.
   The shipped `article` template binds fields by CONVENTION (`resolveConventionLayout`: first media =
   hero, first non-title text = dek, markdown = body, tags/relations = meta, slug never rendered) —
   presentation lives in code, NEVER as a per-field role in the schema data. See TECH_DECISIONS D41.
+- **Text renders (D47).** Beside the HTML templates, a template key can declare named TEXT renders
+  (`src/templates/renders.ts` — pure, import-light, no JSX): role-tailored, token-budgeted markdown
+  views of a document (the `warp` template ships `reviewer`/`implementer`). A derived surface riding
+  the existing `read` action — exposed as `render`/`budget` args on generated `get_<slug>` MCP tools
+  and `?render=` on the REST document GET, advertised ONLY where the template declares renders (the
+  enum derives from code, so schema drift is impossible). Tailoring is by ROLE + BUDGET, never model
+  vendor. The `renderDocumentText` service validates the render name against code metadata BEFORE the
+  document read (no existence oracle). See TECH_DECISIONS D47.
 - **Explicit slot binding (`bind`, D42).** When convention would guess wrong (an `author` text field
   winning the dek slot), the optional `bind` key pins the scalar slots explicitly:
   `{ title?, hero?, lead? }` → field keys. CLOSED shape (strictObject, the workflow/access posture);

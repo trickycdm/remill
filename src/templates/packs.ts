@@ -16,7 +16,7 @@
 import type { CollectionDefinition } from '@/fields/types';
 import type { TemplateKey } from '@/templates/keys';
 
-export const PACK_KEYS = ['blog', 'changelog', 'portfolio', 'docs', 'prompts'] as const;
+export const PACK_KEYS = ['blog', 'changelog', 'portfolio', 'docs', 'prompts', 'collab'] as const;
 export type PackKey = (typeof PACK_KEYS)[number];
 
 export function isPackKey(key: string): key is PackKey {
@@ -225,6 +225,159 @@ export const promptsCollectionScaffold: CollectionDefinition = {
   template: 'prompt',
 };
 
+/** The collab pack (D47) — remill as a multi-model context bus. Three PRIVATE,
+ *  lifecycle-free collections whose required fields ARE the handover protocol:
+ *  a lazy warp (no state, no open questions, no next action) is rejected at
+ *  write time, not discovered by the next model. `tasks` carries the CURRENT
+ *  rollup (stage + open questions — update it when you warp out) and renders
+ *  the share-link status page; `warps` are immutable session snapshots (and
+ *  the text-render surface, renders.ts); `decisions` is the append-only log
+ *  both of them link. Record-like working data: no slugs (id-addressed), no
+ *  draft ceremony, never world-readable. */
+export const collabTasksCollectionScaffold: CollectionDefinition = {
+  slug: 'tasks',
+  name: 'Tasks',
+  shape: 'collection',
+  access: { private: true },
+  workflow: { lifecycle: 'none' },
+  fields: [
+    { key: 'title', type: 'text', required: true, index: true, admin: { showInList: true } },
+    {
+      key: 'goal',
+      type: 'markdown',
+      required: true,
+      admin: { help: 'What done looks like — the job statement every agent reads first.' },
+    },
+    { key: 'repo', type: 'text', admin: { help: 'Repository the work lives in.' } },
+    { key: 'branch', type: 'text', admin: { help: 'Working branch, if one exists yet.' } },
+    {
+      key: 'stage',
+      type: 'select',
+      index: true,
+      config: {
+        options: [
+          { value: 'exploring', label: 'Exploring' },
+          { value: 'building', label: 'Building' },
+          { value: 'in-review', label: 'In review' },
+          { value: 'changes-requested', label: 'Changes requested' },
+          { value: 'done', label: 'Done' },
+        ],
+      },
+      admin: { showInList: true, help: 'Where the work stands right now.' },
+    },
+    {
+      key: 'open_questions',
+      type: 'markdown',
+      label: 'Needs a human',
+      admin: {
+        help: 'Current unresolved questions needing a human — update when you warp out.',
+      },
+    },
+  ],
+  template: 'status',
+};
+
+export const collabDecisionsCollectionScaffold: CollectionDefinition = {
+  slug: 'decisions',
+  name: 'Decisions',
+  shape: 'collection',
+  access: { private: true },
+  workflow: { lifecycle: 'none' },
+  fields: [
+    { key: 'title', type: 'text', required: true, index: true, admin: { showInList: true } },
+    { key: 'body', type: 'markdown', admin: { help: 'The decision and its why.' } },
+    {
+      key: 'task',
+      type: 'relation',
+      index: true,
+      config: { collection: 'tasks' },
+      admin: { help: 'The task this decision belongs to.' },
+    },
+    {
+      key: 'verdict',
+      type: 'select',
+      index: true,
+      config: {
+        options: [
+          { value: 'note', label: 'Note' },
+          { value: 'recommended', label: 'Recommended' },
+          { value: 'blocking', label: 'Blocking' },
+        ],
+      },
+      admin: { showInList: true, help: 'Blocking verdicts must be resolved before ship.' },
+    },
+  ],
+  template: 'docs',
+};
+
+export const collabWarpsCollectionScaffold: CollectionDefinition = {
+  slug: 'warps',
+  name: 'Warps',
+  shape: 'collection',
+  access: { private: true },
+  workflow: { lifecycle: 'none' },
+  fields: [
+    {
+      key: 'title',
+      type: 'text',
+      required: true,
+      index: true,
+      admin: { showInList: true, help: 'Name the session, e.g. "Session 3 — auth wiring".' },
+    },
+    {
+      key: 'task',
+      type: 'relation',
+      required: true,
+      index: true,
+      config: { collection: 'tasks' },
+      admin: { help: 'The task this handover belongs to.' },
+    },
+    {
+      key: 'written_as',
+      type: 'select',
+      config: {
+        options: [
+          { value: 'implementer', label: 'Implementer' },
+          { value: 'reviewer', label: 'Reviewer' },
+          { value: 'planner', label: 'Planner' },
+        ],
+      },
+      admin: { help: 'The mode this session worked in.' },
+    },
+    {
+      key: 'state',
+      type: 'markdown',
+      required: true,
+      admin: { help: 'Where the work stands — what a fresh session must know.' },
+    },
+    {
+      key: 'decisions',
+      type: 'relation',
+      index: true,
+      config: { collection: 'decisions', multiple: true },
+      admin: { help: 'Decisions made or relied on this session.' },
+    },
+    {
+      key: 'open_questions',
+      type: 'markdown',
+      required: true,
+      admin: { help: 'Unresolved questions, one bullet each — required: a warp without open questions is a warp the next model cannot trust.' },
+    },
+    {
+      key: 'next_action',
+      type: 'text',
+      required: true,
+      admin: { help: 'The single next concrete step.' },
+    },
+    {
+      key: 'code',
+      type: 'json',
+      admin: { help: 'Code pointers — branch, head SHA, diffstat. Pointers, never patches.' },
+    },
+  ],
+  template: 'warp',
+};
+
 export const PACKS: Record<PackKey, Pack> = {
   blog: {
     key: 'blog',
@@ -271,6 +424,20 @@ export const PACKS: Record<PackKey, Pack> = {
       'not the web — share via tokens or share links.',
     template: 'prompt',
     collections: [promptsCollectionScaffold],
+  },
+  collab: {
+    key: 'collab',
+    name: 'Collab',
+    description:
+      'A multi-model context bus: tasks with a live status page, session-handover warps with ' +
+      'role-tailored text renders, and a decision log — private, built for agent-to-agent ' +
+      'handoffs over MCP.',
+    template: 'warp',
+    collections: [
+      collabTasksCollectionScaffold,
+      collabDecisionsCollectionScaffold,
+      collabWarpsCollectionScaffold,
+    ],
   },
 };
 

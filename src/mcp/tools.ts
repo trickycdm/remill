@@ -28,6 +28,7 @@ import {
   listCollectionsForDiscovery,
 } from '@/services/collections';
 import { listTemplates } from '@/templates/registry';
+import { rendersFor } from '@/templates/renders';
 import * as docs from '@/services/documents';
 import * as collectionsService from '@/services/collections';
 import { listMedia, getMediaById, uploadMedia } from '@/services/media';
@@ -45,6 +46,29 @@ export interface McpTool {
   readonly description: string;
   readonly inputSchema: JSONSchema;
   readonly handler: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+/** Sentinel a handler returns when its result IS text (a D47 markdown render):
+ *  the transport emits `text` verbatim instead of JSON-stringifying — quoting
+ *  markdown would escape every newline and bloat the exact tokens a render
+ *  budget exists to save. Kept deliberately narrow: one shape, one guard, one
+ *  branch in handler.ts. */
+export interface McpTextResult {
+  readonly kind: 'mcp-text';
+  readonly text: string;
+}
+
+export function mcpText(text: string): McpTextResult {
+  return { kind: 'mcp-text', text };
+}
+
+export function isMcpTextResult(value: unknown): value is McpTextResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as McpTextResult).kind === 'mcp-text' &&
+    typeof (value as McpTextResult).text === 'string'
+  );
 }
 
 /** Request-scoped capabilities tools need beyond the DB (threaded from the /mcp
@@ -348,11 +372,53 @@ export async function buildToolsForPrincipal(
           };
         },
       });
+      // Collections whose template declares text renders (D47) advertise the
+      // `render`/`budget` args; everything else keeps the bare read — the enum
+      // derives from code, so schema drift is impossible.
+      const renders = rendersFor(def.template);
       tools.push({
         name: `get_${slug}`,
-        description: `Get one ${def.name} document by id.`,
-        inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-        handler: async (args) => docs.getDocument(db, principal, slug, String(args.id), now()),
+        description: renders.length
+          ? `Get one ${def.name} document by id. Pass \`render\` (${renders.join(', ')}) for a ` +
+            `role-tailored markdown brief instead of raw JSON; \`budget\` caps its approximate tokens.`
+          : `Get one ${def.name} document by id.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            ...(renders.length
+              ? {
+                  render: {
+                    type: 'string',
+                    enum: [...renders],
+                    description: 'Named text render — returns markdown, not JSON.',
+                  },
+                  budget: {
+                    type: 'integer',
+                    description: 'Approximate token cap for the render.',
+                  },
+                }
+              : {}),
+          },
+          required: ['id'],
+        },
+        handler: async (args) =>
+          typeof args.render === 'string'
+            ? mcpText(
+                await docs.renderDocumentText(
+                  db,
+                  principal,
+                  slug,
+                  String(args.id),
+                  {
+                    render: args.render,
+                    budget: typeof args.budget === 'number' ? args.budget : undefined,
+                    baseUrl,
+                  },
+                  now(),
+                ),
+              )
+            : docs.getDocument(db, principal, slug, String(args.id), now()),
       });
       tools.push({
         name: `backlinks_${slug}`,
