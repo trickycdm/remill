@@ -40,6 +40,13 @@ rendered public pages + share links.)
 > **v1.4.0 shipped 2026-07-10**: the author-centric Content home redesign (`/admin/c` with per-collection counts, freshness, and quick actions via a `contentOverview` service that reuses the compiled read filter, ensuring counts respect access grants).
 > **v1.6.0 shipped 2026-07-17** (plan: [`plans/2026-07-17-prompt_pack_and_nebulae_graph_explorer/`](plans/2026-07-17-prompt_pack_and_nebulae_graph_explorer/)): the prompts content pack (D42 pack #5 — private by default, shared via tokens/links), the MCP prompts primitive (D44 — agent-native prompt library in every client's picker), and the Nebulae graph explorer (D45 — `/admin/graph` 3D canvas galaxy with collection clusters and cross-collection relation arcs). A feature backlog now lives at `plans/BACKLOG.md`.
 > Post-v1.6.0 fix round (PR #33): the /admin dashboard is now graph-first, rendering the Nebulae graph as its hero via a shared `GraphPanel` component; the collection builder layout is aligned with name/slug identity and behavior sections.
+> **D47 shipped 2026-07-21**: the **collab pack** (remill as a multi-model context bus — private,
+> lifecycle-none `tasks`/`warps`/`decisions` whose required fields are the handover protocol; the
+> first multi-collection pack, with per-collection templates `status`/`warp`/`docs`) plus **text
+> renders** (`src/templates/renders.ts` — role + budget-tailored markdown views; `render`/`budget`
+> args on `get_<slug>` MCP tools with a literal-text transport passthrough, REST
+> `?render=` → `text/markdown`, one `renderDocumentText` service behind both). Orchestration and
+> webhooks are explicit non-goals ("the bus, never the brain").
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -113,16 +120,19 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **Templates** `src/templates/` — the render-template registry (the code side of the public
   reading surface); a collection selects a template by name via its `template` key (D41) and can
   pin slots explicitly via `bind` ({title/hero/lead}→field key — the escape hatch convention falls
-  back from). Five shipped templates — `article.tsx`, `changelog.tsx` (dated release entries,
+  back from). Seven shipped templates — `article.tsx`, `changelog.tsx` (dated release entries,
   opts out of all article furniture), `portfolio.tsx` (media-first with a link-out), `docs.tsx`
   (graph-forward doc pages), `prompt.tsx` (mono prompt panel with token-highlighted `{{variables}}`,
-  variable chips, model badge; D44/D45) — each declaring `wants` capability flags that gate the share
+  variable chips, model badge; D44/D45), `warp.tsx` (session-handover brief; D47), `status.tsx`
+  (share-link task status page; D47) — each declaring `wants` capability flags that gate the share
   island/reading time; `lib/conventions.ts` (parameterized hero/dek/body/meta binding heuristics);
-  and `packs.ts` — the content-PACK registry (D42): a pack bundles a template with co-designed
-  collection definition(s), installable from the admin **Marketplace** (`/admin/marketplace`),
-  MCP `install_pack`, or `POST /api/packs/:key/install` — all through one `installPack` service.
-  Five packs ship: blog, changelog, portfolio, docs, prompts (private by default). Templates and packs are code; both
-  registries are closed (`keys.ts`, `packs.ts`).
+  `renders.ts` (role + budget-tailored markdown text renders, per-template; D47); and `packs.ts`
+  — the content-PACK registry (D42): a pack bundles a template with co-designed collection
+  definition(s), installable from the admin **Marketplace** (`/admin/marketplace`), MCP `install_pack`,
+  or `POST /api/packs/:key/install` — all through one `installPack` service. Six packs ship: blog,
+  changelog, portfolio, docs, prompts (private by default), collab (private; tasks/warps/decisions;
+  first multi-collection pack; D47). Templates, renders, and packs are code; registries are closed
+  (`keys.ts`, `packs.ts`).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
   (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
   invite a person via `users.tsx`, custom roles, token scoping, teams — a grant subject kind, D24 —
@@ -141,10 +151,12 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   — `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
     (D34 parity), `schedule_<slug>` (D32 per-collection scheduled publishing), `poll_events` (D33 outbox
     change feed), `list_audit` (audit log access), the D42 marketplace trio — `list_templates` +
-    `list_packs` (ungated discovery) and `install_pack` (manage_schema), and the D44 prompts primitive —
+    `list_packs` (ungated discovery) and `install_pack` (manage_schema), the D44 prompts primitive —
     items of prompt-shaped collections (`template: 'prompt'`) surfaced as native MCP prompts (`prompts/list`,
     `prompts/get`) with arguments derived from `{{variables}}` — so the agent flow
-    `list_packs → install_pack('prompts') → create_prompts → list_prompts` needs no schema design.
+    `list_packs → install_pack('prompts') → create_prompts → list_prompts` needs no schema design — and D47
+    text renders: `get_<slug>` on render-declaring collections gains `render` and `budget` args, returning
+    literal markdown (via `McpTextResult` transport passthrough, not JSON-quoted).
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
   Person/Service/Agent display persona), `email/` (`EmailTransport` — Resend + styled templates,
   D20 realized; console stub fallback), `base-url.ts` (resolveBaseUrl for minted links),

@@ -14,10 +14,14 @@ describe('the pack registry', () => {
       expect(pack.collections.length).toBeGreaterThan(0);
       for (const def of pack.collections) {
         // The whole point of a pack: its scaffold passes the standard pipeline
-        // untouched, and each collection actually selects the pack's template.
+        // untouched, and every template it selects is registered. A collection
+        // may select a DIFFERENT registered template than the pack's signature
+        // one (the collab pack pairs status/warp/docs — D47), but at least one
+        // collection must carry the signature template the card advertises.
         expect(() => validateDefinition(def)).not.toThrow();
-        expect(def.template).toBe(pack.template);
+        if (def.template) expect(resolveTemplate(def.template)).toBeDefined();
       }
+      expect(pack.collections.some((def) => def.template === pack.template)).toBe(true);
     }
   });
 

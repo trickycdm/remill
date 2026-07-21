@@ -24,6 +24,10 @@ export const PROTECTED_COLLECTIONS = ['settings', 'media'] as const;
  *  build/static paths. */
 export const RESERVED_COLLECTION_SLUGS = ['admin', 'api', 'assets', 'auth', 'mcp', 's', 'src', 'vendor'] as const;
 
+/** Rough chars-per-token heuristic for text-render budgets (D47) — an
+ *  approximation shared by every surface that accepts a `budget` arg. */
+export const APPROX_CHARS_PER_TOKEN = 4;
+
 /** Reserved document-field keys the engine owns; a collection field may not use them. */
 export const RESERVED_FIELD_KEYS = [
   'id',

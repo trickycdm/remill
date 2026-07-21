@@ -12,6 +12,8 @@ import { changelogTemplate } from '@/templates/changelog';
 import { portfolioTemplate } from '@/templates/portfolio';
 import { docsTemplate } from '@/templates/docs';
 import { promptTemplate } from '@/templates/prompt';
+import { warpTemplate } from '@/templates/warp';
+import { statusTemplate } from '@/templates/status';
 
 const TEMPLATES: Record<TemplateKey, RenderTemplate> = {
   article: articleTemplate,
@@ -19,6 +21,8 @@ const TEMPLATES: Record<TemplateKey, RenderTemplate> = {
   portfolio: portfolioTemplate,
   docs: docsTemplate,
   prompt: promptTemplate,
+  warp: warpTemplate,
+  status: statusTemplate,
 };
 
 /** Resolve a collection's `template` key to its component, or undefined when the

@@ -130,16 +130,24 @@ item grants. Everything — every allow and every deny — is audited with princ
 - **Tier 3 (Phases 9–11): shipped** — editor islands (D38: CodeMirror 6 markdown + native Dialog
   media picker, progressive enhancement over `data-bind` carriers; implements D13, supersedes D12/Uppy),
   revision diff viewer, and bulk list actions via one native form with per-item authorize/audit/events (D39).
+- **Multi-model context bus (D47): shipped** — text renders (`renderDocumentText` service,
+  per-template named markdown views exposed via MCP `get_<slug>` `render`/`budget` args and REST
+  `?render=` → `text/markdown`; role-first section ordering with token-budget truncation) and the
+  collab pack (six packs total: blog/changelog/portfolio/docs/prompts/collab; collab is the first
+  multi-collection pack — three private lifecycle-none collections `tasks`/`warps`/`decisions` with
+  REQUIRED handover protocol fields so a lazy handover 422s at write time, and share-link status page).
+  Positions remill as multi-model handoff infrastructure: heterogeneous agents (Claude Code, Codex,
+  any MCP client) coordinate work through validated warps, not copy-paste; stakeholders watch a status
+  page derived from the record.
 - **Public reading templates (D41) + content-pack marketplace (D42): shipped** — a closed
-  `src/templates/` registry (`article`, `changelog`, `portfolio`, `docs`) selected per-collection by a
-  `template` key, with an explicit `bind` escape hatch ({title/hero/lead}→field key) alongside the
-  convention-based default. Four packs (`src/templates/packs.ts`: blog, changelog, portfolio, docs —
-  each a template + a co-designed `CollectionDefinition`) are installable from three surfaces behind one
-  `installPack` service: the admin **Marketplace** (`/admin/marketplace`), MCP (`list_packs` →
-  `install_pack`), and REST (`POST /api/packs/:key/install`) — authorize-first, all-or-nothing. The
-  "second pack" deferral noted in D41 is resolved. A `/{collection}` public index page (published
-  entries, newest first) and a redesigned homepage (audience strip, use-case stories, "Run your own
-  mill" CTA, dogfood writing index) round out the public reading surface.
+  `src/templates/` registry (`article`, `changelog`, `portfolio`, `docs`, `prompt`, `status`, `warp`)
+  selected per-collection by a `template` key, with an explicit `bind` escape hatch
+  ({title/hero/lead}→field key) alongside the convention-based default. Six packs
+  (`src/templates/packs.ts`: blog, changelog, portfolio, docs, prompts, collab) installable from three
+  surfaces behind one `installPack` service: the admin **Marketplace** (`/admin/marketplace`), MCP
+  (`list_packs` → `install_pack`), and REST (`POST /api/packs/:key/install`) — authorize-first,
+  all-or-nothing. A `/{collection}` public index page (published entries, newest first) and a redesigned
+  homepage round out the public reading surface.
 
 Roadmap detail and per-phase status: `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`
 (Tracks A–C, worklogs), plus the full completion roadmap

@@ -42,6 +42,7 @@ import { collectionsWithAction, getPrincipalPermissions } from '@/services/acces
 import { newId } from '@/lib/id';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { titleFieldOf } from '@/lib/def-helpers';
+import { renderDocument, rendersFor, textRenderOf } from '@/templates/renders';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
 import {
   InputValidationError,
@@ -605,6 +606,46 @@ export async function getDocument(
   const [expanded] = await expandRelations(db, principal, def, [doc], now);
   const [withMedia] = await expandMedia(db, principal, def, [expanded], now);
   return withMedia;
+}
+
+/**
+ * Text render (D47): a role-tailored markdown view of one document, produced by
+ * the pure per-template renders in `@/templates/renders`. Rides the same gated
+ * read as `getDocument` — no new action, no new gates. The render NAME is code
+ * metadata (like template keys), so an unknown name 422s BEFORE the document
+ * read — never an existence oracle.
+ */
+export async function renderDocumentText(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  opts: { readonly render: string; readonly budget?: number; readonly baseUrl?: string },
+  now: string,
+): Promise<string> {
+  const def = await loadCollection(db, collectionSlug);
+  const render = textRenderOf(def.template, opts.render);
+  if (!render) {
+    const available = rendersFor(def.template);
+    throw new InputValidationError([
+      {
+        path: 'render',
+        message: available.length
+          ? `Unknown render '${opts.render}' — available: ${available.join(', ')}`
+          : `Collection '${def.slug}' has no text renders`,
+      },
+    ]);
+  }
+  if (opts.budget !== undefined && (!Number.isInteger(opts.budget) || opts.budget <= 0)) {
+    throw new InputValidationError([
+      { path: 'budget', message: 'budget must be a positive integer (approximate tokens)' },
+    ]);
+  }
+  const doc = await getDocument(db, principal, collectionSlug, id, now);
+  const backlinks = render.needsBacklinks
+    ? await getBacklinks(db, principal, collectionSlug, id, now)
+    : [];
+  return renderDocument(def, doc, backlinks, opts);
 }
 
 export interface ListParams {

@@ -17,7 +17,7 @@
 
 import type { Database } from '@/db/client';
 import type { Principal } from '@/access';
-import { buildToolsForPrincipal, type McpToolContext } from '@/mcp/tools';
+import { buildToolsForPrincipal, isMcpTextResult, type McpToolContext } from '@/mcp/tools';
 import { getPromptForPrincipal, listPromptsForPrincipal } from '@/mcp/prompts';
 import { listCollections } from '@/services/collections';
 import { getDocument, listDocuments } from '@/services/documents';
@@ -83,7 +83,16 @@ export async function handleMcp(
       }
       try {
         const value = await tool.handler(args);
-        return result(id, { content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] });
+        // Text renders (D47) come back verbatim — JSON-quoting markdown would
+        // escape every newline; everything else stays a JSON text block.
+        return result(id, {
+          content: [
+            {
+              type: 'text',
+              text: isMcpTextResult(value) ? value.text : JSON.stringify(value, null, 2),
+            },
+          ],
+        });
       } catch (err) {
         // Return errors as tool results (isError) so the agent can reason about
         // them — including the structured 403 with `missing`.
