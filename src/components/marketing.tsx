@@ -46,6 +46,7 @@ import {
   ShieldCheck,
 } from '@/components/ui/icon';
 import { formatDate } from '@/lib/format-date';
+import { mcpJsonConfig } from '@/lib/connect-snippets';
 import type { SiteSettings } from '@/services/settings';
 import type { CollectionDefinition } from '@/fields/types';
 import type { DiscoveryDoc } from '@/services/discovery';
@@ -716,15 +717,8 @@ function Coupon({ n, title, children }: { n: string; title: string; children?: u
  * instead of a curl dump. Conversion target.
  */
 export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
-  const mcpConfig = `{
-  "mcpServers": {
-    "remill": {
-      "type": "http",
-      "url": "${baseUrl}/mcp",
-      "headers": { "Authorization": "Bearer <token>" }
-    }
-  }
-}`;
+  // Shared builder (D48) — the wizard's .mcp.json card renders the same shape.
+  const mcpConfig = mcpJsonConfig(baseUrl, '<token>');
 
   return (
     <section id="connect" aria-labelledby="home-connect" class="rm-perf scroll-mt-20">
@@ -738,13 +732,15 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
           </h2>
         </div>
         <ol class="border-accent/60 grid overflow-hidden rounded-xl border-[1.5px] bg-surface sm:grid-cols-[1fr_1.7fr_1fr]">
-          <Coupon n="1" title="Mint a token">
+          <Coupon n="1" title="Connect by URL">
             <p class="text-sm leading-relaxed text-ink-muted">
-              Sign in and create a bearer token under Access. Scope it to just the collections
-              your agent should touch.
+              Paste <code class="font-mono text-xs">{baseUrl || 'https://your.remill'}/mcp</code>{' '}
+              into any MCP client and approve it in your browser — remill speaks OAuth, so
+              claude.ai, ChatGPT, and Claude Code connect by URL alone. Or sign in and use the
+              one-step connect wizard for a token with a paste-ready config.
             </p>
           </Coupon>
-          <Coupon n="2" title="Add remill to your MCP client">
+          <Coupon n="2" title="Or configure it by hand">
             <p class="text-sm leading-relaxed text-ink-muted">
               remill speaks streamable HTTP JSON-RPC. Point any MCP client at the endpoint, or
               call it raw; no SDK required.

@@ -177,6 +177,32 @@ function queryRecord(c: Context<{ Bindings: Env }>): Record<string, string | und
   return Object.fromEntries(url.searchParams.entries());
 }
 
+/**
+ * The decision's terminal response is a 200 interstitial, NOT a 303: the
+ * strict CSP's `form-action 'self'` (correctly) blocks a form submission from
+ * redirecting off-origin, and custom-scheme callbacks (vscode://) wouldn't be
+ * covered by any form-action source anyway. A meta refresh handles http(s)
+ * loopback/web callbacks instantly; the visible Continue link provides the
+ * user gesture some browsers require for custom-protocol launches. `url` is
+ * safe by construction: the redirect URI passed registration validation
+ * (https / loopback http / non-executable private schemes only).
+ */
+function redirectingPage(url: string, clientName: string) {
+  return (
+    <AuthShell>
+      {/* In-body meta refresh is honored by every major browser; AuthShell has
+          no head slot and this page exists only to hand the browser off. */}
+      <meta http-equiv="refresh" content={`0;url=${url}`} />
+      <div class="flex flex-col items-center gap-4 text-center">
+        <p class="text-sm text-ink-muted">Returning you to {clientName}…</p>
+        <Button href={url} variant="primary">
+          Continue
+        </Button>
+      </div>
+    </AuthShell>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // GET /oauth/authorize — validate, then render consent (or bounce/explain)
 // ---------------------------------------------------------------------------
@@ -242,10 +268,12 @@ export const onRequestPost = factory.createHandlers(async (c) => {
     baseUrl,
   );
   if (validated.kind === 'invalid') return c.render(invalidRequestCard());
-  if (validated.kind === 'redirect') return c.redirect(validated.redirectUrl, 303);
+  if (validated.kind === 'redirect') {
+    return c.render(redirectingPage(validated.redirectUrl, 'your client'));
+  }
 
   if (field('decision') !== 'approve') {
-    return c.redirect(denyAuthorization(validated.params).redirectUrl, 303);
+    return c.render(redirectingPage(denyAuthorization(validated.params).redirectUrl, validated.clientName));
   }
 
   try {
@@ -255,7 +283,7 @@ export const onRequestPost = factory.createHandlers(async (c) => {
       { params: validated.params, role: field('role') ?? '' },
       nowIso(),
     );
-    return c.redirect(redirectUrl, 303);
+    return c.render(redirectingPage(redirectUrl, validated.clientName));
   } catch (err) {
     if (err instanceof ForbiddenError) {
       return c.render(askAdminCard(validated.clientName, loginRedirectHref(c)));

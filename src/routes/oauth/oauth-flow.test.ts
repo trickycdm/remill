@@ -117,8 +117,13 @@ describe('OAuth 2.1 flow — integration through the Hono app', () => {
       }),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
     });
-    expect(decision.status).toBe(303);
-    const location = new URL(decision.headers.get('location')!);
+    // 200 interstitial, not a 303: CSP form-action blocks off-origin form
+    // redirects, so the handoff is a meta refresh + Continue link.
+    expect(decision.status).toBe(200);
+    const html = await decision.text();
+    const target = /content="0;url=([^"]+)"/.exec(html)?.[1]?.replace(/&amp;/g, '&');
+    expect(target).toBeTruthy();
+    const location = new URL(target!);
     expect(location.origin + location.pathname).toBe(REDIRECT);
     expect(location.searchParams.get('state')).toBe('st4te');
     const code = location.searchParams.get('code')!;
@@ -268,8 +273,11 @@ describe('OAuth 2.1 flow — integration through the Hono app', () => {
       }),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
     });
-    expect(denied.status).toBe(303);
-    const loc = new URL(denied.headers.get('location')!);
+    expect(denied.status).toBe(200);
+    const deniedTarget = /content="0;url=([^"]+)"/
+      .exec(await denied.text())?.[1]
+      ?.replace(/&amp;/g, '&');
+    const loc = new URL(deniedTarget!);
     expect(loc.searchParams.get('error')).toBe('access_denied');
     expect(loc.searchParams.get('state')).toBe('s');
 

@@ -47,6 +47,15 @@ rendered public pages + share links.)
 > args on `get_<slug>` MCP tools with a literal-text transport passthrough, REST
 > `?render=` → `text/markdown`, one `renderDocumentText` service behind both). Orchestration and
 > webhooks are explicit non-goals ("the bus, never the brain").
+> **D48 shipped 2026-07-23** (plan: [`plans/2026-07-23-oauth_mcp_connect_wizard/`](plans/2026-07-23-oauth_mcp_connect_wizard/)):
+> **agent connect** — remill is its own OAuth 2.1 authorization server for `/mcp` (MCP auth spec:
+> RFC 9728/8414 discovery, DCR, PKCE, rotating refresh, RFC 8628 device pairing at `/oauth/device`),
+> so any MCP client connects by URL alone; unauthenticated `/mcp` now 401-challenges (anonymous MCP
+> removed). OAuth access tokens are ordinary `api_tokens` rows (`rmo_`, `grant_id` cascade); SEC-8
+> refined to "issuance authority is always a recorded human consent" (`src/services/oauth/`, consent
+> at `/oauth/authorize`). Plus the one-step **connect wizard** (`/admin/access/connect` — atomic
+> `connectAgent`, per-client connect cards from `src/lib/connect-snippets.ts`) and the
+> `/admin/access` index rebuilt as a directory with connection-health lines.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.

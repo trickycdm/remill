@@ -1,5 +1,10 @@
 # Agent Connect: OAuth 2.1 for MCP + Connect Wizard + Access Simplification (D48)
 
+> **STATUS: IMPLEMENTED (2026-07-23, branch `feat/agent-connect-oauth`).** All six phases built and
+> verified — 522+ unit/integration tests green including the 10-step OAuth walk driven through the
+> real app, plus new e2e specs (wizard flow, consent screen). See the Revision Log at the bottom for
+> the deviations from this plan as written.
+
 ## Context
 
 Connecting an agent to remill today is clunky: create a machine principal on `/admin/access`, assign
@@ -295,3 +300,22 @@ Watch for: metadata discovery variants, token-endpoint error shapes, loopback po
 **Order of implementation** = Phases 1→6 (each independently type-checkable/testable). Riskiest:
 the oauth services (Phase 2 — the invariant lives there) and real-client interop quirks
 (mitigated by serving all metadata aliases; test with MCP Inspector before live clients).
+
+## Revision Log
+
+- 2026-07-23: **Implemented as planned**, with four deviations:
+  1. `reconsentGrant` also deletes the grant's live access tokens (not just nulling refresh
+     hashes) — a re-consent that narrows the role should not leave hour-long tokens named for the
+     old grant lying around.
+  2. Drizzle dropped `ON DELETE CASCADE` from the generated `api_tokens.grant_id` FK — hand-restored
+     in migration 0014 (the cascade IS the revocation mechanism); CHECKs hand-added as planned.
+  3. The wizard's client choice doubles as the persona: "Script / REST API" connections are created
+     with subtype `service` (replaces the old Type select on the removed index form).
+  4. The consent screen's ForbiddenError/InputValidationError paths re-render in place (native
+     full renders, matching the zero-JS posture) rather than fragment morphs — the page is
+     deliberately Datastar-free.
+  5. **The consent POST answers with a 200 interstitial, not the planned 303** ("Returning you to
+     {client}…" + meta refresh + Continue link). Found by e2e: the strict CSP's `form-action 'self'`
+     makes Chrome block a form submission's redirect to the external callback, and no form-action
+     source list can cover custom-scheme callbacks (`vscode://`). The interstitial is scheme-proof
+     and keeps the strict CSP; GET-time param-error redirects stay 302s (not form submissions).
