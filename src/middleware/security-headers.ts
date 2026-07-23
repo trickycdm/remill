@@ -27,7 +27,7 @@ import type { Env } from '@/types';
 import { getDb } from '@/db/client';
 import { getSettings } from '@/services/settings';
 
-const PROTECTED_PREFIXES = ['/admin', '/api', '/mcp', '/auth', '/media'] as const;
+const PROTECTED_PREFIXES = ['/admin', '/api', '/mcp', '/auth', '/media', '/oauth'] as const;
 
 /** Exact hosts only — never wildcards. Documented in the settings help copy. */
 export const CDN_SCRIPT_HOSTS = ['https://cdn.jsdelivr.net', 'https://unpkg.com'] as const;

@@ -316,8 +316,13 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(r.body.result.isError).toBe(true);
   });
 
-  it('SEC-5: anonymous list_collections returns a public-safe projection (no access/workflow)', async () => {
-    const r = await mcp(null, 'tools/call', { name: 'list_collections' });
+  it('D48: anonymous /mcp gets the 401 OAuth challenge (no anonymous surface)', async () => {
+    const r = await mcp(null, 'tools/list');
+    expect(r.status).toBe(401);
+  });
+
+  it('SEC-5: reader list_collections returns a public-safe projection (no access/workflow)', async () => {
+    const r = await mcp(readerToken, 'tools/call', { name: 'list_collections' });
     const payload = JSON.parse(r.body.result.content[0].text) as {
       slug: string;
       access?: unknown;
@@ -329,7 +334,7 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(posts?.workflow).toBeUndefined();
   });
 
-  it('D46: a private collection is invisible over MCP to anonymous and to wrongly-scoped tokens', async () => {
+  it('D46: a private collection is invisible over MCP to wrongly-scoped tokens', async () => {
     await collectionsService.createCollection(
       db,
       admin,
@@ -345,11 +350,8 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
         ) as { slug: string }[]
       ).map((c) => c.slug);
 
-    // Anonymous: absent from list_collections and no generated tools for it.
-    expect(await slugsFor(null)).not.toContain('secret');
-    const anonTools = toolNames(await mcp(null, 'tools/list'));
-    expect(anonTools.some((t) => t.endsWith('_secret'))).toBe(false);
-
+    // (Anonymous can no longer reach /mcp at all — D48's 401 challenge — so
+    // the anonymous-invisibility half of D46 holds a fortiori.)
     // A reader token is role-wide ('*' assignment) so it CAN discover it; an
     // admin token sees the full definition path. The interesting negative is a
     // scoped agent: wildcard reader role masked by a posts-only token scope.
@@ -377,7 +379,8 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
         ) as { key: string; installed: boolean }[]
       ).find((p) => p.key === 'prompts')?.installed;
     expect(await installedFor(adminToken)).toBe(true);
-    expect(await installedFor(null)).toBe(false);
+    // The masked reader can't see the pack's private collection → reads as not installed.
+    expect(await installedFor(maskedToken)).toBe(false);
   });
 
   it('share_<slug> supports team subjects; list_teams resolves names (manage_access only)', async () => {
@@ -512,10 +515,10 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
       ]);
     });
 
-    it('prompts/list is permission-filtered: anonymous and scope-masked tokens see []', async () => {
+    it('prompts/list is permission-filtered: scope-masked tokens see [] (anonymous is 401, D48)', async () => {
       await seedPrompt();
       const anon = await mcp(null, 'prompts/list');
-      expect(anon.body.result.prompts).toEqual([]);
+      expect(anon.status).toBe(401);
 
       // A reader-role agent whose TOKEN is masked to posts-only: role would
       // allow, the scope mask must not.

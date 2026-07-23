@@ -36,6 +36,12 @@ export const LOGIN_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
 export const TOKEN_RATE_LIMIT: RateLimitTier = { limit: 20, windowSeconds: 60 };
 export const UPLOAD_RATE_LIMIT: RateLimitTier = { limit: 30, windowSeconds: 60 };
 export const IMPORT_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 }; // D37: each import is a bulk write
+// D48 OAuth tiers. Register (DCR) is unauthenticated by design → tight. Token
+// must accommodate device polling (12/min at the 5s interval) plus refreshes.
+// Device-code ENTRY is the low-entropy brute-force surface → login-tight.
+export const OAUTH_REGISTER_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
+export const OAUTH_TOKEN_RATE_LIMIT: RateLimitTier = { limit: 30, windowSeconds: 60 };
+export const OAUTH_DEVICE_ENTRY_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
 
 /** What the limiter records on the context for `apiJson` to surface as headers. */
 export interface RateLimitInfo {
