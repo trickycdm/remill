@@ -457,6 +457,57 @@ export async function revokeToken(db: Database, principal: Principal, tokenId: s
   await principalQ.revokeToken(db, tokenId);
 }
 
+/**
+ * The connect-wizard path (D48): principal + role + token in one atomic step,
+ * collapsing the old create-agent → assign-role → issue-token trek. Same gate
+ * as issueToken (human-only, manage_access, audited once). Unlike the OAuth
+ * consent screen, the wizard MAY grant `admin` — it is the sanctioned path for
+ * full-admin agents. Returns the plaintext token exactly once.
+ */
+export async function connectAgent(
+  db: Database,
+  principal: Principal,
+  input: {
+    name: string;
+    role: string;
+    roleCollection?: string;
+    scope?: { collection: string; action: Action }[];
+    subtype?: MachinePersona;
+  },
+  now: string,
+): Promise<{ principalId: string; tokenId: string; token: string }> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+
+  const name = input.name.trim();
+  const issues: ErrorDetails[] = [];
+  if (!name) issues.push({ path: 'name', message: 'Name is required.' });
+  const roles = await roleQ.listRoles(db);
+  if (input.role === 'anonymous' || !roles.some((r) => r.slug === input.role)) {
+    issues.push({ path: 'role', message: `Unknown role '${input.role}'.` });
+  }
+  const badScope = (input.scope ?? []).filter((s) => !ACTIONS.includes(s.action));
+  issues.push(...badScope.map((s) => ({ path: 'scope', message: `Unknown action '${s.action}'.` })));
+  if (issues.length) throw new InputValidationError(issues, 'Invalid agent connection');
+
+  const token = generateToken();
+  const { principalId, tokenId } = await principalQ.createAgentWithToken(
+    db,
+    {
+      name,
+      subtype: input.subtype ?? 'agent',
+      role: input.role,
+      roleCollection: input.roleCollection?.trim() || '*',
+      tokenName: `${name} token`,
+      tokenHash: await hashToken(token),
+      scope: input.scope?.length ? input.scope : null,
+      expiresAt: null,
+    },
+    now,
+  );
+  return { principalId, tokenId, token };
+}
+
 // ---------------------------------------------------------------------------
 // Teams (D24) — named groups of principals used as item-grant subjects.
 // Teams never carry role permissions; a team grant only ADDs read (etc.) on one

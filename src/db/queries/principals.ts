@@ -74,6 +74,48 @@ export async function createUserPrincipal(
   return id;
 }
 
+/**
+ * The connect-wizard path (D48): machine principal + role assignment + first
+ * bearer token in ONE batch, so a half-created agent can never exist. Mirrors
+ * `createUserPrincipal`'s atomicity. The service layer owns all validation.
+ */
+export async function createAgentWithToken(
+  db: Database,
+  input: {
+    name: string;
+    subtype: MachinePersona;
+    role: string;
+    roleCollection: string;
+    tokenName: string;
+    tokenHash: string;
+    scope: { collection: string; action: string }[] | null;
+    expiresAt: string | null;
+  },
+  now: string,
+): Promise<{ principalId: string; tokenId: string }> {
+  const principalId = newId('principal');
+  const tokenId = newId('token');
+  await db.batch([
+    db
+      .insert(principals)
+      .values({ id: principalId, kind: 'agent', subtype: input.subtype, name: input.name, disabled: 0, createdAt: now }),
+    db
+      .insert(principalRoles)
+      .values({ id: newId('principalRole'), principalId, role: input.role, collection: input.roleCollection }),
+    db.insert(apiTokens).values({
+      id: tokenId,
+      principalId,
+      name: input.tokenName,
+      tokenHash: input.tokenHash,
+      scopeJson: input.scope ? JSON.stringify(input.scope) : null,
+      expiresAt: input.expiresAt,
+      lastUsedAt: null,
+      createdAt: now,
+    }),
+  ]);
+  return { principalId, tokenId };
+}
+
 export async function setPrincipalDisabled(db: Database, id: string, disabled: boolean): Promise<void> {
   await db.update(principals).set({ disabled: disabled ? 1 : 0 }).where(eq(principals.id, id));
 }
@@ -123,6 +165,7 @@ export async function insertToken(
     scope: { collection: string; action: string }[] | null;
     expiresAt: string | null;
     now: string;
+    grantId?: string; // D48: set for OAuth access tokens — grant deletion cascades them
   },
 ): Promise<string> {
   const id = newId('token');
@@ -135,6 +178,7 @@ export async function insertToken(
     expiresAt: input.expiresAt,
     lastUsedAt: null,
     createdAt: input.now,
+    grantId: input.grantId ?? null,
   });
   return id;
 }
