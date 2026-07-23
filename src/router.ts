@@ -26,7 +26,6 @@ import * as api_c_collection_export from './routes/api/c/[collection]/export';
 import * as api_c_collection_import from './routes/api/c/[collection]/import';
 import * as api_packs_key_install from './routes/api/packs/[key]/install';
 import * as api_trash_id_restore from './routes/api/trash/[id]/restore';
-import * as admin_access_agents from './routes/admin/access/agents';
 import * as admin_access_assign from './routes/admin/access/assign';
 import * as admin_access_connect_index from './routes/admin/access/connect';
 import * as admin_access_matrix_index from './routes/admin/access/matrix';
@@ -117,7 +116,6 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.patch('/api/c/:collection/:id', ...api_c_collection_id_index.onRequestPatch);
 	app.post('/api/packs/:key/install', ...api_packs_key_install.onRequestPost);
 	app.post('/api/trash/:id/restore', ...api_trash_id_restore.onRequestPost);
-	app.post('/admin/access/agents', ...admin_access_agents.onRequestPost);
 	app.post('/admin/access/assign', ...admin_access_assign.onRequestPost);
 	app.get('/admin/access/connect', ...admin_access_connect_index.onRequestGet);
 	app.post('/admin/access/connect', ...admin_access_connect_index.onRequestPost);

@@ -270,7 +270,14 @@ export const onRequestPost = factory.createHandlers(
         const result = await access.connectAgent(
           db,
           principal,
-          { name: agentName, role: String(body.role ?? ''), scope },
+          {
+            name: agentName,
+            role: String(body.role ?? ''),
+            scope,
+            // "Script / REST API" is the wizard's Service persona; everything
+            // else is an autonomous Agent (display grouping only, never security).
+            subtype: body.client === 'rest' ? 'service' : 'agent',
+          },
           now,
         );
         token = result.token;
