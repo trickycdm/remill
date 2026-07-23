@@ -28,6 +28,7 @@ import * as api_packs_key_install from './routes/api/packs/[key]/install';
 import * as api_trash_id_restore from './routes/api/trash/[id]/restore';
 import * as admin_access_agents from './routes/admin/access/agents';
 import * as admin_access_assign from './routes/admin/access/assign';
+import * as admin_access_connect_index from './routes/admin/access/connect';
 import * as admin_access_matrix_index from './routes/admin/access/matrix';
 import * as admin_access_roles_index from './routes/admin/access/roles';
 import * as admin_access_teams_index from './routes/admin/access/teams';
@@ -118,6 +119,8 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/api/trash/:id/restore', ...api_trash_id_restore.onRequestPost);
 	app.post('/admin/access/agents', ...admin_access_agents.onRequestPost);
 	app.post('/admin/access/assign', ...admin_access_assign.onRequestPost);
+	app.get('/admin/access/connect', ...admin_access_connect_index.onRequestGet);
+	app.post('/admin/access/connect', ...admin_access_connect_index.onRequestPost);
 	app.get('/admin/access/matrix', ...admin_access_matrix_index.onRequestGet);
 	app.get('/admin/access/roles', ...admin_access_roles_index.onRequestGet);
 	app.post('/admin/access/roles', ...admin_access_roles_index.onRequestPost);

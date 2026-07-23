@@ -10,8 +10,7 @@ import { getEmailTransport } from '@/lib/email';
 import { inviteEmail } from '@/lib/email/templates';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
-import { jsonForScript } from '@/lib/json-for-script';
-import { Button } from '@/components/ui';
+import { SecretReveal } from '@/components/connect-cards';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -57,36 +56,17 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
 
   return c.html(
     <div id="invite-reveal">
-      <div
-        class="mt-3 rounded-md border border-accent/40 bg-accent/5 p-4"
-        data-signals={jsonForScript({ inviteCopied: false })}
-      >
-        <p class="text-sm font-medium text-ink">Invitation created — copy the link now</p>
-        <p class="mt-0.5 mb-3 text-[13px] text-ink-muted">
-          {transport.kind === 'resend'
-            ? 'An invite email was sent. This single-use link expires in 7 days; copy it if you also want to share it directly.'
-            : 'An invite email was queued (delivery is stubbed in this build). This single-use link expires in 7 days; copy it to share directly.'}
-        </p>
-        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <code
-            id="invite-link"
-            class="min-w-0 flex-1 overflow-x-auto rounded-md bg-hover px-3 py-2 font-mono text-sm break-all"
-          >
-            {link}
-          </code>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            aria-label="Copy invite link to clipboard"
-            data-on:click="navigator.clipboard.writeText(document.getElementById('invite-link').textContent.trim()); $inviteCopied = true"
-          >
-            <span data-show="!$inviteCopied">Copy</span>
-            <span data-show="$inviteCopied" style="display:none">
-              Copied!
-            </span>
-          </Button>
-        </div>
+      <div class="mt-3">
+        <SecretReveal
+          id="invite-link"
+          label="Invitation created — copy the link now"
+          note={
+            transport.kind === 'resend'
+              ? 'An invite email was sent. This single-use link expires in 7 days; copy it if you also want to share it directly.'
+              : 'An invite email was queued (delivery is stubbed in this build). This single-use link expires in 7 days; copy it to share directly.'
+          }
+          value={link}
+        />
       </div>
     </div>,
     200,
