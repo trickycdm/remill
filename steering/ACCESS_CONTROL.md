@@ -145,12 +145,25 @@ code. The audit log is itself readable only with `manage_access`.
 ## Non-negotiables
 
 - `manage_access` is held by humans by default. Agents never perform access-management
-  **mutations** — `assignRole`, `issueToken`, `createUser`, `createAgent`, and all team
-  CRUD/membership/invite operations are `refuseAgentEscalation`-guarded; granting an agent
+  **mutations** — `assignRole`, `issueToken`, `connectAgent`, `createUser`, `createAgent`, and all
+  team CRUD/membership/invite operations are `refuseAgentEscalation`-guarded; granting an agent
   `manage_access` requires a human decision recorded in the audit log. The one deliberate
   carve-out is `share_link` (D26): minting an expiring read-only link on a single document is a
   separately grantable action a human MAY hand to an agent — it is not escalation, because the
   link never grants more than that one document's read.
+- **SEC-8, refined for OAuth (D48): issuance authority is always a recorded human consent.** The
+  OAuth token endpoint mints `rmo_` access tokens *without a human in-flight* — that is NOT a
+  violation, because the **privilege decision** already happened at the consent screen
+  (`/oauth/authorize` / `/oauth/device`): human-only (agents refused), gated by the identical
+  `authorize('manage_access', ROOT)` call as `issueToken`, audited, and materialized as an
+  `oauth_grants` row — the **capability ceiling** (agent principal + role + refresh window).
+  Everything `/oauth/token` does (code exchange, refresh rotation, device polling) is **credential
+  re-derivation inside that ceiling** via witness-free grant-scoped queries (the D30/D32
+  system-actor precedent): same principal, roles untouched, access expiry ≤ 1 h. Structurally, no
+  code path below the consent pair writes `principal_roles` or calls the gated `issueToken`.
+  Revocation is one write — deleting the grant cascades (FK) every derived credential; auth-code
+  replay and refresh-token reuse kill the live chain. The OAuth `scope` parameter is echoed for
+  client compatibility and **never** an authority (roles never come from client input).
 - Permission resolution happens **once per request**, is carried on the request context, and is
   never read from client input (no role-in-cookie-payload, no role-in-body).
 - MCP tool listing is intersected with the connecting principal's effective permissions — an agent

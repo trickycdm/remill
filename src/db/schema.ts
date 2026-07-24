@@ -96,10 +96,14 @@ export const apiTokens = sqliteTable(
     expiresAt: text('expires_at'),
     lastUsedAt: text('last_used_at'),
     createdAt: text('created_at').notNull(),
+    // D48: OAuth access tokens are ordinary api_tokens rows tied to a grant.
+    // Deleting the grant cascades its tokens — revocation in one write.
+    grantId: text('grant_id').references(() => oauthGrants.id, { onDelete: 'cascade' }),
   },
   (t) => [
     uniqueIndex('api_tokens_hash_unique').on(t.tokenHash),
     index('api_tokens_principal_idx').on(t.principalId),
+    index('api_tokens_grant_idx').on(t.grantId),
   ],
 );
 
@@ -442,4 +446,94 @@ export const events = sqliteTable(
     createdAt: text('created_at').notNull(),
   },
   (t) => [index('events_created_idx').on(t.createdAt)],
+);
+
+// ---------------------------------------------------------------------------
+// OAuth 2.1 authorization server (D48) — remill is both AS and protected
+// resource for /mcp. Public clients only (PKCE, no secrets). The durable
+// human consent is the oauth_grants row: the capability ceiling that token
+// exchanges re-derive credentials within, and the single revocation point
+// (delete → FK cascade kills refresh + every live access token).
+// ---------------------------------------------------------------------------
+
+export const oauthClients = sqliteTable('oauth_clients', {
+  id: text('id').primaryKey(), // ocl_… — doubles as the public client_id (nanoid: unguessable)
+  name: text('name').notNull(), // client_name from DCR — UNTRUSTED display text
+  redirectUrisJson: text('redirect_uris_json').notNull(), // string[] (validated at registration)
+  // Public clients only — CHECK (= 'none') hand-added in the migration; no
+  // secret column exists, structurally enforcing it.
+  tokenEndpointAuthMethod: text('token_endpoint_auth_method').notNull().default('none'),
+  metadataJson: text('metadata_json'), // sanitized DCR extras (client_uri, software_id, …)
+  createdAt: text('created_at').notNull(),
+});
+
+export const oauthGrants = sqliteTable(
+  'oauth_grants',
+  {
+    id: text('id').primaryKey(), // ogr_…
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => principals.id, { onDelete: 'cascade' }), // the agent principal
+    grantedBy: text('granted_by').notNull(), // human principal id — attribution, never authorization
+    role: text('role').notNull(), // slug chosen at consent (record; authority = principal_roles)
+    resource: text('resource'), // RFC 8707 indicator, if the client presented one
+    refreshTokenHash: text('refresh_token_hash'), // SHA-256 hex, rotated in place; null until first exchange
+    prevRefreshTokenHash: text('prev_refresh_token_hash'), // one-slot rotation memory — reuse detection
+    refreshExpiresAt: text('refresh_expires_at'), // sliding window, re-stamped on rotation
+    createdAt: text('created_at').notNull(),
+    lastUsedAt: text('last_used_at'),
+  },
+  (t) => [
+    // One grant per registration — a reconnecting client reuses its principal.
+    uniqueIndex('oauth_grants_client_unique').on(t.clientId),
+    uniqueIndex('oauth_grants_refresh_unique').on(t.refreshTokenHash),
+    index('oauth_grants_principal_idx').on(t.principalId),
+  ],
+);
+
+export const oauthCodes = sqliteTable(
+  'oauth_codes',
+  {
+    id: text('id').primaryKey(), // oco_…
+    codeHash: text('code_hash').notNull(), // SHA-256 of the rmc_… plaintext
+    grantId: text('grant_id')
+      .notNull()
+      .references(() => oauthGrants.id, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(), // exact value from /authorize, re-matched at /token
+    codeChallenge: text('code_challenge').notNull(),
+    codeChallengeMethod: text('code_challenge_method').notNull().default('S256'), // CHECK in migration
+    resource: text('resource'),
+    expiresAt: text('expires_at').notNull(), // ~60s
+    consumedAt: text('consumed_at'), // kept (not deleted) so replay is DETECTABLE → kill grant tokens
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('oauth_codes_hash_unique').on(t.codeHash),
+    index('oauth_codes_grant_idx').on(t.grantId),
+  ],
+);
+
+export const oauthDeviceCodes = sqliteTable(
+  'oauth_device_codes',
+  {
+    id: text('id').primaryKey(), // odc_…
+    deviceCodeHash: text('device_code_hash').notNull(), // SHA-256 of rmd_… (high entropy)
+    userCodeHash: text('user_code_hash').notNull(), // SHA-256 of the normalized short code (low entropy → rate-limited entry)
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    resource: text('resource'),
+    grantId: text('grant_id').references(() => oauthGrants.id, { onDelete: 'cascade' }), // set on approval; null = pending
+    deniedAt: text('denied_at'),
+    lastPolledAt: text('last_polled_at'), // slow_down enforcement (interval 5s)
+    expiresAt: text('expires_at').notNull(), // 10 minutes
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('oauth_device_hash_unique').on(t.deviceCodeHash),
+    uniqueIndex('oauth_device_user_unique').on(t.userCodeHash),
+  ],
 );

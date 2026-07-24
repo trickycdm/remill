@@ -39,6 +39,20 @@ closes one of those, or a class like it. New code must comply; fix violations as
   `share_link` action (D26) — separately grantable, NOT agent-refused — so an agent may mint
   expiring read-only links when a human grants it that capability; identity/role/token mutations
   (`assignRole`, `issueToken`, `createUser`, `createAgent`, team CRUD) still refuse agents.
+- **OAuth credentials follow the same discipline (D48).** Prefix map: `rmk_` manual bearer key ·
+  `rms_` share link · `rmj_` team join · `rmo_` OAuth access token (an ordinary `api_tokens` row,
+  1 h expiry, `grant_id`-cascaded) · `rmr_` OAuth refresh (hash lives on the grant row, rotated on
+  every use with one-slot reuse detection) · `rmc_` auth code (60 s single-use, kept-consumed so
+  replay is detectable) · `rmd_` device code. All 32 bytes Web-Crypto entropy, SHA-256-hashed at
+  rest, plaintext delivered exactly once, uniform `invalid_grant` for unknown/expired/revoked (no
+  enumeration oracle). Unauthenticated `/mcp` answers **401 +
+  `WWW-Authenticate: Bearer resource_metadata=…`** — the challenge that drives MCP OAuth
+  discovery; there is no anonymous MCP surface. The `/oauth/token`, `/oauth/register`,
+  `/oauth/revoke`, and `/oauth/device-authorization` endpoints (and `/.well-known/*`, `/mcp`)
+  carry permissive CORS deliberately — they authenticate by bearer/PKCE, never by cookie; the
+  cookie-bearing consent pages (`/oauth/authorize`, `/oauth/device`) get none. DCR is
+  unauthenticated by design (RFC 7591): rate-limited and purged when no grant follows in 7 days;
+  the device user-code entry POST is login-tight (the low-entropy brute-force surface).
 
 ## 1. Whitelist validation on EVERY write path (the anti-mass-assignment rule)
 

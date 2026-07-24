@@ -17,6 +17,7 @@ import { nowIso } from '@/lib/now';
 import { purgeExpiredTrash } from '@/services/trash';
 import { drainScheduledPublishes } from '@/services/documents';
 import { pruneEvents } from '@/services/events';
+import { purgeOAuthArtifacts } from '@/services/oauth';
 
 type Job = { readonly name: string; readonly run: (env: Env, now: string) => Promise<unknown> };
 
@@ -28,6 +29,9 @@ const PER_MINUTE: Job[] = [
 const DAILY_MAINTENANCE: Job[] = [
   { name: 'purgeExpiredTrash', run: (env, now) => purgeExpiredTrash(getDb(env.DB), now) },
   { name: 'pruneEvents', run: (env, now) => pruneEvents(getDb(env.DB), now) },
+  // D48: expired oauth codes/devices/access tokens, unconsented DCR clients,
+  // and grants whose refresh window died long ago.
+  { name: 'purgeOAuthArtifacts', run: (env, now) => purgeOAuthArtifacts(getDb(env.DB), now) },
   // Hook point: cron-scheduled R2 snapshots could also slot in here (plan Phase 8).
 ];
 

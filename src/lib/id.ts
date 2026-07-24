@@ -25,6 +25,10 @@ export const ID_PREFIX = {
   teamMember: 'tmm', // team_members join rows
   teamInvite: 'tin', // team_invites rows (multi-use join links)
   trash: 'trh', // document_trash snapshots (D29)
+  oauthClient: 'ocl', // oauth_clients — the id doubles as the public client_id (D48)
+  oauthGrant: 'ogr', // oauth_grants — the durable human consent (D48)
+  oauthCode: 'oco', // oauth_codes rows (the code itself is rmc_…, stored hashed)
+  oauthDevice: 'odc', // oauth_device_codes rows (D48)
 } as const;
 
 type Entity = keyof typeof ID_PREFIX;

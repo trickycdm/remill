@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
+import { cors } from 'hono/cors';
 import { securityHeaders } from '@/middleware/security-headers';
 import type { Env } from '@/types';
 import { RootLayout } from '@/layouts';
@@ -16,6 +17,7 @@ import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { nowIso } from '@/lib/now';
 import { runScheduled } from '@/jobs';
+import { authorizationServerMetadata, protectedResourceMetadata } from '@/services/oauth';
 import { loadRoutes } from './router';
 
 // Named export: tests drive the Hono instance directly via `app.request(...)`
@@ -39,6 +41,24 @@ app.use('*', securityHeaders());
 // 1,000-writes/day budget under ordinary crawler traffic. Abuse-prone endpoints
 // carry their own tight limiters (login/token/upload/import/join via
 // `rateLimit()`); volumetric abuse is absorbed by Cloudflare's edge DDoS + WAF.
+
+// D48: the machine-facing OAuth surfaces + /mcp are called cross-origin by
+// browser-resident MCP clients (Inspector, webviews). Permissive CORS is safe
+// here — these endpoints authenticate by bearer/PKCE, never by cookie. The
+// cookie-bearing consent pages (/oauth/authorize, /oauth/device) deliberately
+// get NO CORS. The middleware answers OPTIONS preflights itself.
+const machineOAuthCors = cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'OPTIONS'],
+  allowHeaders: ['Authorization', 'Content-Type', 'Mcp-Session-Id', 'MCP-Protocol-Version'],
+  exposeHeaders: ['WWW-Authenticate'],
+});
+app.use('/.well-known/*', machineOAuthCors);
+app.use('/mcp', machineOAuthCors);
+app.use('/oauth/register', machineOAuthCors);
+app.use('/oauth/token', machineOAuthCors);
+app.use('/oauth/revoke', machineOAuthCors);
+app.use('/oauth/device-authorization', machineOAuthCors);
 
 app.use('*', sessionSetup()); // must run before any auth-reading route
 app.use('*', RootLayout);
@@ -146,6 +166,28 @@ app.get('/robots.txt', async (c) => {
   const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
   return c.text(robotsTxt(baseUrl));
 });
+
+// OAuth discovery documents (D48) — dotted paths, so hand-registered like the
+// discovery pack above. Both the bare and `/mcp`-suffixed variants are served:
+// the MCP authorization spec has clients derive metadata URLs by path-inserting
+// the resource path, and SDKs differ on which variant they try. The
+// openid-configuration alias covers the discovery fallback chain's last stop.
+for (const path of ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp']) {
+  app.get(path, async (c) => {
+    const base = resolveBaseUrl(c.env, await getSettings(getDb(c.env.DB)), c.req.url);
+    return c.json(protectedResourceMetadata(base));
+  });
+}
+for (const path of [
+  '/.well-known/oauth-authorization-server',
+  '/.well-known/oauth-authorization-server/mcp',
+  '/.well-known/openid-configuration',
+]) {
+  app.get(path, async (c) => {
+    const base = resolveBaseUrl(c.env, await getSettings(getDb(c.env.DB)), c.req.url);
+    return c.json(authorizationServerMetadata(base));
+  });
+}
 
 loadRoutes(app);
 

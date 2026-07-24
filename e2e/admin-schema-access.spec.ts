@@ -44,38 +44,69 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await expect(page).toHaveURL(/\/admin\/c\/widgets\/doc_/);
   });
 
-  test('access UI: create an agent, assign a role, issue a token (shown once)', async ({ page }) => {
+  // Own bucket: this test's login would otherwise be the one that tips the
+  // file's shared SEC-2 login limiter for the later author-role test.
+  test.describe('connect wizard (own rate-limit bucket)', () => {
+    test.use({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.113' } });
+
+    test('connect wizard: one step mints principal + role + token with per-client cards (D48)', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto('/admin/access');
 
-    // Create an agent principal (default type = Agent).
-    await page.getByLabel('New machine identity').fill('e2e-bot');
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await expect(page.getByText('e2e-bot')).toBeVisible();
+    // The index is a directory now — one primary action leads to the wizard.
+    // (exact: the empty-state hints also link "connect an agent to get started".)
+    await page.getByRole('link', { name: 'Connect an agent', exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/access\/connect$/);
 
-    // Create a service principal — it lands with a distinct "Service" persona badge.
-    await page.getByLabel('New machine identity').fill('e2e-puller');
-    await page.getByLabel('Type').selectOption('service');
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await expect(page.getByText('e2e-puller')).toBeVisible();
-    // Both persona badges render as <span> pills (exact text avoids the plural group
-    // headers; .and(span) avoids the "Service"/"Agent" <option>s in the Type select).
+    // The client select pre-fills the name until the human edits it.
+    await expect(page.getByLabel('Agent name')).toHaveValue('claude-code');
+    await page.getByLabel('What are you connecting?').selectOption('gemini-cli');
+    await expect(page.getByLabel('Agent name')).toHaveValue('gemini-cli');
+    await page.getByLabel('Agent name').fill('e2e-bot');
+    await page.getByLabel('What are you connecting?').selectOption('claude-code');
+    await expect(page.getByLabel('Agent name')).toHaveValue('e2e-bot'); // dirty guard holds
+
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+
+    // The form morphs into the one-time reveal + connect cards (no navigation).
+    await expect(page.getByText('Access token — copy it now')).toBeVisible();
+    await expect(page.getByText(/^rmk_/).first()).toBeVisible(); // the one-time plaintext
+    await expect(page.getByText(/claude mcp add --transport http remill/)).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/access\/connect$/);
+
+    // Tab to .mcp.json — the Claude command hides, the JSON config shows.
+    // (id-scoped: the Cursor fallback panel also contains "mcpServers".)
+    await page.getByRole('radio', { name: '.mcp.json' }).check({ force: true });
+    await expect(page.locator('#connect-snip-mcp-json')).toBeVisible();
+    await expect(page.getByText(/claude mcp add --transport/)).toBeHidden();
+
+    // One-time invariant: a reload renders the empty form — the token is gone.
+    await page.reload();
+    await expect(page.getByLabel('Agent name')).toBeVisible();
+    await expect(page.getByText(/^rmk_/)).toHaveCount(0);
+
+    // A "Script / REST API" connection lands as a Service persona.
+    await page.getByLabel('What are you connecting?').selectOption('rest');
+    await page.getByLabel('Agent name').fill('e2e-puller');
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(page.getByText('Access token — copy it now')).toBeVisible();
+
+    // Back on the directory: both principals, persona badges, health lines,
+    // and the reconnect path.
+    await page.goto('/admin/access');
+    // exact: the auto-named "<name> token" revoke badges also contain the names.
+    await expect(page.getByText('e2e-bot', { exact: true })).toBeVisible();
+    await expect(page.getByText('e2e-puller', { exact: true })).toBeVisible();
     await expect(page.getByText('Service', { exact: true }).and(page.locator('span')).first()).toBeVisible();
     await expect(page.getByText('Agent', { exact: true }).and(page.locator('span')).first()).toBeVisible();
+    await expect(page.getByText(/Never connected/).first()).toBeVisible();
 
-    // Issue a token. The ScopePicker defaults to the Read-only preset on All
-    // collections, so no scope tweaking is needed for a read-only token.
-    const card = page.locator('div', { hasText: 'e2e-bot' });
-    await card.getByLabel('New token').first().fill('ci-read');
-    await card.getByRole('button', { name: 'Issue token' }).first().click();
-
-    // Datastar morphs the plaintext in place — no navigation (the address bar
-    // stays on /admin/access, so a refresh can't re-mint the token) — with a copy
-    // affordance. The secret is shown exactly once.
-    await expect(page.getByText('New token — copy it now')).toBeVisible();
-    await expect(page.getByText(/^rmk_/)).toBeVisible(); // the one-time plaintext
-    await expect(card.getByRole('button', { name: 'Copy' }).first()).toBeVisible();
-    await expect(page).toHaveURL(/\/admin\/access$/);
+    // Reconnect mode: "New token →" mints for the EXISTING principal.
+    await page.getByRole('link', { name: 'New token →' }).first().click();
+    await expect(page).toHaveURL(/\/admin\/access\/connect\?for=prn_/);
+    await page.getByRole('button', { name: 'Mint token', exact: true }).click();
+    await expect(page.getByText('Access token — copy it now')).toBeVisible();
+    });
   });
 
   test('roles: create a custom role from the closed action vocabulary', async ({ page }) => {
@@ -137,7 +168,9 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/access');
 
-    await page.getByLabel('Add a person — name').fill('Casey Jones');
+    // The invite form lives behind a disclosure in the People group (D48).
+    await page.locator('summary', { hasText: 'Add a person' }).click();
+    await page.getByLabel('Name', { exact: true }).fill('Casey Jones');
     await page.getByLabel('Email', { exact: true }).fill('casey@remill.local');
     await page.getByLabel('Password (optional)').fill('caseypass1');
     await page.getByLabel('Initial role').selectOption('editor');
@@ -159,7 +192,8 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await loginAsAdmin(page);
     await page.goto('/admin/access');
 
-    await page.getByLabel('Add a person — name').fill('Dana Link');
+    await page.locator('summary', { hasText: 'Add a person' }).click();
+    await page.getByLabel('Name', { exact: true }).fill('Dana Link');
     await page.getByLabel('Email', { exact: true }).fill('dana@remill.local');
     // Leave the password blank → an invite link is issued and morphed in place
     // (Datastar reveal, no navigation — the address bar stays on /admin/access).
@@ -167,7 +201,7 @@ test.describe('Phase 4 — schema builder + access UI', () => {
 
     await expect(page.getByText('Invitation created — copy the link now')).toBeVisible();
     await expect(page).toHaveURL(/\/admin\/access$/);
-    const link = (await page.locator('#invite-link').innerText()).trim();
+    const link = (await page.locator('#invite-link-code').innerText()).trim();
     expect(link).toContain('/auth/set-password/');
 
     // Visit the link in a fresh session and set a password.

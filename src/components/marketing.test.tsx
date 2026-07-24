@@ -82,8 +82,9 @@ describe('homepage (marketing)', () => {
     // carries the meaning; the tilt marks at most one stamp per cluster).
     expect(html).toContain('Allowed');
     expect(html).toContain('Denied');
-    // The quickstart is the coupon strip (three steps, one ticket).
-    expect(html).toContain('Mint a token');
+    // The quickstart is the coupon strip (three steps, one ticket) — D48 leads
+    // with the URL-only OAuth connect.
+    expect(html).toContain('Connect by URL');
     expect(html).toContain('Put it to work');
   });
 

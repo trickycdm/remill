@@ -5,17 +5,15 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { nowIso } from '@/lib/now';
 import * as access from '@/services/access';
-import { listCollections } from '@/services/collections';
+import { oauthProvenance } from '@/services/oauth';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
 import { personaOf, PERSONA_LABEL, PERSONA_TONE, type Persona } from '@/lib/persona';
+import { relativeTime } from '@/lib/relative-time';
 import type { PrincipalRecord, TokenRecord } from '@/db/queries/principals';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import {
   PageHeader,
   Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
   CardContent,
   Table,
   TableHead,
@@ -29,34 +27,64 @@ import {
   Select,
   Button,
   FormField,
-  ScopePicker,
-  ACCESS_ACTION_GROUPS,
-  type ScopePreset,
 } from '@/components/ui';
 
 /**
- * Token scope presets. A token scope is a NARROWING mask over the agent's own
- * permissions, so "Full access" = an empty selection (no narrowing / inherit);
- * the other presets restrict to the actions they list. `custom` opens the grid.
+ * /admin/access — the DIRECTORY of who has access (D48 restructure): one
+ * primary action (Connect an agent), the persona groups with connection
+ * health, and the audit trail. All creation/minting moved to the connect
+ * wizard; roles/teams/matrix live on their own sub-pages.
  */
-const TOKEN_SCOPE_PRESETS: readonly ScopePreset[] = [
-  { key: 'readonly', label: 'Read-only', actions: ['read'] },
-  { key: 'editor', label: 'Editor', actions: ['read', 'create', 'update', 'delete', 'publish'] },
-  { key: 'full', label: 'Full access', actions: [] },
-  { key: 'custom', label: 'Custom', actions: null },
-];
 
-/** One principal card — role badges, inline assign, and (machine principals) tokens. */
+/** Connection health from the freshest token use (resolvePrincipal stamps
+ *  last_used_at on every authenticated REST/MCP call). Colour + words, never
+ *  colour alone (A11Y). */
+function HealthLine({ p, tokens, now }: { p: PrincipalRecord; tokens: TokenRecord[]; now: string }) {
+  if (tokens.length === 0) {
+    return (
+      <p class="mt-1 text-sm text-ink-subtle">
+        No token yet —{' '}
+        <a href={`/admin/access/connect?for=${p.id}`} class="text-accent-text hover:underline">
+          connect it →
+        </a>
+      </p>
+    );
+  }
+  const used = tokens.map((t) => t.lastUsedAt).filter((t): t is string => t !== null);
+  if (used.length === 0) {
+    return (
+      <p class="mt-1 flex items-center gap-2 text-sm text-ink-muted">
+        <span aria-hidden="true" class="size-1.5 rounded-full bg-warning" />
+        Never connected — check your client config
+        <a href={`/admin/access/connect?for=${p.id}`} class="text-accent-text hover:underline">
+          view setup →
+        </a>
+      </p>
+    );
+  }
+  const latest = used.sort().at(-1)!;
+  return (
+    <p class="mt-1 flex items-center gap-2 text-sm text-ink-muted">
+      <span aria-hidden="true" class="size-1.5 rounded-full bg-success" />
+      Connected · last used {relativeTime(latest, now)}
+    </p>
+  );
+}
+
+/** One principal card: identity, roles (+assign disclosure), tokens, health. */
 function PrincipalCard({
   p,
   tokens,
-  collectionSlugs,
+  oauthClient,
+  now,
 }: {
   p: PrincipalRecord;
   tokens: TokenRecord[];
-  collectionSlugs: string[];
+  oauthClient: string | undefined;
+  now: string;
 }) {
   const persona = personaOf(p.kind, p.subtype);
+  const machine = p.kind === 'agent';
   return (
     <Card>
       <CardContent class="pt-5">
@@ -64,6 +92,11 @@ function PrincipalCard({
           <div>
             <span class="font-medium text-ink">{p.name}</span>{' '}
             <Badge tone={PERSONA_TONE[persona]}>{PERSONA_LABEL[persona]}</Badge>
+            {oauthClient && (
+              <span class="ml-2">
+                <Badge tone="neutral">via OAuth</Badge>
+              </span>
+            )}
             {p.disabled && (
               <span class="ml-2">
                 <Badge tone="danger">disabled</Badge>
@@ -72,7 +105,14 @@ function PrincipalCard({
             {p.email && <span class="ml-2 font-mono text-xs text-ink-subtle">{p.email}</span>}
             <span class="ml-2 font-mono text-xs text-ink-subtle">{p.id}</span>
           </div>
+          {machine && (
+            <Button href={`/admin/access/connect?for=${p.id}`} variant="secondary" size="sm">
+              New token →
+            </Button>
+          )}
         </div>
+
+        {machine && <HealthLine p={p} tokens={tokens} now={now} />}
 
         {/* Role assignments */}
         <div class="mt-3 flex flex-wrap items-center gap-2">
@@ -96,97 +136,54 @@ function PrincipalCard({
           )}
         </div>
 
-        {/* Assign a role */}
-        <form
-          method="post"
-          action="/admin/access/assign"
-          class="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"
-        >
-          <input type="hidden" name="op" value="assign" />
-          <input type="hidden" name="principalId" value={p.id} />
-          <FormField fieldId={`role-${p.id}`} label="Assign role">
-            <Select id={`role-${p.id}`} name="role">
-              {SYSTEM_ROLE_SLUGS.filter((s) => s !== 'anonymous').map((s) => (
-                <option value={s}>{s}</option>
-              ))}
-            </Select>
-          </FormField>
-          <FormField fieldId={`scope-${p.id}`} label="Scope">
-            <Input
-              id={`scope-${p.id}`}
-              name="collection"
-              type="text"
-              value="*"
-              placeholder="* or a slug"
-            />
-          </FormField>
-          <Button type="submit" variant="secondary">
-            Assign
-          </Button>
-        </form>
+        {/* Assign a role — collapsed: routine cards stay a directory row. */}
+        <details class="mt-2">
+          <summary class="cursor-pointer text-sm font-medium text-ink-muted hover:text-ink">
+            Assign role
+          </summary>
+          <form
+            method="post"
+            action="/admin/access/assign"
+            class="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"
+          >
+            <input type="hidden" name="op" value="assign" />
+            <input type="hidden" name="principalId" value={p.id} />
+            <FormField fieldId={`role-${p.id}`} label="Role">
+              <Select id={`role-${p.id}`} name="role">
+                {SYSTEM_ROLE_SLUGS.filter((s) => s !== 'anonymous').map((s) => (
+                  <option value={s}>{s}</option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField fieldId={`scope-${p.id}`} label="Scope">
+              <Input id={`scope-${p.id}`} name="collection" type="text" value="*" placeholder="* or a slug" />
+            </FormField>
+            <Button type="submit" variant="secondary">
+              Assign
+            </Button>
+          </form>
+        </details>
 
-        {/* Tokens (machine principals — services & agents) */}
-        {p.kind === 'agent' && (
+        {/* Tokens (machine principals): list + revoke; minting lives on /connect. */}
+        {machine && tokens.length > 0 && (
           <div class="mt-4 border-t border-border pt-3">
-            <div class="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <div class="flex flex-wrap items-center gap-2 text-sm">
               <span class="font-medium">Tokens:</span>
-              {tokens.length === 0 ? (
-                <span class="text-ink-subtle">none</span>
-              ) : (
-                tokens.map((t) => (
-                  <span class="inline-flex items-center gap-1.5">
-                    <form method="post" action="/admin/access/tokens" class="contents">
-                      <input type="hidden" name="op" value="revoke" />
-                      <input type="hidden" name="tokenId" value={t.id} />
-                      <button type="submit" aria-label={`Revoke token ${t.name}`}>
-                        <Badge tone="neutral">{t.name} ✕</Badge>
-                      </button>
-                    </form>
-                    {/* Liveness at a glance: resolvePrincipal stamps last_used_at
-                        on every authenticated REST/MCP call. */}
-                    <span class="font-mono text-xs text-ink-subtle">
-                      {t.lastUsedAt
-                        ? `used ${t.lastUsedAt.slice(0, 16).replace('T', ' ')}`
-                        : 'never used'}
-                    </span>
+              {tokens.map((t) => (
+                <span class="inline-flex items-center gap-1.5">
+                  <form method="post" action="/admin/access/tokens" class="contents">
+                    <input type="hidden" name="op" value="revoke" />
+                    <input type="hidden" name="tokenId" value={t.id} />
+                    <button type="submit" aria-label={`Revoke token ${t.name}`}>
+                      <Badge tone="neutral">{t.name} ✕</Badge>
+                    </button>
+                  </form>
+                  <span class="font-mono text-xs text-ink-subtle">
+                    {t.lastUsedAt ? `used ${relativeTime(t.lastUsedAt, now)}` : 'never used'}
                   </span>
-                ))
-              )}
+                </span>
+              ))}
             </div>
-            <form
-              data-indicator:tokbusy=""
-              data-on:submit="!$tokbusy && @post('/admin/access/tokens', {contentType: 'form'})"
-              class="flex flex-col gap-4 rounded-md border border-border bg-canvas p-3"
-            >
-              <input type="hidden" name="op" value="issue" />
-              <input type="hidden" name="principalId" value={p.id} />
-              <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-                <FormField fieldId={`tok-${p.id}`} label="New token" class="sm:w-64">
-                  <Input
-                    id={`tok-${p.id}`}
-                    name="name"
-                    type="text"
-                    placeholder="prod read-only"
-                    required
-                  />
-                </FormField>
-                <Button type="submit" variant="secondary" busy="$tokbusy">
-                  Issue token
-                </Button>
-              </div>
-              <ScopePicker
-                idPrefix={`tok-${p.id}`}
-                name="scopeAction"
-                groups={ACCESS_ACTION_GROUPS}
-                checked={new Set(['read'])}
-                presets={TOKEN_SCOPE_PRESETS}
-                defaultPreset="readonly"
-                collection={{ name: 'scopeCollection', options: collectionSlugs }}
-                help="Full access = no narrowing: the token inherits this agent's own permissions. Any other choice limits it to the checked actions."
-              />
-            </form>
-            {/* Datastar morphs the issued token (+ copy button) into this slot in place. */}
-            <div id={`token-reveal-${p.id}`} />
           </div>
         )}
       </CardContent>
@@ -200,19 +197,26 @@ function PersonaGroup({
   hint,
   principals,
   tokensByPrincipal,
-  collectionSlugs,
+  oauthByPrincipal,
+  now,
+  headerExtra,
 }: {
   title: string;
-  hint: string;
+  hint: unknown;
   principals: PrincipalRecord[];
   tokensByPrincipal: Map<string, TokenRecord[]>;
-  collectionSlugs: string[];
+  oauthByPrincipal: Map<string, string>;
+  now: string;
+  headerExtra?: unknown;
 }) {
   return (
     <div class="mb-6">
-      <h3 class="mb-2 text-sm font-semibold tracking-wide text-ink-muted uppercase">
-        {title} <span class="ml-1 font-normal text-ink-subtle">({principals.length})</span>
-      </h3>
+      <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="text-sm font-semibold tracking-wide text-ink-muted uppercase">
+          {title} <span class="ml-1 font-normal text-ink-subtle">({principals.length})</span>
+        </h3>
+      </div>
+      {headerExtra}
       {principals.length === 0 ? (
         <p class="text-sm text-ink-subtle">{hint}</p>
       ) : (
@@ -221,7 +225,8 @@ function PersonaGroup({
             <PrincipalCard
               p={p}
               tokens={tokensByPrincipal.get(p.id) ?? []}
-              collectionSlugs={collectionSlugs}
+              oauthClient={oauthByPrincipal.get(p.id)}
+              now={now}
             />
           ))}
         </div>
@@ -230,23 +235,66 @@ function PersonaGroup({
   );
 }
 
+/** The invite-a-person flow, folded into the People group as a disclosure. */
+function AddPersonDisclosure() {
+  return (
+    <details class="mb-4">
+      <summary class="cursor-pointer text-sm font-medium text-accent-text hover:underline">
+        Add a person
+      </summary>
+      <form
+        data-indicator:invbusy=""
+        data-on:submit="!$invbusy && @post('/admin/access/users', {contentType: 'form'})"
+        class="mt-2 flex flex-col gap-2 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:flex-wrap sm:items-end"
+      >
+        <FormField fieldId="invite-name" label="Name">
+          <Input id="invite-name" name="name" type="text" placeholder="Jane Doe" required />
+        </FormField>
+        <FormField fieldId="invite-email" label="Email">
+          <Input id="invite-email" name="email" type="email" placeholder="jane@example.com" required />
+        </FormField>
+        <FormField fieldId="invite-role" label="Initial role">
+          <Select id="invite-role" name="role">
+            {SYSTEM_ROLE_SLUGS.filter((s) => s !== 'anonymous').map((s) => (
+              <option value={s} selected={s === 'reader'}>
+                {s}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        <FormField fieldId="invite-password" label="Password (optional)">
+          <Input
+            id="invite-password"
+            name="password"
+            type="password"
+            placeholder="blank → email an invite link"
+          />
+        </FormField>
+        <Button type="submit" variant="secondary" busy="$invbusy">
+          Add person
+        </Button>
+      </form>
+      {/* Datastar morphs the invite link (+ copy button) into this slot in place. */}
+      <div id="invite-reveal" />
+    </details>
+  );
+}
+
 const factory = createFactory<{ Bindings: Env }>();
 
-/** GET /admin/access — principals & agents, roles, tokens, and the audit log. */
+/** GET /admin/access — the access directory + audit log. */
 export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
   const db = getDb(c.env.DB);
   const principal = requirePrincipal(c);
   const now = nowIso();
 
-  const [roles, principals, tokens, audit, collections] = await Promise.all([
-    access.listRoles(db),
+  const [principals, tokens, audit, oauthByPrincipal] = await Promise.all([
     access.listPrincipals(db, principal, now),
     access.listTokens(db, principal, now),
     access.listAudit(db, principal, now, 30),
-    listCollections(db),
+    oauthProvenance(db, principal, now),
   ]);
-  const collectionSlugs = collections.map((c) => c.slug);
   const tokensByPrincipal = new Map<string, typeof tokens>();
   for (const t of tokens) {
     const list = tokensByPrincipal.get(t.principalId) ?? [];
@@ -259,12 +307,25 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const people = byPersona('person');
   const services = byPersona('service');
   const agents = byPersona('agent');
+  const connectHint = (
+    <>
+      None yet —{' '}
+      <a href="/admin/access/connect" class="text-accent-text hover:underline">
+        connect an agent to get started →
+      </a>
+    </>
+  );
 
   return c.render(
     <AdminShell user={user} current="access">
       <PageHeader
         title="Access"
-        description="People, services, and agents — their roles and tokens, and the audit trail. Every actor is a first-class principal, least privilege by default."
+        description="Who can touch this remill — people, services, and agents, with their roles, tokens, and the audit trail."
+        actions={
+          <Button href="/admin/access/connect" variant="primary">
+            Connect an agent
+          </Button>
+        }
       />
 
       <div class="mb-8 flex flex-wrap gap-4 text-sm font-medium">
@@ -279,138 +340,32 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         </a>
       </div>
 
-      {/* Roles */}
+      {/* Principals directory */}
       <section class="mb-10">
-        <h2 class="mb-3 font-display text-display-sm">Roles</h2>
-        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {roles.map((r) => (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {r.name} {r.system && <Badge tone="neutral">system</Badge>}
-                </CardTitle>
-                <CardDescription>{r.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul class="flex flex-wrap gap-1.5">
-                  {r.permissions.length === 0 ? (
-                    <li class="text-sm text-ink-subtle">No permissions</li>
-                  ) : (
-                    r.permissions.map((p) => (
-                      <li>
-                        <Badge tone="accent">
-                          {p.action}
-                          {p.condition ? `:${p.condition}` : ''}
-                        </Badge>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {/* Principals */}
-      <section class="mb-10">
-        <div class="mb-4 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2 class="font-display text-display-sm">Principals</h2>
-            <p class="mt-1 max-w-2xl text-sm text-ink-subtle">
-              Three kinds of actor: <span class="text-ink-muted">People</span> (humans who sign in),{' '}
-              <span class="text-ink-muted">Services</span> (systems that pull data via the API), and{' '}
-              <span class="text-ink-muted">Agents</span> (autonomous AI clients over MCP or the
-              API). Services and agents authenticate with scoped bearer tokens.
-            </p>
-          </div>
-          <form
-            method="post"
-            action="/admin/access/agents"
-            class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"
-          >
-            <FormField fieldId="agent-name" label="New machine identity">
-              <Input
-                id="agent-name"
-                name="name"
-                type="text"
-                placeholder="researcher-bot"
-                required
-              />
-            </FormField>
-            <FormField fieldId="agent-subtype" label="Type">
-              <Select id="agent-subtype" name="subtype">
-                <option value="agent">Agent</option>
-                <option value="service">Service</option>
-              </Select>
-            </FormField>
-            <Button type="submit">Create</Button>
-          </form>
-        </div>
-
-        {/* Invite / add a Person */}
-        <form
-          data-indicator:invbusy=""
-          data-on:submit="!$invbusy && @post('/admin/access/users', {contentType: 'form'})"
-          class="mb-4 flex flex-col gap-2 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:flex-wrap sm:items-end"
-        >
-          <FormField fieldId="invite-name" label="Add a person — name">
-            <Input id="invite-name" name="name" type="text" placeholder="Jane Doe" required />
-          </FormField>
-          <FormField fieldId="invite-email" label="Email">
-            <Input
-              id="invite-email"
-              name="email"
-              type="email"
-              placeholder="jane@example.com"
-              required
-            />
-          </FormField>
-          <FormField fieldId="invite-role" label="Initial role">
-            <Select id="invite-role" name="role">
-              {SYSTEM_ROLE_SLUGS.filter((s) => s !== 'anonymous').map((s) => (
-                <option value={s} selected={s === 'reader'}>
-                  {s}
-                </option>
-              ))}
-            </Select>
-          </FormField>
-          <FormField fieldId="invite-password" label="Password (optional)">
-            <Input
-              id="invite-password"
-              name="password"
-              type="password"
-              placeholder="blank → email an invite link"
-            />
-          </FormField>
-          <Button type="submit" variant="secondary" busy="$invbusy">
-            Add person
-          </Button>
-        </form>
-        {/* Datastar morphs the invite link (+ copy button) into this slot in place;
-            the direct-password path navigates back here via dsRedirect instead. */}
-        <div id="invite-reveal" />
-
         <PersonaGroup
           title="People"
           hint="Humans who sign in with a password."
           principals={people}
           tokensByPrincipal={tokensByPrincipal}
-          collectionSlugs={collectionSlugs}
+          oauthByPrincipal={oauthByPrincipal}
+          now={now}
+          headerExtra={<AddPersonDisclosure />}
         />
         <PersonaGroup
           title="Services"
-          hint="No services yet — create one above for a system that pulls data via the API."
+          hint={connectHint}
           principals={services}
           tokensByPrincipal={tokensByPrincipal}
-          collectionSlugs={collectionSlugs}
+          oauthByPrincipal={oauthByPrincipal}
+          now={now}
         />
         <PersonaGroup
           title="Agents"
-          hint="No agents yet — create one above for an autonomous AI client (MCP or API)."
+          hint={connectHint}
           principals={agents}
           tokensByPrincipal={tokensByPrincipal}
-          collectionSlugs={collectionSlugs}
+          oauthByPrincipal={oauthByPrincipal}
+          now={now}
         />
       </section>
 

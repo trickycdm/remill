@@ -28,12 +28,26 @@ validation or authorization step that lives only in one surface.
 ## Authentication & principal resolution
 
 - Every request resolves to a **principal** before any logic runs (ACCESS_CONTROL.md). Humans:
-  session cookie. Machines (REST + MCP): **bearer token**. Unauthenticated: the `anonymous` principal.
+  session cookie. Machines (REST + MCP): **bearer token**. Unauthenticated on REST/public surfaces:
+  the `anonymous` principal. Unauthenticated on **/mcp**: a **401 with
+  `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/mcp"`** —
+  the challenge that triggers a client's OAuth walk (D48); there is no anonymous MCP surface.
+  `GET /mcp` is a 405 (the transport is POST-only streamable HTTP, D18).
 - Tokens are **hashed at rest** (never stored plaintext). On each request, hash the presented token
-  and look it up; update `last_used_at`. A token maps to exactly one principal.
+  and look it up; update `last_used_at`. A token maps to exactly one principal. OAuth-issued
+  access tokens (`rmo_`, D48) ARE `api_tokens` rows — same resolution, listing, and revocation.
 - **Token scope masks narrow, never widen.** Effective permission = principal's permissions ∩ token
   mask. Resolve this once per request and carry it on the context.
 - Reject expired tokens (`expires_at`) and tokens for disabled principals with a structured 401.
+- **OAuth 2.1 endpoints (D48)** — `/oauth/register` (RFC 7591 DCR, public clients only),
+  `/oauth/authorize` + `/oauth/device` (session-authenticated consent, `manage_access`),
+  `/oauth/token` (auth-code + PKCE S256, rotating refresh, RFC 8628 device grant),
+  `/oauth/revoke` (RFC 7009), `/oauth/device-authorization`; discovery documents hand-registered
+  in `main.tsx` on every client-probed alias. **The token/register/revoke/device-authorization
+  responses — including errors — are raw OAuth JSON (`{error, error_description}`) via early
+  returns**, never the app `{error, code}` shape and never thrown through `onError`: clients
+  branch on `error` values (`authorization_pending`, `slow_down`, `invalid_grant`). This is the
+  documented exception to the error contract above.
 
 ## Error & response shapes
 
