@@ -27,8 +27,7 @@ on:
         default: provision
       admin_email:
         description: 'Email for the bootstrapped first admin (finalize only)'
-        required: false
-        default: 'colimack@icloud.com'
+        required: true
       recreate_empty_d1:
         description: 'provision only: delete + recreate the remill D1 in WEUR (refuses if it has any tables)'
         required: false

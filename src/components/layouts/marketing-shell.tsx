@@ -49,6 +49,9 @@ export function MarketingShell({ children }: { children?: unknown }) {
             <a href="#writing" class={NAV_LINK}>
               Writing
             </a>
+            <a href="https://github.com/trickycdm/remill" class={NAV_LINK}>
+              GitHub
+            </a>
             <a href="/admin" class={NAV_LINK}>
               Sign in
             </a>
@@ -64,9 +67,7 @@ export function MarketingShell({ children }: { children?: unknown }) {
           flips this subtree onto the dark scheme, so every token here resolves
           to its audited dark value in BOTH themes — the page signs off on navy
           with zero literal colours. It sits flush under the marketing #run
-          band (also a dark act), forming one continuous close.
-          TODO(release): add the repository + license links when the source
-          goes public. */}
+          band (also a dark act), forming one continuous close. */}
       <footer class="rm-dark-act bg-canvas text-ink">
         <div class="mx-auto flex w-full max-w-5xl flex-col gap-8 border-t border-border px-6 py-12 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex flex-col gap-1.5">
@@ -77,6 +78,9 @@ export function MarketingShell({ children }: { children?: unknown }) {
             </p>
           </div>
           <nav aria-label="Footer" class="grid grid-cols-2 gap-x-10 gap-y-3 sm:text-right">
+            <a href="https://github.com/trickycdm/remill" class={BAND_LINK}>
+              GitHub
+            </a>
             <a href="/api/openapi.json" class={BAND_LINK}>
               API reference
             </a>

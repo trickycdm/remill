@@ -60,7 +60,7 @@ Using claude-in-chrome against Colin's logged-in dashboard:
 ## Phase 2 — Repo changes (committed to main; CI/config only) — **DONE** (via PRs #1–#2, not direct pushes)
 
 **New `.github/workflows/setup-production.yml`** — `workflow_dispatch` with input
-`phase: provision | finalize` (+ `admin_email`, default `colimack@icloud.com`):
+`phase: provision | finalize` (+ `admin_email`, operator-supplied):
 
 - **provision**: idempotently create D1 `remill`, KV `remill-rate-limit` + `remill-rate-limit-preview`,
   R2 `remill-media` + `remill-media-preview`; print all resulting IDs (`wrangler d1 info remill --json`,

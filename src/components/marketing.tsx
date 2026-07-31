@@ -182,8 +182,8 @@ export function MarketingHero() {
 
 /**
  * The who/why beat as a poster manifesto between perforation rules: the
- * sentence gets the full display scale, the two supporting paragraphs sit
- * offset to the right (the asymmetric second voice under the statement).
+ * sentence gets the full display scale, the two supporting paragraphs run
+ * as side-by-side columns beneath it (the second voice under the statement).
  */
 export function WhoItsFor() {
   return (
@@ -195,7 +195,7 @@ export function WhoItsFor() {
         >
           A backend where the AI is a citizen, not a shared key.
         </h2>
-        <div class="grid max-w-2xl gap-5 leading-relaxed text-ink-muted lg:ml-[30%]">
+        <div class="grid max-w-5xl gap-5 leading-relaxed text-ink-muted sm:grid-cols-2 sm:gap-10">
           <p>
             remill is for builders who let agents write. An agent here is a principal: its own
             identity, a scoped token, a least-privilege role, and an audit trail.
@@ -636,11 +636,8 @@ const MILL_PIECES: { icon: unknown; label: string; body: string }[] = [
 /**
  * The real conversion story (the funnel bug the review named): remill.me is
  * the author's single-tenant instance, so a cold visitor's path is DEPLOY YOUR
- * OWN, not sign-in. Honest about availability: the repo is private while it is
- * readied for release, so the CTA-grade artifact here is the open API
- * reference, and the section earns trust by being concrete about the pieces.
- * TODO(release): add the repository link + license line here and in the footer
- * when the source goes public.
+ * OWN, not sign-in. The source is public on GitHub, so the repository is the
+ * CTA-grade artifact, backed by the open API reference.
  */
 export function RunYourOwnMill() {
   return (
@@ -660,10 +657,13 @@ export function RunYourOwnMill() {
             repository by GitHub Actions.
           </p>
           <p class="max-w-2xl leading-relaxed text-ink-muted">
-            remill.me runs this exact code as the author's own mill. The source is being readied
-            for a public release; the live API is open to read today.
+            remill.me runs this exact code as the author's own mill. The source is open on GitHub;
+            the live API is open to read today.
           </p>
-          <p class="mt-2">
+          <p class="mt-2 flex flex-wrap gap-x-6 gap-y-2">
+            <a href="https://github.com/trickycdm/remill" class={LINK}>
+              Get the source on GitHub
+            </a>
             <a href="/api/openapi.json" class={LINK}>
               Browse the live API reference
             </a>
