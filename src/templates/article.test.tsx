@@ -77,6 +77,16 @@ describe('article template — the reading layout', () => {
     expect(html).toContain(`<time datetime="${NOW}"`);
   });
 
+  it('writes the byline date in full prose (template-owned, ignores the iso default)', () => {
+    const html = render();
+    expect(html).toContain('Saturday, 4 July 2026');
+  });
+
+  it('renders the share bar as the perforated colophon', () => {
+    const html = render();
+    expect(html).toContain('rm-perf');
+  });
+
   it('never renders the slug as a labelled field row', () => {
     const html = render();
     // No "Slug" label anywhere. (The slug VALUE may occur only inside the share

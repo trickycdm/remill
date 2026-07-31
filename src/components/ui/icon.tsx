@@ -422,3 +422,25 @@ export function PenNib(props: IconProps) {
     </Svg>
   );
 }
+
+/** lucide link — the reader share bar's "Copy link". (`Icon` suffix: avoids
+ *  reading as an anchor component; DatabaseIcon precedent.) */
+export function LinkIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </Svg>
+  );
+}
+
+/** lucide share — the reader share bar's native "Share…". */
+export function ShareIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <polyline points="16 6 12 2 8 6" />
+      <line x1="12" x2="12" y1="2" y2="15" />
+    </Svg>
+  );
+}

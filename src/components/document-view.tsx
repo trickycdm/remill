@@ -8,6 +8,8 @@
 
 import type { CollectionDefinition } from '@/fields/types';
 import type { ExpandedDocument, Backlink } from '@/services/documents';
+import type { SiteSettings } from '@/services/settings';
+import { formatDate } from '@/lib/format-date';
 import { FieldView } from '@/components/field-view';
 import { Backlinks } from '@/components/backlinks';
 import { fieldLabel } from '@/lib/humanize';
@@ -33,11 +35,13 @@ export function DocumentView({
   doc,
   backlinks,
   surface,
+  settings,
 }: {
   def: CollectionDefinition;
   doc: ExpandedDocument;
   backlinks: Backlink[];
   surface: 'admin' | 'public';
+  settings?: SiteSettings;
 }) {
   const titleKey = titleFieldOf(def);
   const titleField = titleKey ? def.fields.find((f) => f.key === titleKey) : undefined;
@@ -52,7 +56,7 @@ export function DocumentView({
         <h1 class="font-display text-3xl font-semibold tracking-tight text-ink">{title}</h1>
         {hasLifecycle(def) && doc.publishedAt ? (
           <p class="mt-2 text-sm text-ink-subtle">
-            <time datetime={doc.publishedAt}>{doc.publishedAt.slice(0, 10)}</time>
+            <time datetime={doc.publishedAt}>{formatDate(doc.publishedAt, settings)}</time>
           </p>
         ) : null}
       </header>

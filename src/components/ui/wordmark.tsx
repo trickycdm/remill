@@ -15,7 +15,10 @@ export function Wordmark({ label = 'remill', class: cls }: { label?: string; cla
     <span
       class={`inline-flex items-center gap-2 font-display text-2xl font-semibold tracking-tight text-ink${cls ? ` ${cls}` : ''}`}
     >
-      <PenNib class="size-5 text-overlap" />
+      {/* -ml-px: optical correction — the nib glyph's ink starts ~1.3/24 units
+          into its viewBox (~1.1px at size-5), so without it the mark reads
+          right of a flush-left text column below. */}
+      <PenNib class="-ml-px size-5 text-overlap" />
       {label}
     </span>
   );

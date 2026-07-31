@@ -288,6 +288,46 @@ describe('documents service — the save pipeline', () => {
     );
   });
 
+  it('D49: draft preview by slug — role perms decide, fail-closed for readers', async () => {
+    const PAGES: CollectionDefinition = {
+      slug: 'pages',
+      name: 'Pages',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'slug', type: 'slug', config: { from: 'title' }, unique: true, index: true },
+      ],
+      workflow: { draftPublish: true },
+      access: { publicRead: true },
+    };
+    await collectionsService.createCollection(db, admin, PAGES, NOW);
+
+    const editor = await makePrincipal(db, NOW, { id: 'prn_editor', role: 'editor' });
+    const author = await makePrincipal(db, NOW, { id: 'prn_author', role: 'author' });
+    const rival = await makePrincipal(db, NOW, { id: 'prn_rival', role: 'author' });
+    const reader = await makePrincipal(db, NOW, { id: 'prn_reader', role: 'reader' });
+
+    const draft = await docs.createDocument(db, author, 'pages', { title: 'Draft Piece' }, NOW);
+    expect(draft.status).toBe('draft');
+
+    // Editor (unconditional read) and the author (own) resolve the draft by slug.
+    expect((await docs.getDocumentBySlug(db, editor, 'pages', 'draft-piece', NOW)).id).toBe(
+      draft.id,
+    );
+    expect((await docs.getDocumentBySlug(db, author, 'pages', 'draft-piece', NOW)).id).toBe(
+      draft.id,
+    );
+
+    // Another author (not theirs) and a reader (published-only) get the same
+    // NotFound the anonymous 404 collapses to — no draft-existence leak.
+    await expect(
+      docs.getDocumentBySlug(db, rival, 'pages', 'draft-piece', NOW),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      docs.getDocumentBySlug(db, reader, 'pages', 'draft-piece', NOW),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
   it("B4: lifecycle 'none' — docs born published; publish/unpublish rejected", async () => {
     const RECORDS: CollectionDefinition = {
       slug: 'companies',

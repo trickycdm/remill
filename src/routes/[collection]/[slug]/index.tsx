@@ -2,7 +2,8 @@ import { createFactory } from 'hono/factory';
 import type { Env } from '@/types';
 import { pathParam } from '@/lib/http';
 import { getDb } from '@/db/client';
-import { anonymousPrincipal } from '@/access';
+import { anonymousPrincipal, principalFromSession } from '@/access';
+import { getSessionUser } from '@/lib/auth';
 import {
   getDocument,
   getDocumentBySlug,
@@ -24,20 +25,41 @@ import { Script } from 'vite-ssr-components/hono';
 const factory = createFactory<{ Bindings: Env }>();
 
 /**
- * GET /:collection/:slug — the PUBLIC rendered page (C2). No auth: the
+ * GET /:collection/:slug — the PUBLIC rendered page (C2). By default the
  * anonymous principal flows through the same `authorize()`/`compileReadFilter`
  * machinery as REST, so only published documents in publicRead collections
  * resolve. Accepts a slug (the pretty URL) or a `doc_…` id (the universal
  * fallback relation links use). Anything unreadable — missing, draft, or
  * non-public — renders ONE indistinguishable 404 (existence is never leaked,
  * and the global onError's admin redirect is deliberately bypassed here).
+ *
+ * Draft preview (D49): `?preview=1` + a valid session swaps in the SESSION
+ * principal — the identical pipeline with a real principal, so role perms
+ * decide (admin/editor see drafts, an author their own, a reader the same 404
+ * as anonymous — fail-closed). Flag without session redirects to login BEFORE
+ * any lookup (no draft-existence oracle). Preview responses are no-store +
+ * noindex and carry the author banner. Without the flag a logged-in admin sees
+ * exactly what anonymous sees — deliberate (no "works for me" confusion).
+ * Raw-mode (D27) drafts preview verbatim with no banner: the document IS the
+ * page. Backlinks in preview use the same session principal (one principal per
+ * request), so they may include referrers from other drafts the live page
+ * won't show — useful to an author, and simpler than a split-principal read.
  */
 export const onRequestGet = factory.createHandlers(async (c) => {
   const db = getDb(c.env.DB);
   const now = nowIso();
   const collection = pathParam(c, 'collection');
   const ref = pathParam(c, 'slug');
-  const principal = anonymousPrincipal('rest');
+
+  const previewRequested = c.req.query('preview') != null;
+  const sessionUser = previewRequested ? getSessionUser(c) : null;
+  if (previewRequested && !sessionUser) {
+    const url = new URL(c.req.url);
+    return c.redirect(`/admin/login?redirect=${encodeURIComponent(url.pathname + url.search)}`);
+  }
+  const preview = previewRequested && sessionUser !== null;
+  const principal = sessionUser ? principalFromSession(sessionUser) : anonymousPrincipal('rest');
+  if (preview) c.header('Cache-Control', 'no-store');
   const settings = await getSettings(db);
 
   try {
@@ -81,7 +103,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         }}
       />
     ) : (
-      <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" />
+      <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" settings={settings} />
     );
 
     return c.render(
@@ -92,6 +114,11 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         // page that itself rendered).
         indexLink={
           def.access?.publicRead ? { href: `/${def.slug}`, label: `More ${def.name}` } : undefined
+        }
+        preview={
+          preview
+            ? { editHref: `/admin/c/${collection}/${doc.id}`, status: doc.status }
+            : undefined
         }
       >
         {content}
@@ -105,6 +132,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         ogImage:
           typeof mediaId === 'string' && mediaId.length ? `${baseUrl}/media/${mediaId}` : undefined,
         feedUrl: '/rss.xml',
+        noindex: preview || undefined,
       },
     );
   } catch (e) {

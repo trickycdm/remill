@@ -57,6 +57,12 @@ rendered public pages + share links.)
 > at `/oauth/authorize`). Plus the one-step **connect wizard** (`/admin/access/connect` — atomic
 > `connectAgent`, per-client connect cards from `src/lib/connect-snippets.ts`) and the
 > `/admin/access` index rebuilt as a directory with connection-health lines.
+> **D49 shipped 2026-07-31** (plan: [`plans/2026-07-31-article_preview_and_public_reading_polish/`](plans/2026-07-31-article_preview_and_public_reading_polish/)):
+> **draft preview + reading-surface polish** — `?preview=1` + a session on the public render route
+> swaps in the session principal (same `authorize()` pipeline, fail-closed, no-store + noindex +
+> author banner; edit-page header gains a prominent "Preview ↗"), plus the tear-off share colophon
+> (`rm-perf` + pop-ink "Copied"), the serif-italic prose byline (template-owned `full` date preset),
+> the `.rm-measure` reading column, and the wordmark's 1px optical correction.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -98,7 +104,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
-  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41) + /:c index pages (D42) + /s/:token share links (anonymous)
+  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41) + /:c index pages (D42) + /s/:token share links (anonymous; `?preview=1` + session = draft preview, D49)
                      / · /rss.xml · /sitemap.xml · /robots.txt   Discovery pack (D35, anonymous gated reads)
   Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29: purges · D32: publish drain as the system actor)
 

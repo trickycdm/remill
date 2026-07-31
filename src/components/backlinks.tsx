@@ -7,12 +7,23 @@
 
 import type { Backlink } from '@/services/documents';
 
-export function Backlinks({ backlinks, surface }: { backlinks: Backlink[]; surface: 'admin' | 'public' }) {
+export function Backlinks({
+  backlinks,
+  surface,
+  class: cls,
+}: {
+  backlinks: Backlink[];
+  surface: 'admin' | 'public';
+  class?: string;
+}) {
   if (!backlinks.length) return null;
   const href = (b: Backlink) =>
     surface === 'public' ? `/${b.collection}/${b.id}` : `/admin/c/${b.collection}/${b.id}`;
   return (
-    <section aria-labelledby="rm-backlinks-h" class="mt-4 border-t border-border pt-6">
+    <section
+      aria-labelledby="rm-backlinks-h"
+      class={`mt-4 border-t border-border pt-6${cls ? ` ${cls}` : ''}`}
+    >
       <h2 id="rm-backlinks-h" class="font-display text-lg font-semibold tracking-tight text-ink">
         Referenced by
       </h2>

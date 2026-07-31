@@ -135,6 +135,11 @@ variable woff2, preloaded in `src/layouts.tsx`, `font-display: swap`):
 - `font-sans` — all UI and body text. System sans (SF/Segoe/Roboto fallbacks).
 - `font-mono` — eyebrows (`text-eyebrow`, mono-caps, wide tracking), table column
   heads, metadata, IDs, timestamps.
+- `font-serif` — the **editorial aside only**: the article byline (full prose
+  date · reading time, small italic). System serif stack (declared in
+  `tailwind.css` for token canonicality); real italics, no webfont. This is the
+  one sanctioned deviation from mono-timestamps — a byline is a voice, not
+  machine metadata. Never slant Bricolage (no italic face; synthesis is banned).
 
 Type scale: Tailwind's default sizes plus `text-eyebrow`, `text-display`,
 `text-display-sm`. One `<h1>` per page (PageHeader); headings never skip levels —
@@ -208,9 +213,16 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   Generic document bodies render via `DocumentView` + the `FieldView` seam; a
   publicRead collection can instead select a **reading template** (D41,
   `src/templates/`) — the shipped `article` template composes hero → title →
-  meta (date · reading time) → **standfirst** (`.rm-standfirst`) → body → share →
-  backlinks. Markdown prose styles live in `.rm-prose`; the dek in `.rm-standfirst`
-  (`tailwind.css` `@layer components`) — token-driven, not a theme engine.
+  meta (serif-italic prose date · reading time) → **standfirst**
+  (`.rm-standfirst`) → body → share → backlinks. Markdown prose styles live in
+  `.rm-prose`; the dek in `.rm-standfirst`; header/meta/Details/share/backlinks
+  align to the prose column via `.rm-measure` (65ch) while the hero stays
+  full-width (`tailwind.css` `@layer components`) — token-driven, not a theme
+  engine. The share bar is the article's **tear-off colophon**: an `rm-perf`
+  perforated rule (no longer marketing-only), a mono eyebrow matching the
+  Details zone, `secondary sm` icon buttons, and the transient "Copied" status
+  in `pop-text` — the page's ONE pop moment (an event, per the pop rule). The
+  preview banner (D49) is the accent fill above the masthead, session-only.
 - **PageHeader** — the masthead of a content region (optional breadcrumb + eyebrow
   + display `<h1>` + lede + actions slot). It **owns the space below its hairline**
   (`mb-8`) — pages never add an ad-hoc top margin to compensate. **Nav**, **Card**,

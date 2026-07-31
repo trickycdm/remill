@@ -18,8 +18,10 @@ function mount(root: HTMLElement): void {
   const nativeBtn = root.querySelector<HTMLButtonElement>('[data-share-native]');
   const status = root.querySelector<HTMLElement>('[data-share-status]');
 
-  // Reveal the enhanced controls, retire the no-JS fallbacks.
-  js.classList.remove('hidden');
+  // Reveal the enhanced controls, retire the no-JS fallbacks. `replace`, not
+  // `remove`: with `hidden` gone the div would fall back to display:block and
+  // its flex utilities (gap, items-center) would be inert.
+  js.classList.replace('hidden', 'flex');
   fallback?.classList.add('hidden');
 
   const say = (msg: string): void => {

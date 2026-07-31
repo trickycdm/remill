@@ -81,7 +81,11 @@ can touch what." When you add a new grant kind or scope mechanism, it must show 
 team grants render with their resolved team names, not opaque ids.
 
 Media rides collection permissions (upload = `create` on the `media` collection). A collection's
-`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`. Its
+`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`. The
+public render route (`/:collection/:slug`) uses the anonymous principal by default; with
+`?preview=1` + a valid session it swaps in the SESSION principal instead (D49, draft preview) —
+the same `authorize()` pipeline with a real principal, so role perms decide (no bypass, no new
+action, no condition-enum change; flag-without-session redirects to login before any lookup). Its
 sibling `access.private` (D46) governs **discovery visibility**, not content: a private collection
 is omitted from every discovery surface (REST/MCP collection list+get, `/api/openapi.json` paths,
 pack installed-status) for principals who hold neither `manage_schema` nor a **role/token-scope

@@ -56,14 +56,18 @@ export const articleTemplate: RenderTemplate = {
           </figure>
         ) : null}
 
-        <header class="flex flex-col gap-4">
+        <header class="rm-measure flex flex-col gap-4">
           <h1 class="font-display text-4xl font-semibold leading-tight tracking-tight text-ink">
             {title}
           </h1>
           {published || ctx.readingMinutes ? (
-            <p class="flex flex-wrap items-center gap-x-2 text-sm text-ink-subtle">
+            // Editorial byline: full prose date in the serif italic — a deliberate
+            // deviation from the mono-timestamp convention (this is a voice, not
+            // machine metadata; recorded in DESIGN_SYSTEM.md). The `full` preset is
+            // template-owned; `settings.dateFormat` keeps governing admin surfaces.
+            <p class="rm-measure flex flex-wrap items-center gap-x-2 font-serif text-[13px] text-ink-subtle italic">
               {published ? (
-                <time datetime={published}>{formatDate(published, ctx.settings)}</time>
+                <time datetime={published}>{formatDate(published, ctx.settings, 'full')}</time>
               ) : null}
               {published && ctx.readingMinutes ? <span aria-hidden="true">·</span> : null}
               {ctx.readingMinutes ? <span>{ctx.readingMinutes} min read</span> : null}
@@ -79,7 +83,7 @@ export const articleTemplate: RenderTemplate = {
         {metaFields.length ? (
           <section
             aria-label="Details"
-            class="mt-2 flex flex-col gap-4 border-t border-border pt-6"
+            class="rm-measure mt-2 flex flex-col gap-4 border-t border-border pt-6"
           >
             {metaFields.map((field) => (
               <div class="flex flex-col gap-1">
@@ -100,7 +104,7 @@ export const articleTemplate: RenderTemplate = {
 
         {ctx.shareUrl ? <ShareBar url={ctx.shareUrl} title={title} /> : null}
 
-        <Backlinks backlinks={dedupeBacklinks(backlinks, def, doc)} surface="public" />
+        <Backlinks backlinks={dedupeBacklinks(backlinks, def, doc)} surface="public" class="rm-measure" />
       </article>
     );
   },

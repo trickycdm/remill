@@ -89,4 +89,10 @@ describe('prompts pack scaffold', () => {
   it('declares exactly the share-bar capability (no reading time)', () => {
     expect(promptTemplate.wants).toEqual({ shareBar: true });
   });
+
+  it('renders the share bar when a shareUrl is present (the wants flag is not dead)', () => {
+    const html = renderDoc({ title: 'Bare prompt', slug: 'bare-prompt', body: 'Text.' });
+    expect(html).toContain('aria-label="Share"');
+    expect(html).toContain('data-share-copy');
+  });
 });

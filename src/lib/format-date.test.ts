@@ -25,6 +25,23 @@ describe('formatDate', () => {
     expect(formatDate(TS, { dateFormat: 'nonsense' as SiteSettings['dateFormat'] })).toBe('2026-07-05');
   });
 
+  it('renders the full prose preset (weekday written out, en-GB order)', () => {
+    expect(formatDate(TS, {}, 'full')).toBe('Sunday, 5 July 2026');
+  });
+
+  it('lets the call-site preset override settings.dateFormat', () => {
+    expect(formatDate(TS, { dateFormat: 'iso' }, 'full')).toBe('Sunday, 5 July 2026');
+    expect(formatDate(TS, { dateFormat: 'full' as SiteSettings['dateFormat'] }, 'iso')).toBe(
+      '2026-07-05',
+    );
+  });
+
+  it('formats the full preset in the configured timezone (calendar + weekday roll back)', () => {
+    expect(formatDate('2026-07-05T02:00:00Z', { timezone: 'America/New_York' }, 'full')).toBe(
+      'Saturday, 4 July 2026',
+    );
+  });
+
   it('applies the configured timezone (shifting the calendar date)', () => {
     // 02:00 UTC is the previous evening in New York → the local date rolls back.
     const early = '2026-07-05T02:00:00Z';

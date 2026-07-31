@@ -57,6 +57,8 @@ interface ButtonBase {
   'aria-controls'?: string;
   'aria-current'?: string;
   'aria-haspopup'?: string;
+  /** Island carrier attributes (e.g. data-share-copy) — props already spread. */
+  [key: `data-${string}`]: string | boolean | undefined;
 }
 
 interface ButtonAsButton extends ButtonBase {

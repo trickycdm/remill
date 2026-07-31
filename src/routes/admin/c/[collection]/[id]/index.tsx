@@ -62,6 +62,16 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const rawTitle = titleField ? doc.data[titleField.key] : undefined;
   const docTitle = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle : `Edit ${def.name}`;
 
+  // Preview (D49): the public render with the session principal — works for
+  // drafts AND published. Pretty slug when the doc has one, id URL otherwise
+  // (a draft's slug may still be empty; the route accepts both).
+  const slugField = def.fields.find((f) => f.type === 'slug' && f.index);
+  const slugValue = slugField ? doc.data[slugField.key] : undefined;
+  const previewRef = typeof slugValue === 'string' && slugValue ? slugValue : id;
+  const previewHref = def.access?.publicRead
+    ? `/${slug}/${encodeURIComponent(previewRef)}?preview=1`
+    : undefined;
+
   return c.render(
     <AdminShell user={user} current="content">
       {/* Editor islands (D38) — Scripts live in ROUTE files (vite-ssr-components
@@ -76,9 +86,31 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         ]}
         title={docTitle}
         actions={
-          <Button href={`/admin/c/${slug}/${id}/view`} variant="ghost" size="sm">
-            View
-          </Button>
+          // Header = navigation/inspection; the sidebar keeps every mutation
+          // (Save stays the page's only primary). Preview is the prominent
+          // affordance on publicRead collections; without one, the internal
+          // View steps up so the header always carries a visible action.
+          <>
+            {previewHref ? (
+              <Button
+                href={previewHref}
+                variant="secondary"
+                size="sm"
+                target="_blank"
+                rel="noopener"
+                aria-label="Preview public page (opens in new tab)"
+              >
+                Preview ↗
+              </Button>
+            ) : null}
+            <Button
+              href={`/admin/c/${slug}/${id}/view`}
+              variant={previewHref ? 'ghost' : 'secondary'}
+              size="sm"
+            >
+              View
+            </Button>
+          </>
         }
       />
 

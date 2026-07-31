@@ -239,6 +239,12 @@ must contain **no `<form>`** (the island builds `FormData` from bare inputs for
 `<button>` would submit the editor form). Selection writes the id into the field input +
 dispatches bubbling `input` — the same handoff as example 1.
 
+**Island reveal gotcha — `hidden` on a flex container.** When an island reveals a
+server-rendered group that uses flex utilities (`hidden flex-wrap items-center gap-2 …`), use
+`el.classList.replace('hidden', 'flex')`, never `remove('hidden')` — with `hidden` gone the
+element falls back to `display:block` and every flex utility on it is silently inert (found live
+in the share bar: the revealed buttons lost their gap/alignment with no error anywhere).
+
 **Worked example 3 — bulk selection is a NATIVE form, not signals (D39).** The selectable list
 wraps table + bulk bar in one `<form method="post">`; row checkboxes are `name="ids"
 value={doc.id}` (the FORM is the state — nanoid ids make invalid signal names, and the flow must

@@ -19,6 +19,8 @@ export interface PageHead {
   readonly ogImage?: string;
   /** Feed href (usually '/rss.xml') — advertised for feed readers. */
   readonly feedUrl?: string;
+  /** Emit <meta name="robots" content="noindex"> — draft/preview renders (D49). */
+  readonly noindex?: boolean;
 }
 
 declare module 'hono' {
@@ -41,7 +43,7 @@ declare module 'hono' {
  *   string with no interpolated data — safe to inline.
  */
 export const RootLayout = jsxRenderer(
-  ({ children, title, description, canonical, ogType, ogImage, feedUrl }) => {
+  ({ children, title, description, canonical, ogType, ogImage, feedUrl, noindex }) => {
     const pageTitle = title ?? 'remill';
     const pageDescription = description ?? 'remill — a lightweight, agent-native CMS';
     return (
@@ -51,6 +53,7 @@ export const RootLayout = jsxRenderer(
           <meta charset="UTF-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           <meta name="description" content={pageDescription} />
+          {noindex ? <meta name="robots" content="noindex" /> : null}
 
           {/* Open Graph + discovery links (D36) — emitted only when a route set
             head props; admin pages stay meta-minimal. */}

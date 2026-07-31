@@ -23,6 +23,7 @@ import {
 import { FieldView } from '@/components/field-view';
 import { Backlinks } from '@/components/backlinks';
 import { dedupeBacklinks } from '@/templates/lib/dedupe-backlinks';
+import { ShareBar } from '@/components/share-bar';
 import { fieldLabel } from '@/lib/humanize';
 
 export const promptTemplate: RenderTemplate = {
@@ -32,7 +33,7 @@ export const promptTemplate: RenderTemplate = {
     'Prompt card: the prompt text in a mono panel with {{variable}} placeholders highlighted, ' +
     'variable chips, a model badge, and labelled usage notes. No hero or standfirst.',
   wants: { shareBar: true },
-  Component: ({ def, doc, backlinks }) => {
+  Component: ({ def, doc, backlinks, ctx }) => {
     const layout = resolveConventionLayout(def, { wantHero: false, wantLead: false });
     const titleRaw = layout.titleField ? doc.data[layout.titleField.key] : undefined;
     const title = typeof titleRaw === 'string' && titleRaw.trim() ? titleRaw : def.name;
@@ -124,6 +125,8 @@ export const promptTemplate: RenderTemplate = {
             ))}
           </section>
         ) : null}
+
+        {ctx.shareUrl ? <ShareBar url={ctx.shareUrl} title={title} /> : null}
 
         <Backlinks backlinks={dedupeBacklinks(backlinks, def, doc)} surface="public" />
       </article>

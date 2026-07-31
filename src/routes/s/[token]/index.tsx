@@ -77,7 +77,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         }}
       />
     ) : (
-      <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" />
+      <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" settings={settings} />
     );
     return c.render(<PublicShell settings={settings}>{content}</PublicShell>);
   } catch (e) {

@@ -11,6 +11,10 @@
  * <collection>" on document pages, pointing at the public collection index.
  * Callers pass it only when that index actually resolves (publicRead); the
  * share-link route never passes it (a private link advertises nothing).
+ *
+ * `preview` (optional, D49) renders the author-facing preview banner above the
+ * masthead — only the public route sets it, and only for a session-principal
+ * `?preview=1` render. An `/admin/...` href is wayfinding, not an admin import.
  */
 
 import type { SiteSettings } from '@/services/settings';
@@ -22,10 +26,12 @@ const FOOTER_LINK =
 export function PublicShell({
   settings,
   indexLink,
+  preview,
   children,
 }: {
   settings: SiteSettings;
   indexLink?: { readonly href: string; readonly label: string };
+  preview?: { readonly editHref: string; readonly status: 'draft' | 'published' };
   children?: unknown;
 }) {
   const siteName = settings.siteName?.trim() || 'remill';
@@ -37,6 +43,21 @@ export function PublicShell({
       >
         Skip to content
       </a>
+      {preview ? (
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-md bg-accent px-4 py-2 text-sm text-accent-fg">
+          <span>
+            {preview.status === 'draft'
+              ? 'Draft preview — this page is not publicly visible.'
+              : 'Preview — this is the live published page.'}
+          </span>
+          <a
+            href={preview.editHref}
+            class="rounded-sm font-medium underline decoration-1 underline-offset-4 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            Back to editor
+          </a>
+        </div>
+      ) : null}
       <header class="border-b border-border py-6">
         <div class="flex items-center justify-between gap-4">
           <a

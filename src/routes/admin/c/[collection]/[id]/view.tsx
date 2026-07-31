@@ -28,13 +28,15 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const doc = await getDocument(db, principal, slug, id, now);
   const backlinks = await getBacklinks(db, principal, slug, id, now);
 
-  // The public URL, when this document is publicly reachable right now.
+  // The public URL: live for published docs, `?preview=1` (D49, session
+  // principal) for anything unpublished on a publicRead collection.
   const slugField = def.fields.find((f) => f.type === 'slug' && f.index);
   const slugValue = slugField ? doc.data[slugField.key] : undefined;
-  const publicHref =
-    def.access?.publicRead && doc.status === 'published'
-      ? `/${slug}/${typeof slugValue === 'string' && slugValue ? slugValue : doc.id}`
-      : undefined;
+  const publicRef = typeof slugValue === 'string' && slugValue ? slugValue : doc.id;
+  const isLive = doc.status === 'published';
+  const publicHref = def.access?.publicRead
+    ? `/${slug}/${encodeURIComponent(publicRef)}${isLive ? '' : '?preview=1'}`
+    : undefined;
 
   return c.render(
     <AdminShell user={user} current="content">
@@ -49,7 +51,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           <div class="flex items-center gap-2">
             {publicHref ? (
               <Button href={publicHref} variant="ghost" size="sm">
-                Public page ↗
+                {isLive ? 'Public page ↗' : 'Preview ↗'}
               </Button>
             ) : null}
             <Button href={`/admin/c/${slug}/${id}`} variant="secondary" size="sm">
