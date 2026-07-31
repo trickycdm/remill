@@ -5,7 +5,7 @@ collection definition generates six surfaces — storage, validation, the admin 
 edit form, the REST API, and the MCP tools — so humans and AI agents author the same content through
 the same whitelist-validated, authorization-gated pipeline.
 
-**Live at [https://remill.org](https://remill.org)**
+**Live at [https://remill.me](https://remill.me)**
 
 ## The one idea
 

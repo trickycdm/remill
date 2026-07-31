@@ -85,7 +85,7 @@ describe('portfolio pack', () => {
     slug: 'remill',
     cover: 'med_cover1',
     summary: 'An agent-native headless data platform.',
-    link: 'https://remill.org',
+    link: 'https://remill.me',
     body: 'Built on **Workers**.',
     tags: ['cloudflare'],
   };
@@ -116,7 +116,7 @@ describe('portfolio pack', () => {
     expect(html.indexOf('<figure')).toBeLessThan(html.indexOf('<h1')); // cover leads
     expect(html).toContain('The remill admin'); // real alt
     expect(html).toContain('rm-standfirst'); // summary as the one-liner
-    expect(html).toContain('href="https://remill.org"'); // the link-out
+    expect(html).toContain('href="https://remill.me"'); // the link-out
     expect(html).toContain('Visit the project');
     expect(html).not.toContain('>Link<'); // claimed — not a labelled meta row
     expect(html).toContain('data-share-copy'); // share bar present (wants.shareBar)

@@ -116,10 +116,10 @@ describe('wire shapes', () => {
   });
 
   it('wwwAuthenticate points at the path-suffixed PRM document', () => {
-    expect(wwwAuthenticate('https://remill.org')).toBe(
-      'Bearer resource_metadata="https://remill.org/.well-known/oauth-protected-resource/mcp"',
+    expect(wwwAuthenticate('https://remill.me')).toBe(
+      'Bearer resource_metadata="https://remill.me/.well-known/oauth-protected-resource/mcp"',
     );
-    expect(wwwAuthenticate('https://remill.org', { invalidToken: true })).toContain(
+    expect(wwwAuthenticate('https://remill.me', { invalidToken: true })).toContain(
       'error="invalid_token"',
     );
   });

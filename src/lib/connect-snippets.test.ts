@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { connectSnippets, mcpJsonConfig, CLIENT_TO_SNIPPET } from '@/lib/connect-snippets';
 
-const BASE = 'https://remill.org';
+const BASE = 'https://remill.me';
 const TOKEN = 'rmk_test123';
 
 describe('connect snippets (D48)', () => {
