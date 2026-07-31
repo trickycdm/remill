@@ -1,0 +1,417 @@
+@import 'tailwindcss';
+
+/* The one webfont: Bricolage Grotesque (OFL, vendored in public/fonts —
+   latin subset, variable wght 500-800, ~30KB). Display headings only; body
+   and mono stay system stacks. Served same-origin (CSP font-src 'self');
+   preloaded in src/layouts.tsx. */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('/fonts/bricolage-grotesque-latin-wght.woff2') format('woff2-variations');
+  font-weight: 500 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+2013-2014, U+2018-201D, U+2026;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   remill design tokens — "Overprint"
+
+   The single source of truth for the platform's visual language (D43). Two
+   inks on cream stock in light; the "gig poster" register (cyan + pink on
+   ink-navy) in dark. DESIGN_SYSTEM.md explains intent and usage; it never
+   restates these values. Components consume these tokens through Tailwind
+   utilities (bg-surface, text-ink, border-border, text-danger, …) — never
+   raw hex. scripts/check-contrast.mjs audits every promised pairing.
+
+   ── Theming mechanism ───────────────────────────────────────────────────────
+   Every colour token declares BOTH its light and dark value in one line via the
+   CSS `light-dark()` function. Which value resolves is decided by the element's
+   `color-scheme`, controlled below:
+
+     • no `data-theme`      → color-scheme: light dark → follows prefers-color-scheme
+     • data-theme="dark"    → color-scheme: dark        → forced dark
+     • data-theme="light"   → color-scheme: light       → forced light
+
+   The admin-shell theme toggle sets `data-theme` on <html> and persists it to
+   localStorage; THEME_INIT_SNIPPET (exported from admin-shell) applies it in
+   <head> before first paint so a chosen theme never flashes. When no theme is
+   chosen, the OS preference applies with zero JS. `color-scheme` also themes
+   native scrollbars and form controls for free.
+
+   ── Contrast ────────────────────────────────────────────────────────────────
+   Every text/background pairing meets WCAG 2.1 AA (body 4.5:1, large/UI 3:1) in
+   BOTH themes. Non-obvious ratios are noted inline. Text-safe colour tokens are
+   tuned so `text-{token}` is AA on canvas/surface AND on the matching `-soft`
+   wash; solid fills (accent, danger-solid) are tuned for AA white text.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Typography ────────────────────────────────────────────────────────────
+     Three roles: display = Bricolage Grotesque (the one webfont, @font-face
+     above, sans fallback of a similar metric class); sans = UI/body; mono =
+     eyebrows, metadata, IDs, timestamps, code. */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+
+  /* Editorial additions to Tailwind's default type scale. */
+  --text-eyebrow: 0.6875rem; /* 11px mono-caps label */
+  --text-eyebrow--line-height: 1;
+  --text-eyebrow--letter-spacing: 0.14em;
+  --text-display: 2.25rem; /* display page title */
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.02em;
+  --text-display-sm: 1.5rem;
+  --text-display-sm--line-height: 1.15;
+  --text-display-sm--letter-spacing: -0.015em;
+  --text-display-lg: 3.25rem; /* marketing hero headline */
+  --text-display-lg--line-height: 1.05;
+  --text-display-lg--letter-spacing: -0.03em; /* grotesque tracks tighter than the old serif */
+
+  /* ── Neutrals — cream stock / ink-navy stock ───────────────────────────────
+     Light is two-ink print on cream; dark is the "gig poster" register on
+     deep ink-navy. Text ink is a deep blue-slate, never pure black. */
+  --color-canvas: light-dark(#f6f1e3, #191c30); /* app background */
+  --color-surface: light-dark(#fbf8ee, #232741); /* cards, panels, bars */
+  --color-surface-raised: light-dark(#fffdf6, #2a2f4e); /* dialogs, popovers, menus */
+  --color-hover: light-dark(#ece5d2, #2e3452); /* subtle hover / pressed fill */
+
+  --color-ink: light-dark(#23364a, #f2ecdd); /* primary text — 11:1 / 12.4:1 on surface */
+  --color-ink-muted: light-dark(#4a5c6e, #bcb9c4); /* secondary text — 6.5:1 / 7.6:1 on surface */
+  --color-ink-subtle: light-dark(#566778, #a3a0b2); /* meta/placeholder — AA even on the hover fill (4.6:1 / 4.8:1), the darkest surface text can sit on (axe reads hovered rows) */
+
+  --color-border: light-dark(#ddd6c6, #333858); /* hairline rules (non-text) */
+  --color-border-strong: light-dark(#c9c0aa, #454b6e); /* input / divider edges */
+
+  /* ── Working ink — riso blue (light) / cyan (dark) ─────────────────────────
+     The everyday accent: actions, links, active nav, focus, selection. The
+     FILL/TEXT split matters: `accent` is tuned for accent-fg text ON it;
+     `accent-text` is tuned to BE text on stock. accent-fg is theme-aware —
+     white on blue in light, navy on cyan in dark — so any accent fill is AA
+     in both themes without per-site overrides. */
+  --color-accent: light-dark(#0078bf, #4dd8e6); /* solid fill — accent-fg AA (4.7:1 / 9.3:1) */
+  --color-accent-hover: light-dark(#0069a8, #71e2ec);
+  --color-accent-fg: light-dark(#ffffff, #10233c); /* text/icon on an accent fill */
+  --color-accent-text: light-dark(#00639c, #4dd8e6); /* accent as link/label text — 5.7:1 / 9.8:1 */
+  --color-accent-soft: light-dark(#ddeaf3, #14364a); /* tinted wash: active nav, selection */
+
+  /* ── Pop ink — fluoro pink (events only) ───────────────────────────────────
+     The second ink is an EVENT, not a workhorse: denials, publish moments,
+     marketing pop (halftones, offset shadows, stamps). `pop` is graphics /
+     large-bold ONLY (3.4:1 / 5.4:1 on canvas — below body AA by design);
+     `pop-text` is the text-safe form. Never white text on a pop fill. */
+  --color-pop: light-dark(#ef2c9b, #ff48b0);
+  --color-pop-text: light-dark(#b8156e, #ff77c4); /* pink as text — 5.5:1 / 6.0:1 */
+  --color-pop-soft: light-dark(#fbe3ef, #3d1a30); /* tinted wash for pop-text chips */
+
+  /* ── Overlap violet — the two inks multiplied ──────────────────────────────
+     Where blue and pink overprint: the mark at small sizes (wordmark nib,
+     favicon) and continuity accents. Graphic-only (6.2:1 / 6.9:1 on canvas). */
+  --color-overlap: light-dark(#5348b8, #a89cf0);
+
+  --color-ring: light-dark(#0078bf, #4dd8e6); /* focus ring — 4.2:1 / 9.8:1 vs canvas */
+  --color-overlay: light-dark(rgba(35, 42, 58, 0.45), rgba(6, 8, 18, 0.62)); /* modal backdrop */
+
+  /* ── Semantic — success / warning / danger / info ──────────────────────────
+     Base token = text-safe tone (AA on surface AND on its own -soft wash, both
+     themes). `-soft` = tinted background for badges/toasts/inline notices.
+     Danger stays RED — deliberately distinct from pop pink so a destructive
+     control never reads as brand pop (and vice versa). Never rely on colour
+     alone — components always pair colour with a label. */
+  --color-success: light-dark(#22703f, #5fca8a); /* text 5.7:1 / 7.2:1 on surface */
+  --color-success-soft: light-dark(#e2efe2, #143424);
+  --color-warning: light-dark(#8a5a10, #e0a94e); /* text 5.6:1 / 6.9:1 */
+  --color-warning-soft: light-dark(#f4e8cd, #3a2f18);
+  --color-danger: light-dark(#b02e21, #f08a7e); /* text 6.1:1 / 6.0:1 */
+  --color-danger-soft: light-dark(#f8e0da, #3f1c20);
+  --color-danger-solid: light-dark(#b02e21, #c03a2b); /* destructive fill — white fg AA (6.4:1 / 5.4:1) */
+  --color-info: light-dark(#0f6f86, #59b6d0); /* text 5.4:1 / 6.3:1 */
+  --color-info-soft: light-dark(#dcebee, #12333f);
+
+  /* ── Radii — hairline card language ────────────────────────────────────────*/
+  --radius-sm: 0.25rem; /* 4px  — chips, small controls */
+  --radius-md: 0.4375rem; /* 7px  — buttons, inputs */
+  --radius-lg: 0.75rem; /* 12px — cards (Overprint panels) */
+  --radius-xl: 0.875rem; /* 14px — large panels */
+  --radius-2xl: 1.25rem; /* 20px — feature surfaces */
+
+  /* ── Shadows — cool-tinted, quiet (hairlines carry structure now) ──────────*/
+  --shadow-xs: 0 1px 2px rgba(25, 28, 48, 0.06);
+  --shadow-sm: 0 1px 3px rgba(25, 28, 48, 0.08), 0 1px 2px -1px rgba(25, 28, 48, 0.06);
+  --shadow-md: 0 5px 12px -4px rgba(25, 28, 48, 0.1), 0 2px 5px -2px rgba(25, 28, 48, 0.07);
+  --shadow-lg: 0 16px 32px -12px rgba(25, 28, 48, 0.18);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Theme control — color-scheme drives every light-dark() token.
+   ───────────────────────────────────────────────────────────────────────────*/
+:root {
+  color-scheme: light dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'kern', 'liga', 'calt';
+  }
+
+  /* Editorial ink selection. */
+  ::selection {
+    background-color: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
+
+  /* One visible focus ring for every keyboard-focused control. Components may
+     override the offset; they must never remove it without a replacement. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+  /* Pointer clicks shouldn't paint the ring (only keyboard focus). */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Native <dialog> backdrop for Dialog + Drawer (focus-trap & Esc for free). */
+  dialog::backdrop {
+    background-color: var(--color-overlay);
+    backdrop-filter: blur(2px);
+  }
+  dialog {
+    color: var(--color-ink);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Rendered document prose (C2) — the FieldView markdown output (.rm-prose).
+   Token-driven; renders identically on the public page and the admin detail
+   view. Kept deliberately small: readable rhythm, not a theme engine.
+──────────────────────────────────────────────────────────────────────────── */
+@layer components {
+  /* The standfirst / dek: a larger, muted lead paragraph under an article H1
+     (the `article` reading template). Aligned to the prose measure. */
+  .rm-standfirst {
+    max-width: 65ch;
+    font-size: 1.2rem;
+    line-height: 1.6;
+    color: var(--color-ink-muted);
+  }
+  .rm-prose {
+    max-width: 65ch;
+    line-height: 1.65;
+  }
+  .rm-prose h1,
+  .rm-prose h2,
+  .rm-prose h3,
+  .rm-prose h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin-block: 1.25em 0.5em;
+  }
+  .rm-prose h1 { font-size: 1.5rem; }
+  .rm-prose h2 { font-size: 1.25rem; }
+  .rm-prose h3 { font-size: 1.125rem; }
+  .rm-prose p,
+  .rm-prose ul,
+  .rm-prose ol,
+  .rm-prose table {
+    margin-block: 0.75em;
+  }
+  .rm-prose ul { list-style: disc; padding-inline-start: 1.5rem; }
+  .rm-prose ol { list-style: decimal; padding-inline-start: 1.5rem; }
+  .rm-prose a {
+    color: var(--color-accent-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .rm-prose code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background-color: var(--color-surface);
+    border-radius: 0.25rem;
+    padding: 0.1em 0.35em;
+  }
+  .rm-prose pre {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 0.875rem 1rem;
+    margin-block: 0.75em;
+    overflow-x: auto;
+  }
+  .rm-prose pre code {
+    background: transparent;
+    padding: 0;
+  }
+  .rm-prose blockquote {
+    border-inline-start: 3px solid var(--color-border);
+    padding-inline-start: 1rem;
+    color: var(--color-ink-muted);
+    margin-block: 0.75em;
+  }
+  .rm-prose th,
+  .rm-prose td {
+    border: 1px solid var(--color-border);
+    padding: 0.375rem 0.625rem;
+    text-align: left;
+  }
+  .rm-prose img {
+    max-width: 100%;
+    border-radius: 0.5rem;
+  }
+  .rm-prose hr {
+    border-color: var(--color-border);
+    margin-block: 1.5em;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Motion — tasteful entrances for overlays/toasts. All disabled under
+   prefers-reduced-motion (A11Y_STANDARDS.md §Motion).
+   ───────────────────────────────────────────────────────────────────────────*/
+@keyframes rm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rm-rise-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes rm-slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes rm-slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes rm-toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes rm-scroll-rise-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rm-anim-fade { animation: rm-fade-in 0.18s ease-out; }
+.rm-anim-rise { animation: rm-rise-in 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+.rm-anim-slide-right { animation: rm-slide-in-right 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+.rm-anim-slide-left { animation: rm-slide-in-left 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+.rm-anim-toast { animation: rm-toast-in 0.24s cubic-bezier(0.22, 1, 0.36, 1); }
+.rm-anim-spin { animation: rm-spin 0.7s linear infinite; }
+
+@keyframes rm-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Scroll-driven reveal (marketing page). Progressive on two axes: browsers
+   without animation-timeline render static, and the definition only exists
+   under no-preference so reduced motion stays static (the blanket block below
+   is belt-and-braces). JS-free — the sanctioned alternative to scroll
+   listeners. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .rm-scroll-rise {
+      animation: rm-scroll-rise-in linear both;
+      animation-timeline: view();
+      animation-range: entry 10% entry 45%;
+    }
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Marketing homepage — the Overprint print-shop devices (DESIGN_SYSTEM.md).
+   Every colour is a token or a token color-mix, except the footer band, which
+   is DELIBERATELY theme-fixed (the gig-poster register closes the page in
+   both themes).
+   ───────────────────────────────────────────────────────────────────────────*/
+
+/* Halftone: a pink riso dot screen, decorative corner texture only. Kept off
+   the text column and faded with a mask so copy never sits on the dots. */
+.rm-halftone {
+  position: absolute;
+  pointer-events: none;
+  background-image: radial-gradient(
+    color-mix(in oklab, var(--color-pop) 55%, transparent) 1.5px,
+    transparent 2px
+  );
+  background-size: 13px 13px;
+  mask-image: radial-gradient(closest-side, black, transparent);
+  opacity: 0.55;
+}
+
+/* The overprint title: working-ink fill (axe reads the fill), pop-ink second
+   pass as a 2px misregistered shadow. Display sizes only — the misregister
+   turns to mud below ~40px (DESIGN_SYSTEM.md, the mark rules). */
+.rm-overprint-title {
+  color: var(--color-accent-text);
+  text-shadow: 2px 2px 0 color-mix(in oklab, var(--color-pop) 72%, transparent);
+}
+
+/* Offset print shadow for marketing pop elements (CTA pills, feature cards). */
+.rm-offset-shadow {
+  box-shadow: 3px 3px 0 var(--color-pop);
+}
+
+/* Perforation rule: the page's section separator — a full-bleed dashed rule
+   in the working ink, the ticket-edge tell that replaces tonal banding. */
+.rm-perf {
+  border-top: 2px dashed color-mix(in oklab, var(--color-accent) 55%, transparent);
+}
+
+/* The dark act: force an element subtree onto the dark scheme so every
+   light-dark() token inside resolves to its audited dark value, whatever the
+   page theme. The marketing close (the #run band + footer) uses this to sign
+   the page off in the gig-poster register with ZERO literal colours — in dark
+   mode it simply blends with the page. Pair with bg-canvas on the element. */
+.rm-dark-act {
+  color-scheme: dark;
+}
+
+/* Entrance stagger: each direct child rises in sequence (hero choreography).
+   `both` fill + the reduced-motion blanket below = instant final state when
+   motion is off. Capped at 6 children; later ones share the last delay. */
+.rm-stagger > * {
+  animation: rm-rise-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rm-stagger > :nth-child(2) { animation-delay: 90ms; }
+.rm-stagger > :nth-child(3) { animation-delay: 180ms; }
+.rm-stagger > :nth-child(4) { animation-delay: 270ms; }
+.rm-stagger > :nth-child(n + 5) { animation-delay: 360ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-anim-fade,
+  .rm-anim-rise,
+  .rm-anim-slide-right,
+  .rm-anim-slide-left,
+  .rm-anim-toast,
+  .rm-anim-spin,
+  .rm-stagger > * {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

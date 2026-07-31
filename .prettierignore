@@ -1,0 +1,8 @@
+dist/
+node_modules/
+.wrangler/
+src/router.ts
+src/db/migrations/
+public/vendor/
+playwright-report/
+bun.lock

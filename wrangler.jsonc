@@ -1,0 +1,101 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "remill",
+  "main": "src/main.tsx",
+  "compatibility_date": "2025-10-11",
+  "compatibility_flags": ["nodejs_compat"],
+  // Production serves ONLY on the remill.me custom domain (apex, no www) — no workers.dev
+  // host, so minted links (BASE_URL) are the single public origin. remill.org (the launch
+  // domain) 301-redirects here via a Redirect Rule on its zone — it is NOT attached to the
+  // Worker. NOTE: `logpush` is a Workers-Paid feature; re-add it here if the account upgrades.
+  "workers_dev": false,
+  "routes": [{ "pattern": "remill.me", "custom_domain": true }],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
+  // BASE_URL feeds resolveBaseUrl (share/join/email links + OpenAPI); it must
+  // match where the app is actually reachable. This top-level value is PRODUCTION;
+  // local dev + e2e override it via .dev.vars (BASE_URL=http://127.0.0.1:3100).
+  // EMAIL_FROM is the deploy-time default sender; settings.emailFrom (admin
+  // Settings) overrides it. The Resend key is a SECRET, never a var:
+  // `wrangler secret put RESEND_API_KEY` (local: .dev.vars).
+  "vars": {
+    "BASE_URL": "https://remill.me"
+  },
+  // Cron triggers (D31), dispatched on controller.cron in src/jobs:
+  //  - per-minute: scheduled-publish drain (activates in the scheduled-publishing
+  //    phase; a cheap no-op selection until then)
+  //  - daily 03:00 UTC: maintenance (trash purge D29; events pruning later)
+  "triggers": {
+    "crons": ["* * * * *", "0 3 * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "remill",
+      // Provisioned by setup-production (WEUR — primary near the UK operator).
+      "database_id": "6baea339-ac8c-44da-8fb2-ac3ead5309a2",
+      "migrations_dir": "src/db/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "remill-media"
+    }
+  ],
+  // KV namespace backing the fixed-window rate limiter (SEC-2), provisioned by
+  // the setup-production workflow (title "RATE_LIMIT" on the remill.org account).
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT",
+      "id": "d560b68edc67494aa6f45862554e0237"
+    }
+  ],
+  // MCP server (Phase 7) binds an McpAgent Durable Object here.
+  // "durable_objects": { "bindings": [{ "name": "MCP", "class_name": "RemillMcp" }] },
+  "env": {
+    "preview": {
+      "name": "remill-preview",
+      // Previews DO serve on workers.dev (per-PR hosts; the top-level opt-out is
+      // production-only). No BASE_URL var: each PR gets a different host, and
+      // resolveBaseUrl falls back to the request origin, which is always right.
+      "workers_dev": true,
+      // `routes` is INHERITABLE: without this explicit empty override every per-PR
+      // preview would claim production's remill.org custom domain (this happened).
+      "routes": [],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "remill-preview",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "src/db/migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "MEDIA",
+          "bucket_name": "remill-media-preview"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "RATE_LIMIT",
+          // Shared across all per-PR preview Workers (title "preview-RATE_LIMIT").
+          "id": "1346fc21ef8d4fdca77f1c7c774a0bdd"
+        }
+      ],
+      // No crons on previews: the free plan caps cron triggers at 5 PER ACCOUNT, so
+      // per-PR schedules starve production's two (scheduled publishing + maintenance).
+      // An empty list must be explicit — omitting `triggers` would inherit production's.
+      "triggers": {
+        "crons": []
+      }
+    }
+  }
+}

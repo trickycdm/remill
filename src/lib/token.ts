@@ -1,0 +1,69 @@
+/**
+ * Bearer-token generation + hashing (steering/SECURITY_STANDARDS.md). Tokens are
+ * high-entropy random strings; only their SHA-256 hash is stored (never the
+ * plaintext). The plaintext is shown to the issuer exactly once. Uses Web Crypto,
+ * available in both Workers and the Node test runtime.
+ */
+
+const TOKEN_PREFIX = 'rmk_'; // "remill key" — helps humans/scanners recognise it
+const SHARE_TOKEN_PREFIX = 'rms_'; // "remill share" — a link token, never an API key
+const JOIN_TOKEN_PREFIX = 'rmj_'; // "remill join" — a team-join link token (D24)
+const OAUTH_ACCESS_PREFIX = 'rmo_'; // "remill oauth" — a grant-derived access token (D48)
+const OAUTH_REFRESH_PREFIX = 'rmr_'; // OAuth refresh token — rotated on every use (D48)
+const OAUTH_CODE_PREFIX = 'rmc_'; // OAuth authorization code — 60s single-use (D48)
+const DEVICE_CODE_PREFIX = 'rmd_'; // OAuth device code — the high-entropy poll credential (D48)
+
+function randomToken(prefix: string): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return prefix + base64url(bytes);
+}
+
+/** Generate a new opaque API token (returned to the caller once, never stored). */
+export function generateToken(): string {
+  return randomToken(TOKEN_PREFIX);
+}
+
+/** Generate a share-link token (C3) — same entropy/hashing as API tokens, but a
+ *  distinct prefix so a leaked link can never be mistaken for a bearer key. */
+export function generateShareToken(): string {
+  return randomToken(SHARE_TOKEN_PREFIX);
+}
+
+/** Generate a team-join link token (D24) — distinct prefix for the same reason. */
+export function generateJoinToken(): string {
+  return randomToken(JOIN_TOKEN_PREFIX);
+}
+
+/** OAuth access token (D48) — an ordinary api_tokens row tied to a grant. */
+export function generateOAuthAccessToken(): string {
+  return randomToken(OAUTH_ACCESS_PREFIX);
+}
+
+/** OAuth refresh token (D48) — hash lives on the grant row, rotated on use. */
+export function generateOAuthRefreshToken(): string {
+  return randomToken(OAUTH_REFRESH_PREFIX);
+}
+
+/** OAuth authorization code (D48) — short-lived, single-use, stored hashed. */
+export function generateOAuthCode(): string {
+  return randomToken(OAUTH_CODE_PREFIX);
+}
+
+/** OAuth device code (D48) — the client's poll credential, stored hashed. */
+export function generateDeviceCode(): string {
+  return randomToken(DEVICE_CODE_PREFIX);
+}
+
+/** SHA-256 hex hash of a token, for storage and constant-time-ish lookup. */
+export async function hashToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Base64url without padding (RFC 4648 §5) — also used for PKCE S256 (D48). */
+export function base64url(bytes: Uint8Array): string {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}

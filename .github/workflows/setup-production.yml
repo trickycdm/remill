@@ -1,0 +1,167 @@
+name: Setup production
+
+# One-time production bootstrap for the remill.me Cloudflare account, run in two
+# manually-dispatched phases (all Cloudflare access lives in Actions — no local wrangler auth):
+#
+#   1. provision — create the D1 database, KV namespaces, and R2 buckets, then PRINT their
+#      IDs in the job log. The real IDs get committed into wrangler.jsonc before phase 2.
+#   2. finalize — migrations → seed (system data only, credential-free) → build+deploy
+#      (attaches the remill.me custom domain) → push Worker secrets → bootstrap the first
+#      admin (scripts/bootstrap-admin.ts, idempotent) → smoke-check the live site.
+#
+# Both phases are idempotent: create steps tolerate existing resources, the seed and the
+# admin bootstrap are INSERT OR IGNORE, and re-deploys are versioned. Regular releases stay
+# tag-driven (see deploy-production in ci.yml); this workflow is for first-time setup and
+# recovery, not routine deploys.
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'provision = create resources + print IDs; finalize = migrate/seed/deploy/secrets/admin'
+        required: true
+        type: choice
+        options:
+          - provision
+          - finalize
+        default: provision
+      admin_email:
+        description: 'Email for the bootstrapped first admin (finalize only)'
+        required: true
+      recreate_empty_d1:
+        description: 'provision only: delete + recreate the remill D1 in WEUR (refuses if it has any tables)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: remill-production
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  provision:
+    name: Provision Cloudflare resources
+    if: inputs.phase == 'provision'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      # D1 pins its primary to the region it was created from; GitHub runners are US-based,
+      # so an unhinted create lands in WNAM. This deployment is operated from the UK — hint
+      # WEUR. The recreate path exists to fix a mis-located EMPTY database and refuses to
+      # touch one that has any user tables.
+      # NOTE: `d1 execute <name>` resolves the name through wrangler.jsonc first, and the
+      # committed placeholder/stale database_id would break it — move the config aside so
+      # wrangler resolves the name via the account API instead.
+      - name: Recreate empty D1 in WEUR (guarded, opt-in)
+        if: inputs.recreate_empty_d1
+        run: |
+          mv wrangler.jsonc /tmp/wrangler.jsonc.aside
+          N=$(bunx wrangler d1 execute remill --remote --json \
+              --command "SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE '\_cf\_%' ESCAPE '\' AND name NOT LIKE 'sqlite\_%' ESCAPE '\'" \
+              | jq -r '.[0].results[0].n')
+          if [ "$N" != "0" ]; then
+            echo "Refusing to delete D1 'remill': it has $N table(s)." >&2
+            exit 1
+          fi
+          bunx wrangler d1 delete remill -y
+          mv /tmp/wrangler.jsonc.aside wrangler.jsonc
+          echo "Empty D1 'remill' deleted; the next step recreates it in WEUR."
+
+      - name: Create D1 database (remill, WEUR)
+        run: bunx wrangler d1 create remill --location weur || echo "D1 'remill' already exists (ok)"
+
+      - name: Create KV namespaces (rate limiter, prod + preview)
+        run: |
+          bunx wrangler kv namespace create RATE_LIMIT || echo "prod RATE_LIMIT namespace already exists (ok)"
+          bunx wrangler kv namespace create RATE_LIMIT --env preview || echo "preview RATE_LIMIT namespace already exists (ok)"
+
+      - name: Create R2 buckets (media, prod + preview)
+        run: |
+          bunx wrangler r2 bucket create remill-media || echo "remill-media already exists (ok)"
+          bunx wrangler r2 bucket create remill-media-preview || echo "remill-media-preview already exists (ok)"
+
+      # The IDs printed here get committed into wrangler.jsonc (d1_databases[].database_id
+      # and kv_namespaces[].id for both top-level and env.preview) before running finalize.
+      # `d1 list` is config-independent (unlike `d1 info <name>`, which resolves the name
+      # through the possibly-placeholder database_id in wrangler.jsonc).
+      - name: Print resource IDs (copy into wrangler.jsonc)
+        run: |
+          echo "=== D1 databases ==="
+          bunx wrangler d1 list --json | jq 'map({name, uuid, created_at})'
+          echo "=== KV namespaces ==="
+          bunx wrangler kv namespace list
+          echo "=== R2 buckets ==="
+          bunx wrangler r2 bucket list
+
+  finalize:
+    name: First production deploy
+    if: inputs.phase == 'finalize'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      # Only the TOP-LEVEL (production) section may not contain placeholders — env.preview
+      # keeps a placeholder D1 id by design (the per-PR preview job seds in a real one).
+      - name: Guard — real production resource IDs must be committed
+        run: |
+          if awk '/"env":/{exit} {print}' wrangler.jsonc | grep -qE '00000000-0000-0000-0000-000000000000|00000000000000000000000000000000'; then
+            echo "wrangler.jsonc still has placeholder PRODUCTION resource IDs — run the provision phase and commit the real IDs first." >&2
+            exit 1
+          fi
+
+      - name: Apply D1 migrations
+        run: bunx wrangler d1 migrations apply remill --remote
+
+      - name: Seed system data (roles, settings, media collection — credential-free)
+        run: bunx wrangler d1 execute remill --remote --file src/db/seed.sql
+
+      - name: Build & deploy (attaches the remill.me custom domain)
+        run: bun run deploy
+
+      - name: Push Worker secrets
+        run: |
+          printf 'SESSION_SECRET=%s\n' "${{ secrets.SESSION_SECRET }}" > /tmp/prod-secrets.env
+          if [ -n "${{ secrets.RESEND_API_KEY }}" ]; then
+            printf 'RESEND_API_KEY=%s\n' "${{ secrets.RESEND_API_KEY }}" >> /tmp/prod-secrets.env
+          fi
+          bunx wrangler secret bulk /tmp/prod-secrets.env
+          rm -f /tmp/prod-secrets.env
+
+      - name: Bootstrap first admin (idempotent, no plaintext stored)
+        run: bun run db:bootstrap:remote
+        env:
+          ADMIN_BOOTSTRAP_EMAIL: ${{ inputs.admin_email }}
+          ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.ADMIN_BOOTSTRAP_PASSWORD }}
+
+      # Custom-domain DNS + cert issuance can lag the first deploy by a few minutes.
+      - name: Smoke check https://remill.me
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf -o /dev/null --max-time 15 https://remill.me/robots.txt; then
+              echo "remill.me is live."
+              exit 0
+            fi
+            echo "Attempt $i: not reachable yet, retrying in 30s..."
+            sleep 30
+          done
+          echo "remill.me not reachable after 5 minutes — check the custom domain in the Cloudflare dash." >&2
+          exit 1

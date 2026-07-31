@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+dist/
+.output/
+.vite/
+
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.tpl
+
+# D1 local
+.wrangler/state/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Test / coverage
+coverage/
+playwright-report/
+test-results/
+.playwright/
+
+# Claude Code local (user/session-specific, never committed)
+.claude/settings.local.json
+
+# Editor / OS
+.DS_Store
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Generated (routes are generated from src/routes/**; commit or ignore per Phase 1 decision)
+# src/router.ts
+
+# plan-mode scratch drafts (canonical plans live in dated folders)
+plans/.tmp/
