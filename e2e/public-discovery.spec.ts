@@ -135,7 +135,7 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     // Exactly one h1 (the hero); the writing index is demoted below it.
     await expect(anonPage.getByRole('heading', { level: 1 })).toHaveCount(1);
 
-    // Primary CTA anchors to the deploy story (remill.org is single-tenant:
+    // Primary CTA anchors to the deploy story (remill.me is single-tenant:
     // a cold visitor's conversion is running their own, not signing in here).
     const cta = anonPage.getByRole('link', { name: 'Run your own mill' });
     await expect(cta).toHaveAttribute('href', '#run');

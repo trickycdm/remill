@@ -16,7 +16,7 @@
  * config). Motion is CSS-only (entrance stagger, scroll-rise),
  * reduced-motion-safe. Exactly two mono-caps eyebrows page-wide (hero +
  * quickstart); zero em-dashes in visible copy. The primary CTA is "Run your
- * own mill" — remill.org is a single-tenant instance, so a cold visitor's
+ * own mill" — remill.me is a single-tenant instance, so a cold visitor's
  * conversion is deploying their own, never signing in here.
  */
 
@@ -634,7 +634,7 @@ const MILL_PIECES: { icon: unknown; label: string; body: string }[] = [
 ];
 
 /**
- * The real conversion story (the funnel bug the review named): remill.org is
+ * The real conversion story (the funnel bug the review named): remill.me is
  * the author's single-tenant instance, so a cold visitor's path is DEPLOY YOUR
  * OWN, not sign-in. Honest about availability: the repo is private while it is
  * readied for release, so the CTA-grade artifact here is the open API
@@ -660,7 +660,7 @@ export function RunYourOwnMill() {
             repository by GitHub Actions.
           </p>
           <p class="max-w-2xl leading-relaxed text-ink-muted">
-            remill.org runs this exact code as the author's own mill. The source is being readied
+            remill.me runs this exact code as the author's own mill. The source is being readied
             for a public release; the live API is open to read today.
           </p>
           <p class="mt-2">

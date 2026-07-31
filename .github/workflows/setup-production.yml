@@ -1,12 +1,12 @@
 name: Setup production
 
-# One-time production bootstrap for the remill.org Cloudflare account, run in two
+# One-time production bootstrap for the remill.me Cloudflare account, run in two
 # manually-dispatched phases (all Cloudflare access lives in Actions — no local wrangler auth):
 #
 #   1. provision — create the D1 database, KV namespaces, and R2 buckets, then PRINT their
 #      IDs in the job log. The real IDs get committed into wrangler.jsonc before phase 2.
 #   2. finalize — migrations → seed (system data only, credential-free) → build+deploy
-#      (attaches the remill.org custom domain) → push Worker secrets → bootstrap the first
+#      (attaches the remill.me custom domain) → push Worker secrets → bootstrap the first
 #      admin (scripts/bootstrap-admin.ts, idempotent) → smoke-check the live site.
 #
 # Both phases are idempotent: create steps tolerate existing resources, the seed and the
@@ -135,7 +135,7 @@ jobs:
       - name: Seed system data (roles, settings, media collection — credential-free)
         run: bunx wrangler d1 execute remill --remote --file src/db/seed.sql
 
-      - name: Build & deploy (attaches the remill.org custom domain)
+      - name: Build & deploy (attaches the remill.me custom domain)
         run: bun run deploy
 
       - name: Push Worker secrets
@@ -154,15 +154,15 @@ jobs:
           ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.ADMIN_BOOTSTRAP_PASSWORD }}
 
       # Custom-domain DNS + cert issuance can lag the first deploy by a few minutes.
-      - name: Smoke check https://remill.org
+      - name: Smoke check https://remill.me
         run: |
           for i in $(seq 1 10); do
-            if curl -sf -o /dev/null --max-time 15 https://remill.org/robots.txt; then
-              echo "remill.org is live."
+            if curl -sf -o /dev/null --max-time 15 https://remill.me/robots.txt; then
+              echo "remill.me is live."
               exit 0
             fi
             echo "Attempt $i: not reachable yet, retrying in 30s..."
             sleep 30
           done
-          echo "remill.org not reachable after 5 minutes — check the custom domain in the Cloudflare dash." >&2
+          echo "remill.me not reachable after 5 minutes — check the custom domain in the Cloudflare dash." >&2
           exit 1

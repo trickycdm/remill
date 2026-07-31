@@ -4,11 +4,12 @@
   "main": "src/main.tsx",
   "compatibility_date": "2025-10-11",
   "compatibility_flags": ["nodejs_compat"],
-  // Production serves ONLY on the remill.org custom domain (apex, no www) — no workers.dev
-  // host, so minted links (BASE_URL) are the single public origin. NOTE: `logpush` is a
-  // Workers-Paid feature; re-add it here if the account upgrades.
+  // Production serves ONLY on the remill.me custom domain (apex, no www) — no workers.dev
+  // host, so minted links (BASE_URL) are the single public origin. remill.org (the launch
+  // domain) 301-redirects here via a Redirect Rule on its zone — it is NOT attached to the
+  // Worker. NOTE: `logpush` is a Workers-Paid feature; re-add it here if the account upgrades.
   "workers_dev": false,
-  "routes": [{ "pattern": "remill.org", "custom_domain": true }],
+  "routes": [{ "pattern": "remill.me", "custom_domain": true }],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
@@ -24,7 +25,7 @@
   // Settings) overrides it. The Resend key is a SECRET, never a var:
   // `wrangler secret put RESEND_API_KEY` (local: .dev.vars).
   "vars": {
-    "BASE_URL": "https://remill.org"
+    "BASE_URL": "https://remill.me"
   },
   // Cron triggers (D31), dispatched on controller.cron in src/jobs:
   //  - per-minute: scheduled-publish drain (activates in the scheduled-publishing

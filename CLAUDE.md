@@ -11,7 +11,8 @@ rendered public pages + share links.)
 > [Required Reading](#required-reading) table maps each area to its doc. When in doubt, start in
 > steering — don't reinvent conventions from the code.
 
-> **Build status.** **DEPLOYED — live at https://remill.org since 2026-07-09** on Cloudflare (all
+> **Build status.** **DEPLOYED — live at https://remill.me** (launched 2026-07-09 on remill.org;
+> domain flipped to remill.me 2026-07-31, old domain 301-redirects) on Cloudflare (all
 > deploy access GitHub-Actions-only via `.github/workflows/`; tag-driven `v*` releases, per-PR preview
 > Workers with race-aware cleanup). All 8 phases (0–7) of
 > [`plans/2026-07-04-cms-foundation/plan.md`](plans/2026-07-04-cms-foundation/plan.md) are **complete and

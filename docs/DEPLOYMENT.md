@@ -1,6 +1,6 @@
 # Deployment — remill to production
 
-> **Canonical runbook for the remill production environment.** All Cloudflare access (D1, R2, KV, Worker deployment) is mediated through GitHub Actions using repo secrets — no local `wrangler auth`. This documents the model live since 2026-07-09 (remill.org, WEUR D1).
+> **Canonical runbook for the remill production environment.** All Cloudflare access (D1, R2, KV, Worker deployment) is mediated through GitHub Actions using repo secrets — no local `wrangler auth`. This documents the model live since 2026-07-09 (WEUR D1; on remill.org until 2026-07-31, now remill.me with the old domain 301-redirecting).
 
 ## Overview
 
@@ -15,7 +15,7 @@ Three workflows handle deployments:
 **Cloudflare account setup** (one-time, manual, in the Cloudflare dashboard):
 - Register a `.workers.dev` subdomain (where PR previews live).
 - Activate R2 ($0 due; requires a payment method on file).
-- Have the production domain (e.g., `remill.org`) as an active zone on the same account.
+- Have the production domain (e.g., `remill.me`) as an active zone on the same account.
 - Create a custom API token with these scopes:
   - **Account**:
     - Workers Scripts: Edit
@@ -86,13 +86,13 @@ gh workflow run setup-production.yml \
 - Validates that top-level D1/KV/R2 IDs are not placeholders (production requires real IDs).
 - Applies D1 migrations (0000–0011).
 - Seeds system data (`src/db/seed.sql` — credential-free, safe for prod).
-- Builds and deploys to remill.org (attaches the custom domain).
+- Builds and deploys to remill.me (attaches the custom domain).
 - Pushes Worker secrets (`SESSION_SECRET`, optionally `RESEND_API_KEY`).
 - Bootstraps the first admin (`scripts/bootstrap-admin.ts`, idempotent, `INSERT OR IGNORE`).
   - If no `ADMIN_BOOTSTRAP_PASSWORD` secret is set, a strong password is generated and printed once — **save it immediately** and change it after first login.
-- Smoke-checks `https://remill.org/robots.txt` (retries up to 10×; custom-domain DNS and cert can lag by a few minutes).
+- Smoke-checks `https://remill.me/robots.txt` (retries up to 10×; custom-domain DNS and cert can lag by a few minutes).
 
-On success: remill.org is live.
+On success: remill.me is live.
 
 ## Releases (tag-driven)
 
@@ -149,8 +149,8 @@ git push origin v0.1.x
 
 ## Domain & BASE_URL
 
-- **Top-level `wrangler.jsonc`** has `"workers_dev": false` and routes production to the remill.org custom domain apex only (no `workers.dev` subdomain).
-- **`BASE_URL` var** (`vars.BASE_URL: "https://remill.org"`) is hardcoded to production; minted share/invite/email links use this origin.
+- **Top-level `wrangler.jsonc`** has `"workers_dev": false` and routes production to the remill.me custom domain apex only (no `workers.dev` subdomain).
+- **`BASE_URL` var** (`vars.BASE_URL: "https://remill.me"`) is hardcoded to production; minted share/invite/email links use this origin.
 - **Local dev** overrides `BASE_URL` via `.dev.vars` (gitignored): `BASE_URL=http://127.0.0.1:3100`.
 - **PR previews** don't set `BASE_URL`; the Worker falls back to `request.url` origin, which is always correct (e.g., `https://remill-pr-5.workers.dev`).
 
@@ -178,9 +178,9 @@ Without `RESEND_API_KEY`, the console stub logs all emails; the product still sh
 
 `d1 execute` resolves names through `wrangler.jsonc` first. If the config has a placeholder id (`00000000-…`), it breaks. Use `wrangler d1 list` (config-independent) or temporarily move `wrangler.jsonc` aside.
 
-**PR preview claims remill.org (custom domain hijack)**
+**PR preview claims remill.me (custom domain hijack)**
 
-The top-level `wrangler.jsonc` sets `routes` (production custom domain). Without an explicit `routes: []` override in `env.preview`, subornate envs inherit the parent's routes — every PR preview would then claim remill.org. The fix is already in place (`env.preview` has `"routes": []`); confirm it's still there after any rebase.
+The top-level `wrangler.jsonc` sets `routes` (production custom domain). Without an explicit `routes: []` override in `env.preview`, subornate envs inherit the parent's routes — every PR preview would then claim remill.me. The fix is already in place (`env.preview` has `"routes": []`); confirm it's still there after any rebase.
 
 **PR previews exhaust the free cron cap (5 per account)**
 
@@ -194,7 +194,7 @@ The per-PR preview job creates a D1 with a fresh name (`remill-pr-<N>`). If the 
 
 `logpush: true` requires Workers Paid plan. The config was removed for the free account (it was causing deploy failures). Re-add only after upgrading the account to Paid.
 
-**Custom domain cert not issued; remill.org not yet reachable**
+**Custom domain cert not issued; remill.me not yet reachable**
 
 DNS and certificate issuance can take up to 5 minutes after the first deploy. The finalize job smoke-checks with retries (up to 10×, 30s apart, ~5 minutes total). If it times out, wait a bit and re-run finalize or trigger a test deploy. Check the Cloudflare dashboard (Workers > Custom Domains) to confirm the cert status.
 
@@ -209,7 +209,7 @@ Worker secrets are updated on deploy. If the key was added but emails still use 
 
 | Resource | Value |
 |----------|-------|
-| Origin | https://remill.org (apex, no www) |
+| Origin | https://remill.me (apex, no www) |
 | D1 id | `6baea339-ac8c-44da-8fb2-ac3ead5309a2` (WEUR) |
 | KV RATE_LIMIT (prod) | `d560b68edc67494aa6f45862554e0237` |
 | KV RATE_LIMIT (preview) | `1346fc21ef8d4fdca77f1c7c774a0bdd` |
