@@ -42,6 +42,7 @@ import { collectionsWithAction, getPrincipalPermissions } from '@/services/acces
 import { newId } from '@/lib/id';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { titleFieldOf } from '@/lib/def-helpers';
+import { isSeoFieldKey } from '@/lib/seo-keys';
 import { renderDocument, rendersFor, textRenderOf } from '@/templates/renders';
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/config/constants';
 import {
@@ -52,9 +53,10 @@ import {
   ForbiddenError,
   type ErrorDetails,
 } from '@/lib/errors';
-import type { DocumentRecord } from '@/db/queries/documents';
+import { VISIBILITIES, type DocumentRecord, type Visibility } from '@/db/queries/documents';
 
-export type { DocumentRecord } from '@/db/queries/documents';
+export type { DocumentRecord, Visibility } from '@/db/queries/documents';
+export { VISIBILITIES } from '@/db/queries/documents';
 export type { ExpandedReference } from '@/fields/types';
 export { FILTER_OPS } from '@/db/queries/documents';
 export type { FilterOp } from '@/db/queries/documents';
@@ -204,6 +206,10 @@ export function buildSearchText(
   const parts: string[] = [];
   for (const field of def.fields) {
     if (field.key === titleKey) continue; // already the weighted title column
+    // D52 SEO override fields (seo_title/meta_description/social_image) are
+    // author-controlled metadata, not reading content — keep them out of the
+    // indexed/excerpted body text.
+    if (isSeoFieldKey(field.key)) continue;
     const { ft } = resolveField(field);
     const v = data[field.key];
     if (v === null || v === undefined) continue;
@@ -967,6 +973,8 @@ export interface CreateOverrides {
   readonly status?: 'draft' | 'published';
   readonly createdAt?: string;
   readonly publishedAt?: string | null;
+  /** Initial visibility (import, D37); defaults to 'public'. */
+  readonly visibility?: Visibility;
 }
 
 const DOC_ID_RE = /^doc_[A-Za-z0-9_-]+$/;
@@ -1006,6 +1014,7 @@ export async function createDocument(
         now,
         createdAt: overrides?.createdAt,
         publishedAt,
+        visibility: overrides?.visibility,
         index: buildIndex(def, data),
         search: buildSearchText(def, data),
         event: {
@@ -1034,6 +1043,7 @@ export async function createDocument(
     updatedAt: now,
     publishedAt,
     publishAt: null,
+    visibility: overrides?.visibility ?? 'public',
   };
 }
 
@@ -1266,6 +1276,75 @@ export async function scheduleDocument(
 }
 
 /**
+ * Set a document's visibility (D50: public/unlisted/private), modelled on
+ * `scheduleDocument` — a narrow write (no data change, no revision, no index
+ * churn). Changing visibility is a publication decision, so it requires
+ * `publish`, same as schedule/publish. Allowed on drafts too: it is remembered
+ * and takes effect once the document is published; the scheduled-publish drain
+ * leaves it untouched. A no-op call (the value already matches) short-circuits
+ * after the permission check — no write, no revision-adjacent `updatedAt`
+ * bump, no outbox event.
+ */
+export async function setVisibility(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  visibility: Visibility,
+  now: string,
+): Promise<DocumentRecord> {
+  const readGrant = await authorize(
+    db,
+    principal,
+    'read',
+    { collection: collectionSlug, documentId: id },
+    now,
+  );
+  const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
+  if (!existing) throw new NotFoundError('Document');
+
+  if (!VISIBILITIES.includes(visibility)) {
+    throw new InputValidationError([
+      { path: 'visibility', message: `visibility must be one of: ${VISIBILITIES.join(', ')}` },
+    ]);
+  }
+
+  const grant = await authorize(
+    db,
+    principal,
+    'publish',
+    {
+      collection: collectionSlug,
+      documentId: id,
+      status: existing.status,
+      visibility: existing.visibility,
+    },
+    now,
+  );
+
+  if (existing.visibility === visibility) return existing;
+
+  await dq.setDocumentVisibility(
+    db,
+    {
+      id,
+      collection: collectionSlug,
+      visibility,
+      now,
+      event: {
+        type: 'document.visibility_changed',
+        collection: collectionSlug,
+        resource: id,
+        principalId: principal.id,
+        at: now,
+      },
+    },
+    grant,
+  );
+  return { ...existing, visibility };
+}
+
+/**
  * The per-minute scheduled-publish drain (D32), called from cron
  * (src/jobs/index.ts — the purgeExpiredTrash pattern). Selects due drafts with
  * a witness-free metadata query, then publishes EACH through the full
@@ -1332,6 +1411,7 @@ export async function deleteDocument(
       createdAt: existing.createdAt,
       updatedAt: existing.updatedAt,
       publishedAt: existing.publishedAt,
+      visibility: existing.visibility,
       deletedBy: principal.id,
       deletedAt: now,
       event: {

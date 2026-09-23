@@ -5,7 +5,8 @@
  *
  * Layers, all additive:
  *   1. Role permissions (with conditions own/published).
- *   2. publicRead sugar (read of published documents).
+ *   2. publicRead sugar (read of published, non-private documents — D50; a
+ *      missing visibility counts as public).
  *   3. Per-document item grants.
  * A token scope mask, if present, NARROWS the result (effective = perms ∩ mask) —
  * it can shrink an agent's blast radius but never widen it.
@@ -34,7 +35,17 @@ export interface Decision {
 function conditionSatisfied(condition: Condition | null, resource: Resource, principal: Principal): boolean {
   if (!condition) return true;
   if (condition === 'own') return resource.createdBy === principal.id;
-  if (condition === 'published') return resource.status === 'published';
+  if (condition === 'published') {
+    if (resource.status !== 'published') return false;
+    // A role's `published` condition normally sees every visibility once
+    // published (item grants and roles are trusted readers) — but the
+    // `anonymous` principal is special: it's the built-in, editable, seeded
+    // role, and an admin could attach a `published` read condition to it
+    // without meaning to hand out unlisted/private documents. Anonymous never
+    // bypasses visibility, role condition or not (D50).
+    if (principal.id === 'anonymous' && resource.visibility === 'private') return false;
+    return true;
+  }
   return false;
 }
 
@@ -67,10 +78,11 @@ export function decide(input: Decision): boolean {
     if (conditionSatisfied(p.condition, resource, principal)) return true;
   }
 
-  // 2. publicRead sugar — anyone may read published docs of a publicRead collection.
+  // 2. publicRead sugar — anyone may read published, non-private docs of a
+  // publicRead collection. A missing visibility counts as public (D50).
   if (action === 'read' && publicRead) {
-    if (!isItem) return true; // list; filter restricts to published
-    if (resource.status === 'published') return true;
+    if (!isItem) return true; // list; filter restricts to published + public
+    if (resource.status === 'published' && resource.visibility !== 'private') return true;
   }
 
   // 3. Item grants (document-level only).

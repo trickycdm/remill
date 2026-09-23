@@ -149,6 +149,13 @@ item grants. Everything — every allow and every deny — is audited with princ
   all-or-nothing. A `/{collection}` public index page (published entries, newest first) and a redesigned
   homepage round out the public reading surface.
 
+- **Visibility, link passwords, rich SEO head (D50–D52): shipped** — per-document visibility
+  (public/unlisted/private, orthogonal to draft/published) that scopes what anonymous lists and
+  item reads can see; password-protected share links (one password per link, HMAC unlock cookie,
+  a blanket locked page that leaks nothing); and a shared `buildDocumentHead` giving articles and
+  open share links full og/twitter/JSON-LD tags with author-controlled `seo_title`/
+  `meta_description`/`social_image` fields on the blog/docs/portfolio packs.
+
 Roadmap detail and per-phase status: `plans/2026-07-05-platform_knowledge_publishing_roadmap/plan.md`
 (Tracks A–C, worklogs), plus the full completion roadmap
 `plans/2026-07-07-platform_completion_tiered_roadmap/plan.md` (11/11 phases complete; Tier 4 & deferred

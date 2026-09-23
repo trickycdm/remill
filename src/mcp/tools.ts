@@ -38,6 +38,7 @@ import { snippetToText } from '@/lib/fts';
 import { decodeBase64 } from '@/lib/base64';
 import { parseSort, clampPage, clampPageSize } from '@/lib/list-query';
 import { hasLifecycle } from '@/lib/lifecycle';
+import { VISIBILITIES, type Visibility } from '@/lib/visibility';
 import { jsonSchemaFor } from '@/fields/registry';
 import type { CollectionDefinition, JSONSchema } from '@/fields/types';
 
@@ -130,7 +131,7 @@ function filtersFromArgs(raw: unknown): Record<string, Partial<Record<docs.Filte
 
 /** Agent-minted share links MUST expire; requested expiries are clamped to 30
  *  days (D26). Humans in the admin Share panel may still mint open-ended links. */
-const SHARE_LINK_MAX_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SHARE_LINK_MAX_TTL_DAYS = 30;
 
 /** Build the permission-filtered tool set for a principal. `baseUrl` is the
  *  absolute origin for tools that mint URLs (threaded from the route — this
@@ -524,6 +525,33 @@ export async function buildToolsForPrincipal(
         },
       });
     }
+    // Visibility (D50) only matters for collections readable by the public —
+    // gated on publicRead (like the editor sidebar control), not lifecycle: a
+    // lifecycle:'none' document is always 'published', so visibility alone
+    // still decides whether the public list/read surfaces show it.
+    if (publicRead && couldDo(perms, principal, 'publish', slug, false)) {
+      tools.push({
+        name: `visibility_${slug}`,
+        description: `Set a ${def.name} document's visibility (D50): public (listed everywhere), unlisted (reachable only by its doc_ id link, not listed), or private (no public URL at all — share it via share_link_${slug}). Allowed on drafts too; it takes effect once published.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            visibility: { type: 'string', enum: [...VISIBILITIES] },
+          },
+          required: ['id', 'visibility'],
+        },
+        handler: async (args) =>
+          docs.setVisibility(
+            db,
+            principal,
+            slug,
+            String(args.id),
+            args.visibility as Visibility,
+            now(),
+          ),
+      });
+    }
     if (couldDo(perms, principal, 'manage_access', slug, false)) {
       tools.push({
         name: `share_${slug}`,
@@ -577,29 +605,36 @@ export async function buildToolsForPrincipal(
               type: 'string',
               description: 'REQUIRED ISO-8601 expiry (clamped to 30 days out)',
             },
+            password: {
+              type: 'string',
+              description: 'optional password to require before the link opens (min 8 characters)',
+            },
+            label: { type: 'string', description: 'optional human label shown in the Share panel' },
           },
           required: ['id', 'expiresAt'],
         },
         handler: async (args) => {
-          const requested = Date.parse(String(args.expiresAt ?? ''));
-          if (Number.isNaN(requested)) {
-            throw new InputValidationError([
-              { path: 'expiresAt', message: 'A valid ISO-8601 expiry is required.' },
-            ]);
-          }
           const nowIso = now();
-          const expiresAt = new Date(
-            Math.min(requested, new Date(nowIso).getTime() + SHARE_LINK_MAX_TTL_MS),
-          ).toISOString();
-          const { grantId, token } = await createShareLink(
+          // Validation and the 30-day clamp both live in createShareLink() now
+          // (steering: REST follows "the same rules as the MCP tool" — one
+          // implementation instead of two hand-copied ones).
+          const { grantId, token, hasPassword, label, expiresAt } = await createShareLink(
             db,
             principal,
-            { collection: slug, documentId: String(args.id ?? ''), actions: ['read'], expiresAt },
+            {
+              collection: slug,
+              documentId: String(args.id ?? ''),
+              actions: ['read'],
+              expiresAt: typeof args.expiresAt === 'string' ? args.expiresAt : undefined,
+              maxTtlDays: SHARE_LINK_MAX_TTL_DAYS,
+              password: typeof args.password === 'string' && args.password ? args.password : undefined,
+              label: typeof args.label === 'string' && args.label ? args.label : undefined,
+            },
             nowIso,
           );
           // The plaintext token intentionally enters the agent's context — that
           // IS the capability; it stays revocable from the Share panel/matrix.
-          return { grantId, url: `${baseUrl}/s/${token}`, expiresAt };
+          return { grantId, url: `${baseUrl}/s/${token}`, expiresAt, hasPassword, label };
         },
       });
     }

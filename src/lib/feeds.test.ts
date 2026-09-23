@@ -50,10 +50,14 @@ describe('feeds (D35) — pure builders', () => {
 
   it('robotsTxt disallows every protected surface and names the sitemap', () => {
     const txt = robotsTxt('https://ex.com');
-    for (const path of ['/admin', '/api', '/mcp', '/auth', '/s/']) {
+    for (const path of ['/admin', '/api', '/mcp', '/auth']) {
       expect(txt).toContain(`Disallow: ${path}`);
     }
     expect(txt).toContain('Sitemap: https://ex.com/sitemap.xml');
+  });
+
+  it('robotsTxt does NOT disallow /s/ — share links carry noindex instead (D51)', () => {
+    expect(robotsTxt('https://ex.com')).not.toContain('Disallow: /s/');
   });
 });
 

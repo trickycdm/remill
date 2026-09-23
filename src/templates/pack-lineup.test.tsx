@@ -15,6 +15,7 @@ import { resolveConventionLayout } from '@/templates/lib/conventions';
 import { changelogTemplate } from '@/templates/changelog';
 import { portfolioTemplate } from '@/templates/portfolio';
 import { docsTemplate } from '@/templates/docs';
+import { buildDocumentHead } from '@/lib/seo';
 import type { ExpandedDocument } from '@/services/documents';
 import type { TemplateContext } from '@/templates/types';
 
@@ -95,6 +96,8 @@ describe('portfolio pack', () => {
     expect(layout.titleField?.key).toBe('title');
     expect(layout.hero?.key).toBe('cover');
     expect(layout.lead?.key).toBe('summary');
+    // The D52 SEO override fields (seo_title/meta_description/social_image)
+    // are excluded from every slot — never a meta row, on any pack.
     expect(layout.meta.map((f) => f.key).sort()).toEqual(['link', 'tags']);
   });
 
@@ -145,6 +148,8 @@ describe('docs pack', () => {
     });
     expect(layout.titleField?.key).toBe('title');
     expect(layout.body.map((f) => f.key)).toEqual(['body']);
+    // The D52 SEO override fields (seo_title/meta_description/social_image)
+    // are excluded from every slot — never a meta row, on any pack.
     expect(layout.meta.map((f) => f.key).sort()).toEqual(['related', 'section']);
   });
 
@@ -171,5 +176,33 @@ describe('docs pack', () => {
     expect(html).toContain('Authorize everything');
     expect(html).toContain('The schema engine'); // resolved relation title
     expect(html).not.toContain('data-share'); // wants: {}
+  });
+
+  it("D52 head: the docs template's lead never resolves to seo_title (the docs template opts out of a lead)", () => {
+    const head = buildDocumentHead({
+      def: docsCollectionScaffold,
+      doc: {
+        id: 'doc_1',
+        data: {
+          title: 'Authorize everything',
+          section: 'concept',
+          body: 'Every write goes through authorize().',
+          seo_title: 'A punchy SEO-only title',
+        },
+        status: 'published',
+        visibility: 'public',
+        publishedAt: NOW,
+        updatedAt: NOW,
+      },
+      settings: {},
+      baseUrl: 'https://example.test',
+      canonicalUrl: 'https://example.test/docs/authorize-everything',
+      publicUrl: 'https://example.test/docs/authorize-everything',
+      bodyText: 'Every write goes through authorize().',
+      indexable: true,
+      template: 'docs',
+    });
+    expect(head.description).not.toBe('A punchy SEO-only title');
+    expect(head.description).toContain('authorize');
   });
 });

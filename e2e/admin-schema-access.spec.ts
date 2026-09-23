@@ -151,8 +151,9 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await page.getByRole('button', { name: /Create Posts/i }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 
-    // The Share panel is visible for a manager.
-    await expect(page.getByRole('heading', { name: 'Share', exact: true })).toBeVisible();
+    // The Share panel (D51) is visible for a manager, split into "Share links"
+    // and "People & roles" sections.
+    await expect(page.getByRole('heading', { name: 'People & roles', exact: true })).toBeVisible();
 
     // Grant read (checked by default) to the reader role.
     await page.getByLabel('Grant to').selectOption('role:reader');

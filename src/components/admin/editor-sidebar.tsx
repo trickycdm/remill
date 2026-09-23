@@ -16,10 +16,11 @@
 
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import type { CollectionDefinition } from '@/fields/types';
-import type { DocumentRecord } from '@/services/documents';
+import type { DocumentRecord, Visibility } from '@/services/documents';
 import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
 import { hasLifecycle } from '@/lib/lifecycle';
+import { publicUrlOf } from '@/lib/def-helpers';
 import { Button, Badge, Card, CardHeader, CardTitle, CardContent, Dialog, Input } from '@/components/ui';
 
 type Revision = { readonly revision: number; readonly savedAt: string };
@@ -44,7 +45,23 @@ type EditorSidebarProps =
       doc: DocumentRecord;
       revisions: readonly Revision[];
       settings?: SiteSettings;
+      /** The site's absolute base URL (resolveBaseUrl), for showing the unlisted
+       *  doc_ URL (D50). Falls back to a relative path when absent. */
+      baseUrl?: string;
     };
+
+const VISIBILITY_OPTIONS: { value: Visibility; label: string; help: string }[] = [
+  { value: 'public', label: 'Public', help: 'Listed on the site, in feeds and search.' },
+  {
+    value: 'unlisted',
+    label: 'Unlisted',
+    help: 'Anyone with the link can read it. Not listed anywhere; not indexed.',
+  },
+  { value: 'private', label: 'Private', help: 'Only people you share a link or access with.' },
+];
+
+const RADIO_BASE =
+  'mt-0.5 size-4 shrink-0 border border-border-strong bg-surface accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 /** One `<dl>` row: a mono-caps label and its value. */
 function MetaRow({ label, children }: { label: string; children: unknown }): JSX.Element {
@@ -108,6 +125,60 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
                 </Button>
               </form>
             )
+          ) : null}
+
+          {/* Visibility (D50) — only meaningful when the collection is
+              publicRead; without it, everything is already private. */}
+          {props.mode === 'edit' && props.def.access?.publicRead ? (
+            <form
+              method="post"
+              action={`/admin/c/${props.slug}/${props.id}/visibility`}
+              class="flex flex-col gap-3 border-t border-border pt-3"
+            >
+              <fieldset class="flex flex-col gap-3">
+                <legend class="text-sm font-medium text-ink-muted">Visibility</legend>
+                {VISIBILITY_OPTIONS.map((opt) => (
+                  <label class="flex items-start gap-2">
+                    <input
+                      type="radio"
+                      name="visibility"
+                      value={opt.value}
+                      checked={props.doc.visibility === opt.value}
+                      class={RADIO_BASE}
+                    />
+                    <span class="flex flex-col gap-0.5">
+                      <span class="text-sm font-medium text-ink">{opt.label}</span>
+                      <span class="text-[13px] leading-normal text-ink-muted">
+                        {opt.help}
+                        {opt.value !== 'public' && props.doc.visibility === 'public'
+                          ? ' Switching away from Public means the current slug link will stop working.'
+                          : ''}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+
+              {props.doc.visibility === 'unlisted' && props.doc.status === 'published' ? (
+                <div class="flex flex-col gap-1">
+                  <label for="rm-unlisted-url" class="text-[13px] font-medium text-ink-muted">
+                    Unlisted URL
+                  </label>
+                  <Input
+                    id="rm-unlisted-url"
+                    type="text"
+                    value={publicUrlOf(props.def, props.doc, props.baseUrl ?? '')}
+                    readonly
+                    aria-label="Unlisted document URL"
+                    data-on:focus="evt.target.select()"
+                  />
+                </div>
+              ) : null}
+
+              <Button type="submit" variant="secondary" size="sm" class="w-full">
+                Update visibility
+              </Button>
+            </form>
           ) : null}
 
           <a

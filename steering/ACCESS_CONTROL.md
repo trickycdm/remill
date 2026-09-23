@@ -44,11 +44,16 @@
      "editor, but only of posts."
 2. **Item grants** — per-document tuples `(principal | role | team | link, document_id, actions,
    granted_by, expires_at?)`. Precision layer: "agent `researcher` may `update` document X until
-   Friday." Surfaced (Share) on all three doors: the document edit view's **Share panel** (managers
-   only — install-wide `manage_access`), the REST `/api/c/:collection/:id/grants` endpoint
+   Friday." Surfaced (Share) on all three doors: the document edit view's **Share panel** (its People &
+   roles section needs install-wide `manage_access`; its Share links section needs `share_link` on
+   the document, probed with the non-auditing `canAuthorize`), the REST `/api/c/:collection/:id/grants` endpoint
    (GET/POST/DELETE), and the generated MCP `share_<slug>` tool (visible only with `manage_access`).
    All route through `grantItem`/`revokeItem`/`listItemGrants`, each
-   `authorize('manage_access', {collection, documentId})`-gated.
+   `authorize('manage_access', {collection, documentId})`-gated. Link grants have their own
+   `createShareLink`/`listShareLinks`/`revokeShareLink`/`emailShareLink`, gated on `share_link`.
+   Every item-level `authorize()` checks that the document actually lives in the claimed
+   collection (mismatch → 404), so a collection-scoped permission can't reach another
+   collection's document by id.
    - **`team` subjects are AUDIENCES, never capability containers (D24):** a team holds no
      permissions of its own — it only widens who a grant reaches. Membership resolves at decision
      time: `authorize()` and `compileReadFilter` fetch `getPrincipalTeamIds` alongside role slugs,
@@ -81,7 +86,7 @@ can touch what." When you add a new grant kind or scope mechanism, it must show 
 team grants render with their resolved team names, not opaque ids.
 
 Media rides collection permissions (upload = `create` on the `media` collection). A collection's
-`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`. The
+`access.publicRead` flag is sugar for: `anonymous` gets `read` with condition `published`, narrowed by document visibility (D50) — anonymous lists see published + `public` only, anonymous item reads exclude `private`. The same narrowing applies if an admin grants the `anonymous` role a `published` read directly, so anonymous can never bypass visibility. The
 public render route (`/:collection/:slug`) uses the anonymous principal by default; with
 `?preview=1` + a valid session it swaps in the SESSION principal instead (D49, draft preview) —
 the same `authorize()` pipeline with a real principal, so role perms decide (no bypass, no new
@@ -97,6 +102,29 @@ neither changes document authorization, which was already deny-by-default. Colle
 permissions are still expressed only with `role_permissions` + collection-scoped `principal_roles`,
 the single mechanism the authorizer consumes. An inline `access: { <role>: [actions] }` map is
 rejected on write (it was once stored and silently ignored — a removed security smell).
+
+**`publicRead` sugar splits by surface, since D50.** A document also carries its own
+`visibility` (`public`/`unlisted`/`private`, default `public`), orthogonal to draft/published.
+`compileReadFilter` — every anonymous LIST surface (homepage, collection index, RSS, sitemap,
+REST list, search, backlinks, relation expansion) — resolves the publicRead-only branch to
+`status='published' AND visibility='public'`; a role's `published` condition is untouched and
+still returns every visibility. `decide()` — every anonymous ITEM read — resolves the
+publicRead-only branch to `status='published' AND visibility!='private'`, so an unlisted document
+still opens (by its `doc_…` id URL; the slug URL 404s, since `getDocumentBySlug` resolves through
+`listDocuments`/`compileReadFilter`) while a private one does not. A missing `visibility` counts
+as public. Changing visibility is a publication decision: `setVisibility` is gated by the
+`publish` action, not `manage_access`.
+
+**Password-protected share links (D51).** A `link` subject grant may also carry a
+`password_hash` (scrypt) and a `label`. `openShareLink` resolves a token to
+`{state: 'locked', grant}` when a password is set and not yet unlocked, or `{state: 'open',
+grant}` otherwise — the route reads through this result and can never accidentally skip the
+check the way a raw `resolveShareLink` call could. Unlock is proven by a cookie
+(`<exp>.<HMAC-SHA256(SESSION_SECRET, 'v1:share-unlock:' + grantId + ':' + passwordHash + ':' + exp)>`, path-scoped to `/s/<token>`, expiry ≤24h enforced server-side by the signed `exp`)
+rather than a server-side session, since anonymous requests carry no session; binding the HMAC to
+the current password hash means changing the password or revoking the link invalidates every
+outstanding unlock with no separate invalidation step. A locked link renders a page that carries
+no title, description, image, or OG/JSON-LD tag — it must not leak what it protects.
 
 The capability rule lives in ONE place — `canDiscover` in `services/collections`, fed by
 `collectionsWithActionFrom` (the pure half of `collectionsWithAction`, so discovery resolves the

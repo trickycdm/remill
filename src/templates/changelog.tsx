@@ -24,6 +24,7 @@ export const changelogTemplate: RenderTemplate = {
     'Compact release-note entry: version as the title, release date and change-type badge, ' +
     'markdown body. No hero, standfirst, or share bar. Binds best to version/date/type/body fields.',
   wants: {},
+  layoutOptions: { wantHero: false, wantLead: false },
   Component: ({ def, doc, backlinks, ctx }) => {
     const layout = resolveConventionLayout(def, { wantHero: false, wantLead: false });
     const titleRaw = layout.titleField ? doc.data[layout.titleField.key] : undefined;

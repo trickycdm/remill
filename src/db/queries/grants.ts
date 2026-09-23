@@ -5,7 +5,7 @@
  * principal's id, role set, and carried link identity, and honors `expires_at`.
  */
 
-import { and, eq, inArray, gt, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, gt, isNull, ne, or } from 'drizzle-orm';
 import type { Database } from '@/db/client';
 import { itemGrants } from '@/db/schema';
 import { newId } from '@/lib/id';
@@ -21,6 +21,11 @@ export interface ItemGrantRecord {
   readonly actions: Action[];
   readonly grantedBy: string;
   readonly expiresAt: string | null;
+  /** Optional human label (share links, D51). */
+  readonly label: string | null;
+  /** Whether a link grant is password-protected (D51). The hash itself NEVER
+   *  leaves the query layer — see getLinkGrantPasswordHash. */
+  readonly hasPassword: boolean;
 }
 
 function toDomain(r: typeof itemGrants.$inferSelect): ItemGrantRecord {
@@ -32,6 +37,8 @@ function toDomain(r: typeof itemGrants.$inferSelect): ItemGrantRecord {
     actions: JSON.parse(r.actionsJson || '[]') as Action[],
     grantedBy: r.grantedBy,
     expiresAt: r.expiresAt,
+    label: r.label,
+    hasPassword: r.passwordHash != null,
   };
 }
 
@@ -122,6 +129,32 @@ export async function findLinkGrantByHash(
   return rows[0] ? toDomain(rows[0]) : null;
 }
 
+/** Resolve an unexpired link grant by the hashed share token TOGETHER with its
+ *  stored password hash — one query instead of `findLinkGrantByHash` +
+ *  `getLinkGrantPasswordHash`. `openShareLink` and
+ *  `unlockShareLink` both use this so a link marked `hasPassword` with no
+ *  retrievable hash is visible to both as the SAME row — neither can
+ *  independently drift into "fail open" when the other stays closed. */
+export async function findLinkGrantWithHashByTokenHash(
+  db: Database,
+  tokenHash: string,
+  now: string,
+): Promise<{ grant: ItemGrantRecord; passwordHash: string | null } | null> {
+  const rows = await db
+    .select()
+    .from(itemGrants)
+    .where(
+      and(
+        eq(itemGrants.subjectKind, 'link'),
+        eq(itemGrants.subjectId, tokenHash),
+        or(isNull(itemGrants.expiresAt), gt(itemGrants.expiresAt, now)),
+      ),
+    )
+    .limit(1);
+  const r = rows[0];
+  return r ? { grant: toDomain(r), passwordHash: r.passwordHash } : null;
+}
+
 /** Every item grant in the install (newest first) — for the access overview. */
 export async function listAllGrants(db: Database): Promise<ItemGrantRecord[]> {
   const rows = await db.select().from(itemGrants).orderBy(itemGrants.createdAt);
@@ -138,9 +171,54 @@ export async function listGrantsForDocument(db: Database, documentId: string): P
   return rows.map(toDomain);
 }
 
+/** Non-link grants on a document (the "People & roles" section of the Share
+ *  panel — share LINKS get their own list below). Filters `subjectKind` in
+ *  SQL rather than post-filtering an unbounded row set in memory. */
+export async function listNonLinkGrantsForDocument(db: Database, documentId: string): Promise<ItemGrantRecord[]> {
+  const rows = await db
+    .select()
+    .from(itemGrants)
+    .where(and(eq(itemGrants.documentId, documentId), ne(itemGrants.subjectKind, 'link')))
+    .orderBy(itemGrants.createdAt);
+  return rows.map(toDomain);
+}
+
+/** Unexpired share-link grants on a document, newest first (the Share panel's
+ *  "Share links" section — an expired link is dead weight, not something to
+ *  still list and let someone try to revoke twice). */
+export async function listLinkGrantsForDocument(db: Database, documentId: string, now: string): Promise<ItemGrantRecord[]> {
+  const rows = await db
+    .select()
+    .from(itemGrants)
+    .where(
+      and(
+        eq(itemGrants.documentId, documentId),
+        eq(itemGrants.subjectKind, 'link'),
+        or(isNull(itemGrants.expiresAt), gt(itemGrants.expiresAt, now)),
+      ),
+    )
+    .orderBy(itemGrants.createdAt);
+  return rows.map(toDomain);
+}
+
+/** Input to createItemGrant. Deliberately NOT `Omit<ItemGrantRecord, 'id'>`: the
+ *  record exposes `hasPassword` (derived), never the hash — the write side takes
+ *  the hash directly instead. */
+export interface CreateItemGrantInput {
+  readonly subjectKind: GrantSubjectKind;
+  readonly subjectId: string;
+  readonly documentId: string;
+  readonly actions: Action[];
+  readonly grantedBy: string;
+  readonly expiresAt: string | null;
+  /** Share links only (D51); scrypt hash, never plaintext. */
+  readonly passwordHash?: string | null;
+  readonly label?: string | null;
+}
+
 export async function createItemGrant(
   db: Database,
-  grant: Omit<ItemGrantRecord, 'id'>,
+  grant: CreateItemGrantInput,
   now: string,
 ): Promise<string> {
   const id = newId('grant');
@@ -152,9 +230,23 @@ export async function createItemGrant(
     actionsJson: JSON.stringify(grant.actions),
     grantedBy: grant.grantedBy,
     expiresAt: grant.expiresAt,
+    passwordHash: grant.passwordHash ?? null,
+    label: grant.label ?? null,
     createdAt: now,
   });
   return id;
+}
+
+/** The stored password hash for a link grant — internal, used only by the
+ *  unlock check (D51). NEVER surfaced on ItemGrantRecord. Null for unknown
+ *  grants and grants with no password alike (no enumeration oracle). */
+export async function getLinkGrantPasswordHash(db: Database, grantId: string): Promise<string | null> {
+  const rows = await db
+    .select({ passwordHash: itemGrants.passwordHash })
+    .from(itemGrants)
+    .where(eq(itemGrants.id, grantId))
+    .limit(1);
+  return rows[0]?.passwordHash ?? null;
 }
 
 export async function revokeItemGrant(db: Database, id: string): Promise<void> {

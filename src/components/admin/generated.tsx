@@ -14,7 +14,7 @@ import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { titleOf } from '@/lib/def-helpers';
-import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, Checkbox, EmptyState } from '@/components/ui';
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, Checkbox, EmptyState, Stamp } from '@/components/ui';
 
 type EditProps = { field: FieldDescriptor; config: unknown; value: unknown; signal: string };
 
@@ -117,8 +117,11 @@ export function GeneratedTable({
   const columns = def.fields.filter((f) => f.admin?.showInList);
   const cols = columns.length ? columns : def.fields.slice(0, 1);
   // lifecycle:'none' collections suppress the Status affordance — a record is
-  // not a draft blog post (B4).
+  // not a draft blog post (B4). They can still be publicRead + non-public
+  // visibility though, so the visibility stamp gets its OWN column in that
+  // case (showVisibilityCol) rather than being hidden along with Status.
   const showStatus = hasLifecycle(def);
+  const showVisibilityCol = !showStatus && def.access?.publicRead === true;
 
   if (rows.length === 0) {
     return (
@@ -147,6 +150,7 @@ export function GeneratedTable({
             <TableHeaderCell>{fieldLabel(f)}</TableHeaderCell>
           ))}
           {showStatus ? <TableHeaderCell>Status</TableHeaderCell> : null}
+          {showVisibilityCol ? <TableHeaderCell>Visibility</TableHeaderCell> : null}
           <TableHeaderCell>Updated</TableHeaderCell>
         </TableRow>
       </TableHead>
@@ -173,7 +177,24 @@ export function GeneratedTable({
             ))}
             {showStatus ? (
               <TableCell>
-                <Badge tone={doc.status === 'published' ? 'success' : 'neutral'}>{doc.status}</Badge>
+                <span class="flex items-center gap-1.5">
+                  <Badge tone={doc.status === 'published' ? 'success' : 'neutral'}>{doc.status}</Badge>
+                  {/* Visibility (D50): only meaningful on publicRead collections —
+                      public is the unmarked default, so only flag the exceptions. */}
+                  {def.access?.publicRead && doc.visibility !== 'public' ? (
+                    <Stamp tone="event" class="text-[10px]">
+                      {doc.visibility}
+                    </Stamp>
+                  ) : null}
+                </span>
+              </TableCell>
+            ) : showVisibilityCol ? (
+              <TableCell>
+                {doc.visibility !== 'public' ? (
+                  <Stamp tone="event" class="text-[10px]">
+                    {doc.visibility}
+                  </Stamp>
+                ) : null}
               </TableCell>
             ) : null}
             <TableCell>

@@ -74,6 +74,16 @@ FieldType contract against all six surfaces before merging.
   media), distinct per slot — rejected loudly on write. `bind.title` flows through `titleFieldOf`,
   so the H1, OG/feeds, search title, and relation titles stay ONE heuristic. Convention resolves
   any slot left unbound. Stored in `collections.bind_json` (migration 0013).
+- **SEO convention keys (D52).** `buildDocumentHead` (`src/lib/seo.ts`) resolves the rich public
+  head — title, description, social image — from three optional convention field KEYS, same
+  pattern as `bind`: `seo_title` (text — overrides `titleOf` in `<title>`/`og:title`),
+  `meta_description` (text, ≤160 chars — overrides the resolved lead/excerpt in the description
+  meta and `og:description`), `social_image` (media — overrides the resolved hero in `og:image`).
+  Snake_case, matching the field-key charset (`KEY_RE` rejects camelCase). Present on the blog,
+  docs, and portfolio packs' collection definitions; addable to any collection in the builder —
+  the convention resolver picks them up by key, no schema change needed. Each falls back through
+  the same convention chain used for the reading template (`bind.lead`/`bind.hero` honoured first)
+  before a site-level `settings` default.
 - **Content packs (D42).** A pack (`src/templates/packs.ts`, closed registry) bundles a template with
   the collection definition(s) co-designed for it. Installing (admin Marketplace, MCP `install_pack`,
   REST) runs each definition through the ordinary `createCollection` — packs add ZERO bypass surface:

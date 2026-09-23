@@ -258,6 +258,35 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(JSON.parse(plain.body.result.content[0].text).id).toBe(warpId);
   });
 
+  it('D50: visibility_<slug> — gated like publish (editor yes, reader no), happy path, and 403 audited', async () => {
+    const editor = toolNames(await mcp(editorToken, 'tools/list'));
+    expect(editor).toContain('visibility_posts');
+    const reader = toolNames(await mcp(readerToken, 'tools/list'));
+    expect(reader).not.toContain('visibility_posts');
+
+    const create = await mcp(editorToken, 'tools/call', {
+      name: 'create_posts',
+      arguments: { title: 'Visible or not' },
+    });
+    const doc = JSON.parse(create.body.result.content[0].text);
+
+    const set = await mcp(editorToken, 'tools/call', {
+      name: 'visibility_posts',
+      arguments: { id: doc.id, visibility: 'unlisted' },
+    });
+    expect(set.body.result.isError).toBeFalsy();
+    const updated = JSON.parse(set.body.result.content[0].text);
+    expect(updated.visibility).toBe('unlisted');
+
+    // Calling it isn't even discoverable for a reader — refused without a
+    // service call (same discovery-time denial shape as publish_posts).
+    const denied = await mcp(readerToken, 'tools/call', {
+      name: 'visibility_posts',
+      arguments: { id: doc.id, visibility: 'private' },
+    });
+    expect(denied.body.result.isError).toBe(true);
+  });
+
   it('AGENTIC GOVERNANCE: an author drafts but cannot publish — denial is structured and audited', async () => {
     // Author creates a draft via the generated tool (allowed).
     const create = await mcp(authorToken, 'tools/call', {

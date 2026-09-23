@@ -108,6 +108,20 @@ describe('searchSite — FTS5 search with in-query ACL (D28)', () => {
     expect(res.hits.map((h) => h.id)).toEqual([note.id]);
   });
 
+  it('visibility (D50): anonymous search excludes unlisted and private, even when published', async () => {
+    const pub = await docs.createDocument(db, admin, 'notes', { title: 'Findable public' }, NOW);
+    const unlisted = await docs.createDocument(db, admin, 'notes', { title: 'Findable unlisted' }, NOW);
+    const priv = await docs.createDocument(db, admin, 'notes', { title: 'Findable private' }, NOW);
+    for (const id of [pub.id, unlisted.id, priv.id]) {
+      await docs.setPublished(db, admin, 'notes', id, true, NOW);
+    }
+    await docs.setVisibility(db, admin, 'notes', unlisted.id, 'unlisted', NOW);
+    await docs.setVisibility(db, admin, 'notes', priv.id, 'private', NOW);
+
+    const res = await searchSite(db, anonymousPrincipal('rest'), { q: 'findable' }, NOW);
+    expect(res.hits.map((h) => h.id)).toEqual([pub.id]);
+  });
+
   it('restricts to one collection when asked (the MCP search_<slug> shape)', async () => {
     await docs.createDocument(db, admin, 'posts', { title: 'Everywhere echo' }, NOW);
     await docs.createDocument(db, admin, 'notes', { title: 'Everywhere echo too' }, NOW);

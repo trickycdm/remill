@@ -17,6 +17,13 @@ import { documentFts } from '@/db/fts-table';
 import { eventInsert, type EventInput } from '@/db/queries/events';
 import { newId } from '@/lib/id';
 import type { Grant } from '@/access/grant';
+import { VISIBILITIES, type Visibility } from '@/lib/visibility';
+
+/** Document visibility (D50) — separate from draft/published; the union and
+ *  its predicates live in `src/lib/visibility.ts` (the single source), and
+ *  are re-exported here so existing queries-layer importers are unaffected.
+ *  See steering/ACCESS_CONTROL.md for how each value affects anonymous reads. */
+export { VISIBILITIES, type Visibility };
 
 export interface DocumentRecord {
   readonly id: string;
@@ -30,6 +37,7 @@ export interface DocumentRecord {
   /** Pending scheduled-publish time (D32) — set only while status is 'draft';
    *  cleared by the drain, by manual publish, and by cancel. */
   readonly publishAt: string | null;
+  readonly visibility: Visibility;
 }
 
 /** Which document_index column a field's values live in: number/boolean field
@@ -61,6 +69,7 @@ function toDomain(row: Row): DocumentRecord {
     updatedAt: row.updatedAt,
     publishedAt: row.publishedAt,
     publishAt: row.publishAt,
+    visibility: row.visibility as Visibility,
   };
 }
 
@@ -73,14 +82,31 @@ function toDomain(row: Row): DocumentRecord {
 export async function getDocumentMetaForAuth(
   db: Database,
   id: string,
-): Promise<{ status: 'draft' | 'published'; createdBy: string | null } | null> {
+): Promise<{
+  collection: string;
+  status: 'draft' | 'published';
+  createdBy: string | null;
+  visibility: Visibility;
+} | null> {
   const rows = await db
-    .select({ status: documents.status, createdBy: documents.createdBy })
+    .select({
+      collection: documents.collection,
+      status: documents.status,
+      createdBy: documents.createdBy,
+      visibility: documents.visibility,
+    })
     .from(documents)
     .where(eq(documents.id, id))
     .limit(1);
   const r = rows[0];
-  return r ? { status: r.status as 'draft' | 'published', createdBy: r.createdBy } : null;
+  return r
+    ? {
+        collection: r.collection,
+        status: r.status as 'draft' | 'published',
+        createdBy: r.createdBy,
+        visibility: r.visibility as Visibility,
+      }
+    : null;
 }
 
 /**
@@ -486,6 +512,9 @@ export interface InsertInput {
   readonly search: SearchText | null;
   /** Outbox event (D33) committed atomically with the write. */
   readonly event?: EventInput;
+  /** Initial visibility (import, D37); defaults to the column default 'public'
+   *  when omitted. */
+  readonly visibility?: Visibility;
 }
 
 /** Create a document + its index rows + revision 1, atomically. Witness required. */
@@ -504,6 +533,7 @@ export async function insertDocument(
       createdAt: input.createdAt ?? input.now,
       updatedAt: input.now,
       publishedAt: input.publishedAt,
+      ...(input.visibility ? { visibility: input.visibility } : {}),
     }),
     ...indexInserts(db, input.id, input.collection, input.index),
     db.insert(documentRevisions).values({
@@ -590,6 +620,32 @@ export async function setPublishAt(
     .update(documents)
     .set({ publishAt: input.publishAt, updatedAt: input.now })
     .where(eq(documents.id, input.id));
+}
+
+/** Set a document's visibility (D50). Deliberately NARROW, mirroring
+ *  setPublishAt: data is untouched, so no index/FTS re-sync and NO revision
+ *  append — visibility is not an edit, so `updatedAt` is deliberately left
+ *  alone (it feeds `dateModified` and the sitemap's `lastmod`; a visibility
+ *  flip must not look like a content change). Writes the outbox event
+ *  atomically in the same batch (eventInsert precedent). Witness required
+ *  (the service authorized `publish`). The service short-circuits when the
+ *  value is unchanged, so every call here is a real write. */
+export async function setDocumentVisibility(
+  db: Database,
+  input: {
+    readonly id: string;
+    readonly collection: string;
+    readonly visibility: Visibility;
+    readonly now: string;
+    readonly event?: EventInput;
+  },
+  _grant: Grant,
+): Promise<void> {
+  const stmts: BatchItem<'sqlite'>[] = [
+    db.update(documents).set({ visibility: input.visibility }).where(eq(documents.id, input.id)),
+    ...(input.event ? [eventInsert(db, input.event)] : []),
+  ];
+  await db.batch(stmts as Batch);
 }
 
 /** Drafts whose schedule is due (D32) — the per-minute drain's selection. NO

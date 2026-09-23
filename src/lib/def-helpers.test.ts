@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { titleFieldOf, titleOf } from '@/lib/def-helpers';
+import { titleFieldOf, titleOf, publicUrlOf } from '@/lib/def-helpers';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 
 const def = (
@@ -53,5 +53,28 @@ describe('titleFieldOf — the one shared title heuristic (H1, OG/feeds, search,
     );
     expect(titleFieldOf(d, 'kicker')).toBe('kicker');
     expect(titleFieldOf(d, 'nope')).toBe('headline'); // falls through to bind
+  });
+});
+
+describe('publicUrlOf — visibility (D50) forces the doc_ id URL, never the guessable slug', () => {
+  const slugDef = def([{ key: 'slug', type: 'slug', index: true }]);
+
+  it('uses the slug when visibility is public (or unset — treated as public)', () => {
+    expect(publicUrlOf(slugDef, { id: 'doc_x', data: { slug: 'my-post' }, visibility: 'public' }, '')).toBe(
+      '/c/my-post',
+    );
+    expect(publicUrlOf(slugDef, { id: 'doc_x', data: { slug: 'my-post' } }, '')).toBe('/c/my-post');
+  });
+
+  it('uses the doc_ id, never the slug, when unlisted', () => {
+    expect(
+      publicUrlOf(slugDef, { id: 'doc_x', data: { slug: 'my-post' }, visibility: 'unlisted' }, ''),
+    ).toBe('/c/doc_x');
+  });
+
+  it('uses the doc_ id, never the slug, when private', () => {
+    expect(
+      publicUrlOf(slugDef, { id: 'doc_x', data: { slug: 'my-post' }, visibility: 'private' }, 'https://e.com'),
+    ).toBe('https://e.com/c/doc_x');
   });
 });

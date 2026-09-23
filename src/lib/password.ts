@@ -48,8 +48,9 @@ export function verifyPassword(password: string, stored: string): boolean {
   return timingSafeEqualHex(bytesToHex(hash), hashHex);
 }
 
-/** Constant-time hex string comparison to avoid leaking match progress by timing. */
-function timingSafeEqualHex(a: string, b: string): boolean {
+/** Constant-time hex string comparison to avoid leaking match progress by timing.
+ *  Exported — `share-unlock.ts` (D51) reuses this instead of a second hand-copy. */
+export function timingSafeEqualHex(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) {

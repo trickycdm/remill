@@ -4,6 +4,8 @@
  * decision-log entry (plan §8). Default-deny, additive-only, no negative rules.
  */
 
+import type { Visibility } from '@/lib/visibility';
+
 /** The closed action vocabulary. `share_link` (D26) is the right to mint an
  *  anonymous, expiring `/s/:token` share link for a readable document — split
  *  out of `manage_access` so it can be granted to an agent WITHOUT giving it
@@ -56,6 +58,8 @@ export interface Resource {
   readonly documentId?: string;
   readonly status?: 'draft' | 'published';
   readonly createdBy?: string;
+  /** Document visibility (D50); missing is treated as public. */
+  readonly visibility?: Visibility;
 }
 
 /** Stable string form of a resource for the audit log. */

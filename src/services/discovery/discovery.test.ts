@@ -141,4 +141,24 @@ describe('discovery service (D35)', () => {
     expect(overview[0].def.slug).toBe('posts');
     expect(overview[0].docs).toHaveLength(2);
   });
+
+  it('visibility (D50): unlisted and private published docs never surface in feed/sitemap/index/homepage', async () => {
+    await makePost('Public one', true);
+    const unlisted = await makePost('Unlisted one', true);
+    const priv = await makePost('Private one', true);
+    await docs.setVisibility(db, admin, 'posts', unlisted.id, 'unlisted', NOW);
+    await docs.setVisibility(db, admin, 'posts', priv.id, 'private', NOW);
+
+    const feed = await recentPublishedDocs(db, NOW);
+    expect(feed.map((d) => d.title)).toEqual(['Public one']);
+
+    const all = await allPublishedDocs(db, NOW);
+    expect(all.map((d) => d.title)).toEqual(['Public one']);
+
+    const { docs: indexRows } = await collectionIndex(db, NOW, 'posts');
+    expect(indexRows.map((d) => d.title)).toEqual(['Public one']);
+
+    const overview = await publicOverview(db, NOW);
+    expect(overview[0].docs.map((d) => d.title)).toEqual(['Public one']);
+  });
 });

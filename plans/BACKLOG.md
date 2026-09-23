@@ -46,6 +46,15 @@ ideas stay here until promoted. Brainstormed 2026-07-17.
   security design (rate limits, honeypot, quarantine lifecycle). Not first.
 - **MCP `resources` primitive** — expose published content as MCP resources, same D18
   ownership argument as prompts.
+- **Email delivery fixes.** `ResendEmailTransport.send` swallows non-2xx Resend responses while
+  the UI still reports "sent"; a network throw during send loses the plaintext link with no
+  fallback surfaced; production has neither `RESEND_API_KEY` nor `EMAIL_FROM` set, and the
+  remill.me sender domain isn't verified with Resend. Consider a Cloudflare Email Service binding
+  as an alternative transport. Deferred out of the D51 share-link password plan.
+- **Gate media referenced only by private/protected documents.** `/media/<id>` is served
+  `public, immutable` with no auth check (MEDIA_STANDARDS.md), so an image embedded in a
+  password-locked (D51) or private (D50) document is still reachable by anyone who has its
+  (unguessable) media id. Gating media by the documents that reference it is a separate project.
 - **Builder form drops `template` + `bind` on save** — `parseCollectionForm`
   (`src/components/admin/collection-builder.tsx`) rebuilds the whole definition from the
   posted fields and never reads `template`/`bind`, so `updateCollectionRow` overwrites

@@ -13,12 +13,17 @@ describe('blog pack scaffold', () => {
     expect(resolveTemplate(def.template)).toBeDefined();
   });
 
-  it('binds cleanly to the article convention (only tags left as meta)', () => {
+  it('binds cleanly to the article convention (tags left as meta; D52 SEO fields excluded everywhere)', () => {
     const layout = resolveConventionLayout(blogCollectionScaffold);
     expect(layout.titleField?.key).toBe('title');
     expect(layout.hero?.key).toBe('hero');
     expect(layout.lead?.key).toBe('excerpt');
     expect(layout.body.map((f) => f.key)).toEqual(['body']);
+    // tags falls through to the metadata zone; the D52 SEO override fields
+    // (seo_title/meta_description/social_image) are excluded from EVERY slot
+    // (hero/lead/body/meta) — they're author-controlled metadata, read
+    // directly by key in `buildDocumentHead` (`lib/seo.ts`), never reading
+    // content on the page.
     expect(layout.meta.map((f) => f.key)).toEqual(['tags']);
   });
 

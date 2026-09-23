@@ -1,6 +1,7 @@
 
 import { Hono, Env } from 'hono';
 
+import * as api_c_collection_id_share_links_grantId from './routes/api/c/[collection]/[id]/share-links/[grantId]';
 import * as admin_c_collection_id_delete from './routes/admin/c/[collection]/[id]/delete';
 import * as admin_c_collection_id_publish from './routes/admin/c/[collection]/[id]/publish';
 import * as admin_c_collection_id_restore from './routes/admin/c/[collection]/[id]/restore';
@@ -8,11 +9,14 @@ import * as admin_c_collection_id_revisions from './routes/admin/c/[collection]/
 import * as admin_c_collection_id_schedule from './routes/admin/c/[collection]/[id]/schedule';
 import * as admin_c_collection_id_share from './routes/admin/c/[collection]/[id]/share';
 import * as admin_c_collection_id_view from './routes/admin/c/[collection]/[id]/view';
+import * as admin_c_collection_id_visibility from './routes/admin/c/[collection]/[id]/visibility';
 import * as api_c_collection_id_backlinks from './routes/api/c/[collection]/[id]/backlinks';
 import * as api_c_collection_id_grants from './routes/api/c/[collection]/[id]/grants';
 import * as api_c_collection_id_publish from './routes/api/c/[collection]/[id]/publish';
 import * as api_c_collection_id_revisions from './routes/api/c/[collection]/[id]/revisions';
 import * as api_c_collection_id_schedule from './routes/api/c/[collection]/[id]/schedule';
+import * as api_c_collection_id_share_links from './routes/api/c/[collection]/[id]/share-links';
+import * as api_c_collection_id_visibility from './routes/api/c/[collection]/[id]/visibility';
 import * as admin_c_collection_id_index from './routes/admin/c/[collection]/[id]';
 import * as admin_c_collection_bulk from './routes/admin/c/[collection]/bulk';
 import * as admin_c_collection_export from './routes/admin/c/[collection]/export';
@@ -84,6 +88,7 @@ import * as mcp from './routes/mcp';
 import * as index from './routes';
 
 export const loadRoutes = <T extends Env>(app: Hono<T>) => {
+	app.delete('/api/c/:collection/:id/share-links/:grantId', ...api_c_collection_id_share_links_grantId.onRequestDelete);
 	app.post('/admin/c/:collection/:id/delete', ...admin_c_collection_id_delete.onRequestPost);
 	app.post('/admin/c/:collection/:id/publish', ...admin_c_collection_id_publish.onRequestPost);
 	app.post('/admin/c/:collection/:id/restore', ...admin_c_collection_id_restore.onRequestPost);
@@ -91,6 +96,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/c/:collection/:id/schedule', ...admin_c_collection_id_schedule.onRequestPost);
 	app.post('/admin/c/:collection/:id/share', ...admin_c_collection_id_share.onRequestPost);
 	app.get('/admin/c/:collection/:id/view', ...admin_c_collection_id_view.onRequestGet);
+	app.post('/admin/c/:collection/:id/visibility', ...admin_c_collection_id_visibility.onRequestPost);
 	app.get('/api/c/:collection/:id/backlinks', ...api_c_collection_id_backlinks.onRequestGet);
 	app.get('/api/c/:collection/:id/grants', ...api_c_collection_id_grants.onRequestGet);
 	app.post('/api/c/:collection/:id/grants', ...api_c_collection_id_grants.onRequestPost);
@@ -98,6 +104,9 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/api/c/:collection/:id/publish', ...api_c_collection_id_publish.onRequestPost);
 	app.get('/api/c/:collection/:id/revisions', ...api_c_collection_id_revisions.onRequestGet);
 	app.post('/api/c/:collection/:id/schedule', ...api_c_collection_id_schedule.onRequestPost);
+	app.get('/api/c/:collection/:id/share-links', ...api_c_collection_id_share_links.onRequestGet);
+	app.post('/api/c/:collection/:id/share-links', ...api_c_collection_id_share_links.onRequestPost);
+	app.post('/api/c/:collection/:id/visibility', ...api_c_collection_id_visibility.onRequestPost);
 	app.post('/admin/c/:collection/bulk', ...admin_c_collection_bulk.onRequestPost);
 	app.get('/admin/c/:collection/export', ...admin_c_collection_export.onRequestGet);
 	app.get('/admin/c/:collection/import', ...admin_c_collection_import.onRequestGet);
@@ -184,6 +193,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/oauth/revoke', ...oauth_revoke.onRequestPost);
 	app.post('/oauth/token', ...oauth_token.onRequestPost);
 	app.get('/s/:token', ...s_token_index.onRequestGet);
+	app.post('/s/:token', ...s_token_index.onRequestPost);
 	app.get('/:collection/:slug', ...collection_slug_index.onRequestGet);
 	app.get('/admin', ...admin_index.onRequestGet);
 	app.get('/mcp', ...mcp.onRequestGet);

@@ -148,6 +148,7 @@ export const documents = sqliteTable(
     // clears it too. Partial index hand-added in migration 0010 (drizzle-kit
     // can't express WHERE-indexes).
     publishAt: text('publish_at'),
+    visibility: text('visibility').notNull().default('public'), // 'public' | 'unlisted' | 'private' (D50)
   },
   (t) => [
     index('documents_collection_idx').on(t.collection),
@@ -201,6 +202,7 @@ export const documentTrash = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
     publishedAt: text('published_at'),
+    visibility: text('visibility').notNull().default('public'), // 'public' | 'unlisted' | 'private' (D50)
     deletedBy: text('deleted_by'),
     deletedAt: text('deleted_at').notNull(),
   },
@@ -295,7 +297,7 @@ export const itemGrants = sqliteTable(
   'item_grants',
   {
     id: text('id').primaryKey(), // grn_…
-    subjectKind: text('subject_kind').notNull(), // 'principal' | 'role'
+    subjectKind: text('subject_kind').notNull(), // 'principal' | 'role' | 'team' | 'link'
     subjectId: text('subject_id').notNull(), // principal id or role slug
     documentId: text('document_id')
       .notNull()
@@ -304,6 +306,9 @@ export const itemGrants = sqliteTable(
     grantedBy: text('granted_by').notNull(),
     expiresAt: text('expires_at'), // null = no expiry
     createdAt: text('created_at').notNull(),
+    // Share links only (subject_kind='link', D51). scrypt hash, never plaintext.
+    passwordHash: text('password_hash'),
+    label: text('label'), // optional human label shown in the share panel
   },
   (t) => [index('item_grants_document_idx').on(t.documentId)],
 );

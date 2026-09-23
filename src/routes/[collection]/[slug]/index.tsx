@@ -12,7 +12,8 @@ import {
 } from '@/services/documents';
 import { getCollectionOrThrow } from '@/services/collections';
 import { getSettings } from '@/services/settings';
-import { titleOf, publicUrlOf, excerptFrom } from '@/lib/def-helpers';
+import { publicUrlOf } from '@/lib/def-helpers';
+import { buildDocumentHead } from '@/lib/seo';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { readingTimeMinutes } from '@/lib/reading-time';
 import { resolveTemplate } from '@/templates/registry';
@@ -67,6 +68,10 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     const doc = ref.startsWith('doc_')
       ? await getDocument(db, principal, collection, ref, now)
       : await getDocumentBySlug(db, principal, collection, ref, now);
+    // Unlisted (D50): the X-Robots-Tag header — some crawlers act on it
+    // before ever parsing the body — set BEFORE the raw-mode early return
+    // below, so an unlisted raw-mode (D27) page still gets it.
+    if (doc.visibility === 'unlisted') c.header('X-Robots-Tag', 'noindex');
     // Raw mode (D27): the html field IS the page — a full standalone document,
     // bypassing RootLayout/PublicShell. authorize already gated above; the
     // security headers middleware still applies.
@@ -75,14 +80,32 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     const backlinks = await getBacklinks(db, principal, collection, doc.id, now);
 
     // Per-page head (D36): full title composed HERE (the layout does no DB
-    // reads); canonical is the slug-or-id public URL; og:image is the first
-    // media field's file, when set.
+    // reads); canonical is the slug-or-id public URL; og:image resolves from
+    // `social_image`/the template's hero slot/the first media field, in
+    // `buildDocumentHead` (`lib/seo.ts`).
     const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
-    const siteName = settings.siteName?.trim() || 'remill';
     const body = buildSearchText(def, doc.data)?.body ?? '';
+    // `canonical` is the document's own blessed URL (slug for public docs,
+    // `doc_…` for unlisted — `publicUrlOf` already resolves that); `publicUrl`
+    // is wherever the reader actually landed, used for `og:url` regardless
+    // (D52 — unlisted documents advertise their doc_ URL even though it isn't
+    // a canonical link).
     const canonical = publicUrlOf(def, doc, baseUrl);
-    const mediaField = def.fields.find((f) => f.type === 'media');
-    const mediaId = mediaField ? doc.data[mediaField.key] : undefined;
+    const requestUrl = new URL(c.req.url);
+    const publicUrl = `${baseUrl}${requestUrl.pathname}`;
+    const indexable = !preview && doc.status === 'published' && doc.visibility !== 'unlisted';
+    const head = buildDocumentHead({
+      def,
+      doc,
+      settings,
+      baseUrl,
+      canonicalUrl: canonical,
+      publicUrl,
+      bodyText: body,
+      media: doc.media,
+      indexable,
+      template: def.template,
+    });
 
     // A registered template renders the reading layout; otherwise the generic
     // shell (DocumentView). `renderMode: 'raw'` already short-circuited above.
@@ -124,16 +147,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         {content}
         {wants.shareBar ? <Script src="/src/client/share.ts" /> : null}
       </PublicShell>,
-      {
-        title: `${titleOf(def, doc)} — ${siteName}`,
-        description: excerptFrom(body) || undefined,
-        canonical,
-        ogType: 'article',
-        ogImage:
-          typeof mediaId === 'string' && mediaId.length ? `${baseUrl}/media/${mediaId}` : undefined,
-        feedUrl: '/rss.xml',
-        noindex: preview || undefined,
-      },
+      head,
     );
   } catch (e) {
     if (e instanceof NotFoundError || e instanceof ForbiddenError) {
@@ -142,6 +156,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         <PublicShell settings={settings}>
           <PublicNotFound />
         </PublicShell>,
+        { noindex: true },
       );
     }
     throw e;

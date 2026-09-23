@@ -22,6 +22,7 @@ export interface EventInput {
     | 'document.restored'
     | 'document.published'
     | 'document.unpublished'
+    | 'document.visibility_changed'
     | 'media.created'
     | 'media.deleted'
     | 'collection.created'
