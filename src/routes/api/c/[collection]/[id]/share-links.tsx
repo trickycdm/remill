@@ -11,14 +11,19 @@ import { nowIso } from '@/lib/now';
 const factory = createFactory<{ Bindings: Env }>();
 
 /** GET /api/c/:collection/:id/share-links — list active link grants on this
- *  document (`share_link`; no hashes). */
+ *  document (`share_link`; no hashes), each with its re-copyable `url` (D53,
+ *  null for a legacy link or a decryption failure). */
 export const onRequestGet = factory.createHandlers(async (c) => {
   const now = nowIso();
+  const db = getDb(c.env.DB);
+  const settings = await getSettings(db);
   const links = await listShareLinks(
-    getDb(c.env.DB),
+    db,
     await apiPrincipal(c, now),
     pathParam(c, 'collection'),
     pathParam(c, 'id'),
+    c.env.SESSION_SECRET,
+    resolveBaseUrl(c.env, settings, c.req.url),
     now,
   );
   return apiJson(c, { data: links });
@@ -50,6 +55,7 @@ export const onRequestPost = factory.createHandlers(async (c) => {
       password: typeof body.password === 'string' && body.password ? body.password : undefined,
       label: typeof body.label === 'string' && body.label ? body.label : undefined,
     },
+    c.env.SESSION_SECRET,
     now,
   );
   const settings = await getSettings(db);

@@ -199,8 +199,9 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
       get: {
         tags: [tag],
         summary: `List ${def.name} share links (D51)`,
-        description: 'Requires the share_link action. Returns active link grants (no password hashes).',
-        responses: { '200': { description: 'Share links' } },
+        description:
+          'Requires the share_link action. Returns active link grants (no password hashes), each with a re-copyable `url` (D53; null for a legacy link or a decryption failure).',
+        responses: { '200': { description: 'Share links, each including url' } },
       },
       post: {
         tags: [tag],

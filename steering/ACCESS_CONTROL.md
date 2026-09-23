@@ -65,8 +65,11 @@
      `/auth/join/:token` is UN-gated — the token IS the credential — and an existing email raises
      `ConflictError`, never a silent account attach. Recipients see their item grants at
      `/admin/shared` ("Shared with me", identity-scoped `listSharedWithMe`).
-   - **`link` subjects are SHARE LINKS (C3):** `subjectId` is the SHA-256 hash of an `rms_…` token
-     (plaintext shown once at mint). Minting (`createShareLink`) is gated by the `share_link`
+   - **`link` subjects are SHARE LINKS (C3):** `subjectId` is the SHA-256 hash of an `rms_…` token —
+     the lookup key, matched the same way regardless of mint time. The plaintext is ALSO stored
+     encrypted (`token_enc`, AES-GCM keyed off `SESSION_SECRET`, D53) so `listShareLinks` can
+     decrypt and re-display the URL later — a share link is copyable again from the Share panel,
+     not a show-once secret. Minting (`createShareLink`) is gated by the `share_link`
      action (D26) — not `manage_access`, and NOT agent-refused — so an agent deliberately granted
      `share_link` (via a role or a one-document item grant) may mint links. The
      public `/s/:token` route resolves the hash to the grant and reads through the SAME

@@ -18,6 +18,7 @@ import {
 } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
+const SECRET = 's'.repeat(32);
 
 const POSTS: CollectionDefinition = {
   slug: 'posts',
@@ -214,6 +215,7 @@ describe('documents service — the save pipeline', () => {
       db,
       admin,
       { collection: 'posts', documentId: doc.id, actions: ['read'] },
+      SECRET,
       NOW,
     );
     expect(token.startsWith('rms_')).toBe(true); // never mistakable for an API key
@@ -248,6 +250,7 @@ describe('documents service — the save pipeline', () => {
         actions: ['read'],
         expiresAt: '2026-07-04T13:00:00Z',
       },
+      SECRET,
       NOW,
     );
     expect(await resolveShareLink(db, shortLived, NOW)).not.toBeNull();

@@ -62,14 +62,16 @@ export const onRequestPost = factory.createHandlers(requireAuth(), rateLimit('sh
         password: password || undefined,
         label: label || undefined,
       },
+      c.env.SESSION_SECRET,
       now,
     );
     const settings = await getSettings(db);
     const url = `${resolveBaseUrl(c.env, settings, c.req.url)}/s/${token}`;
-    // The plaintext token exists only in THIS response (its hash is what's
-    // stored), so render the link once — a redirect would lose it. Sending it
-    // by email is a SEPARATE, secondary action below (op=email_link) —
-    // decoupled from creation so the panel doesn't read as "email someone".
+    // The token is also stored encrypted (D53), so — unlike an API key — this
+    // link isn't a show-once secret: it can be copied again later from the
+    // Share card. Sending it by email is a SEPARATE, secondary action below
+    // (op=email_link) — decoupled from creation so the panel doesn't read as
+    // "email someone".
     return c.render(
       <AdminShell user={getUser(c)} current="content">
         <PageHeader
@@ -79,8 +81,8 @@ export const onRequestPost = factory.createHandlers(requireAuth(), rateLimit('sh
         <Card class="max-w-2xl">
           <CardContent class="flex flex-col gap-4 pt-6">
             <p class="text-sm text-ink-muted">
-              Copy it now — this link is shown <strong>only once</strong>. Anyone holding it can
-              read this document until it expires or the grant is revoked from the Share panel.
+              Anyone holding this link can read this document until it expires or the grant is
+              revoked from the Share panel. You can copy it again anytime from the Share card.
             </p>
             <div class="flex items-center gap-2" data-signals={jsonForScript({ copied: false })}>
               <Input
@@ -105,7 +107,7 @@ export const onRequestPost = factory.createHandlers(requireAuth(), rateLimit('sh
             </p>
             {hasPassword ? (
               <p class="text-sm text-ink-muted">
-                Send the password separately — it can't be shown again.
+                Send the password separately — it isn't shown again.
               </p>
             ) : null}
 

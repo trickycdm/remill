@@ -31,14 +31,21 @@ closes one of those, or a class like it. New code must comply; fix violations as
   `allowDangerousHtml`, and never render user/agent content with `dangerouslySetInnerHTML` except
   through this renderer or another escaping path. The `FieldView` fallback is escaped text — a
   field type must explicitly opt in to render markup.
-- **Share-link tokens follow API-token discipline (C3).** `rms_`-prefixed (never confusable with an
-  `rmk_` bearer key), 32 bytes of Web-Crypto entropy, SHA-256-hashed at rest (the hash is the
-  grant's `subjectId`), plaintext rendered exactly once at mint. Resolution returns the same null
-  for unknown/expired/revoked (no enumeration oracle), and consumption still runs through
-  `authorize()` — the token is a credential, not a bypass. Minting is gated per document by the
-  `share_link` action (D26) — separately grantable, NOT agent-refused — so an agent may mint
-  expiring read-only links when a human grants it that capability; identity/role/token mutations
-  (`assignRole`, `issueToken`, `createUser`, `createAgent`, team CRUD) still refuse agents.
+- **Share-link tokens follow API-token discipline for LOOKUP, but stay reversible for display
+  (C3, D53).** `rms_`-prefixed (never confusable with an `rmk_` bearer key), 32 bytes of Web-Crypto
+  entropy, SHA-256-hashed at rest (the hash is the grant's `subjectId` — the ONLY thing `decide()`
+  ever matches against). The plaintext is ALSO stored as `token_enc` — AES-GCM-256 ciphertext keyed
+  by an HKDF-SHA256 derivation of `SESSION_SECRET` (`src/lib/share-token-crypto.ts`, domain-separated
+  `info` string) — so `listShareLinks` can decrypt and re-display the URL from the Share panel at any
+  time, not just once at mint (a share link behaves like a Google Docs link, not a bearer key: it's
+  revocable, not a one-time secret). Resolution returns the same null for unknown/expired/revoked (no
+  enumeration oracle), and consumption still runs through `authorize()` — the token is a credential,
+  not a bypass. Minting is gated per document by the `share_link` action (D26) — separately grantable,
+  NOT agent-refused — so an agent may mint expiring read-only links when a human grants it that
+  capability; identity/role/token mutations (`assignRole`, `issueToken`, `createUser`, `createAgent`,
+  team CRUD) still refuse agents. Rotating `SESSION_SECRET` makes existing links un-copyable (decrypt
+  fails, `url` comes back null) without breaking them — the hash-based lookup is untouched — and, as
+  before (D51), invalidates every outstanding `/s/:token` unlock cookie.
 - **OAuth credentials follow the same discipline (D48).** Prefix map: `rmk_` manual bearer key ·
   `rms_` share link · `rmj_` team join · `rmo_` OAuth access token (an ordinary `api_tokens` row,
   1 h expiry, `grant_id`-cascaded) · `rmr_` OAuth refresh (hash lives on the grant row, rotated on

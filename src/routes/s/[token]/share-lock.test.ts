@@ -66,6 +66,7 @@ describe('GET/POST /s/:token — password-protected share links (D51)', () => {
       db,
       editor,
       { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
+      env.SESSION_SECRET,
       NOW,
     );
     const res = await app.request(`/s/${token}`, {}, env);
@@ -85,6 +86,7 @@ describe('GET/POST /s/:token — password-protected share links (D51)', () => {
       db,
       editor,
       { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
+      env.SESSION_SECRET,
       NOW,
     );
     const res = await app.request(`/s/${token}`, { headers: { Accept: 'application/json' } }, env);
@@ -98,6 +100,7 @@ describe('GET/POST /s/:token — password-protected share links (D51)', () => {
       db,
       editor,
       { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
+      env.SESSION_SECRET,
       NOW,
     );
     const res = await app.request(
@@ -117,6 +120,7 @@ describe('GET/POST /s/:token — password-protected share links (D51)', () => {
       db,
       editor,
       { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
+      env.SESSION_SECRET,
       NOW,
     );
     const res = await app.request(
@@ -145,6 +149,7 @@ describe('GET/POST /s/:token — password-protected share links (D51)', () => {
       db,
       editor,
       { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
+      env.SESSION_SECRET,
       NOW,
     );
     const withKv = { ...env, RATE_LIMIT: fakeKV() };
@@ -170,7 +175,7 @@ describe('GET/POST /s/:token — password-protected share links (D51)', () => {
   });
 
   it('an unprotected link opens directly with OG tags, noindex, and no canonical (private-safe by default is public here)', async () => {
-    const { token } = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW);
+    const { token } = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, env.SESSION_SECRET, NOW);
     const res = await app.request(`/s/${token}`, {}, env);
     expect(res.status).toBe(200);
     expect(res.headers.get('X-Robots-Tag')).toBe('noindex');

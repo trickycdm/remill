@@ -23,9 +23,11 @@ import { InputValidationError, ForbiddenError, NotFoundError } from '@/lib/error
 import type { Principal } from '@/access';
 import type { CollectionDefinition } from '@/fields/types';
 import type { EmailTransport } from '@/lib/email';
+import * as grantQ from '@/db/queries/grants';
 
 const NOW = '2026-09-23T12:00:00Z';
 const SECRET = 's'.repeat(32);
+const BASE_URL = 'https://example.org';
 
 const NOTES: CollectionDefinition = {
   slug: 'notes',
@@ -56,7 +58,7 @@ describe('share-link service (D51)', () => {
 
   describe('createShareLink', () => {
     it('creates a plain link with hasPassword: false', async () => {
-      const link = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW);
+      const link = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW);
       expect(link.hasPassword).toBe(false);
       expect(link.label).toBeNull();
       expect(link.token).toBeTruthy();
@@ -67,7 +69,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
-        NOW,
+        SECRET, NOW,
       );
       expect(link.hasPassword).toBe(true);
       expect(JSON.stringify(link)).not.toContain('hunter22');
@@ -75,7 +77,7 @@ describe('share-link service (D51)', () => {
 
     it('rejects a password shorter than 8 characters', async () => {
       await expect(
-        createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'], password: 'short' }, NOW),
+        createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'], password: 'short' }, SECRET, NOW),
       ).rejects.toBeInstanceOf(InputValidationError);
     });
 
@@ -85,7 +87,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], label: long },
-        NOW,
+        SECRET, NOW,
       );
       expect(link.label).toHaveLength(80);
       expect(link.label?.startsWith('x')).toBe(true);
@@ -93,7 +95,7 @@ describe('share-link service (D51)', () => {
 
     it('denies a reader (no share_link permission)', async () => {
       await expect(
-        createShareLink(db, reader, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW),
+        createShareLink(db, reader, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW),
       ).rejects.toBeInstanceOf(ForbiddenError);
     });
 
@@ -103,14 +105,14 @@ describe('share-link service (D51)', () => {
           db,
           editor,
           { collection: 'notes', documentId: docId, actions: ['read'], expiresAt: 'not-a-real-date' },
-          NOW,
+          SECRET, NOW,
         ),
       ).rejects.toBeInstanceOf(InputValidationError);
     });
 
     it('finding 3: maxTtlDays makes expiresAt required', async () => {
       await expect(
-        createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'], maxTtlDays: 30 }, NOW),
+        createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'], maxTtlDays: 30 }, SECRET, NOW),
       ).rejects.toBeInstanceOf(InputValidationError);
     });
 
@@ -120,7 +122,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], expiresAt: farFuture, maxTtlDays: 30 },
-        NOW,
+        SECRET, NOW,
       );
       expect(link.expiresAt).not.toBeNull();
       const capped = new Date(NOW).getTime() + 30 * 24 * 60 * 60 * 1000;
@@ -128,14 +130,14 @@ describe('share-link service (D51)', () => {
     });
 
     it('finding 3: without maxTtlDays (the admin panel), expiresAt stays open-ended when omitted', async () => {
-      const link = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW);
+      const link = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW);
       expect(link.expiresAt).toBeNull();
     });
   });
 
   describe('openShareLink', () => {
     it('returns open immediately for a link with no password', async () => {
-      const { token } = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW);
+      const { token } = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW);
       const resolved = await openShareLink(db, token, undefined, SECRET, NOW);
       expect(resolved?.state).toBe('open');
     });
@@ -149,7 +151,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
-        NOW,
+        SECRET, NOW,
       );
       const resolved = await openShareLink(db, token, undefined, SECRET, NOW);
       expect(resolved?.state).toBe('locked');
@@ -160,7 +162,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
-        NOW,
+        SECRET, NOW,
       );
       const unlock = await unlockShareLink(db, token, 'hunter22', SECRET, NOW);
       expect(unlock.ok).toBe(true);
@@ -184,7 +186,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
-        NOW,
+        SECRET, NOW,
       );
       const unlock = await unlockShareLink(db, token, 'hunter22', SECRET, NOW);
       if (!unlock.ok) throw new Error('unreachable');
@@ -198,7 +200,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
-        NOW,
+        SECRET, NOW,
       );
       const unlock = await unlockShareLink(db, token, 'hunter22', SECRET, NOW);
       if (!unlock.ok) throw new Error('unreachable');
@@ -214,7 +216,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
-        NOW,
+        SECRET, NOW,
       );
       expect(reMinted.grantId).not.toBe(grantId);
       const resolved = await openShareLink(db, reMinted.token, unlock.cookieValue, SECRET, NOW);
@@ -228,7 +230,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22' },
-        NOW,
+        SECRET, NOW,
       );
       const result = await unlockShareLink(db, token, 'wrongpass', SECRET, NOW);
       expect(result.ok).toBe(false);
@@ -239,7 +241,7 @@ describe('share-link service (D51)', () => {
     });
 
     it('fails for a link with no password set', async () => {
-      const { token } = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW);
+      const { token } = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW);
       expect((await unlockShareLink(db, token, 'whatever1', SECRET, NOW)).ok).toBe(false);
     });
 
@@ -249,7 +251,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22', expiresAt: farFuture },
-        NOW,
+        SECRET, NOW,
       );
       const farUnlock = await unlockShareLink(db, farToken, 'hunter22', SECRET, NOW);
       if (!farUnlock.ok) throw new Error('unreachable');
@@ -260,7 +262,7 @@ describe('share-link service (D51)', () => {
         db,
         editor,
         { collection: 'notes', documentId: docId, actions: ['read'], password: 'hunter22', expiresAt: soon },
-        NOW,
+        SECRET, NOW,
       );
       const soonUnlock = await unlockShareLink(db, soonToken, 'hunter22', SECRET, NOW);
       if (!soonUnlock.ok) throw new Error('unreachable');
@@ -284,7 +286,7 @@ describe('share-link service (D51)', () => {
       // claiming the OTHER document lives in 'notes' (a collection editor DOES
       // hold share_link on), not merely trying 'other' directly.
       await expect(
-        createShareLink(db, editor, { collection: 'notes', documentId: otherDocId, actions: ['read'] }, NOW),
+        createShareLink(db, editor, { collection: 'notes', documentId: otherDocId, actions: ['read'] }, SECRET, NOW),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
@@ -304,20 +306,20 @@ describe('share-link service (D51)', () => {
 
   describe('listShareLinks / revokeShareLink gating', () => {
     it('an editor can list and revoke', async () => {
-      const { grantId } = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW);
-      const links = await listShareLinks(db, editor, 'notes', docId, NOW);
+      const { grantId } = await createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW);
+      const links = await listShareLinks(db, editor, 'notes', docId, SECRET, BASE_URL, NOW);
       expect(links.some((l) => l.id === grantId)).toBe(true);
       await revokeShareLink(db, editor, 'notes', docId, grantId, NOW);
-      const after = await listShareLinks(db, editor, 'notes', docId, NOW);
+      const after = await listShareLinks(db, editor, 'notes', docId, SECRET, BASE_URL, NOW);
       expect(after.some((l) => l.id === grantId)).toBe(false);
     });
 
     it('an author is denied (no share_link permission)', async () => {
-      await expect(listShareLinks(db, author, 'notes', docId, NOW)).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(listShareLinks(db, author, 'notes', docId, SECRET, BASE_URL, NOW)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
     it('a reader is denied', async () => {
-      await expect(listShareLinks(db, reader, 'notes', docId, NOW)).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(listShareLinks(db, reader, 'notes', docId, SECRET, BASE_URL, NOW)).rejects.toBeInstanceOf(ForbiddenError);
     });
 
     it('cannot revoke a non-link grant through revokeShareLink', async () => {
@@ -342,7 +344,6 @@ describe('share-link service (D51)', () => {
         },
       };
     }
-    const BASE_URL = 'https://example.org';
 
     it('a reader (no share_link permission) is denied — never a bare "logged in" check', async () => {
       const transport = fakeTransport();
@@ -412,6 +413,61 @@ describe('share-link service (D51)', () => {
         NOW,
       );
       expect(transport.sent).toEqual([{ to: 'someone@example.com' }]);
+    });
+  });
+
+  describe('listShareLinks url (D53 — reversible token storage)', () => {
+    it('stores token_enc as ciphertext, never the plaintext token', async () => {
+      const { grantId, token } = await createShareLink(
+        db,
+        editor,
+        { collection: 'notes', documentId: docId, actions: ['read'] },
+        SECRET,
+        NOW,
+      );
+      const rows = await grantQ.listLinkGrantsForDocument(db, docId, NOW);
+      const row = rows.find((r) => r.id === grantId);
+      expect(row?.tokenEnc).toBeTruthy();
+      expect(row?.tokenEnc).not.toContain(token);
+    });
+
+    it('returns a url that resolves back to the same grant via openShareLink', async () => {
+      const { grantId } = await createShareLink(
+        db,
+        editor,
+        { collection: 'notes', documentId: docId, actions: ['read'] },
+        SECRET,
+        NOW,
+      );
+      const links = await listShareLinks(db, editor, 'notes', docId, SECRET, BASE_URL, NOW);
+      const link = links.find((l) => l.id === grantId);
+      expect(link?.url).toMatch(new RegExp(`^${BASE_URL}/s/rms_`));
+      const presentedToken = link!.url!.slice(`${BASE_URL}/s/`.length);
+      const opened = await openShareLink(db, presentedToken, undefined, SECRET, NOW);
+      expect(opened?.grant.id).toBe(grantId);
+    });
+
+    it('returns a null url for a legacy link (token_enc null — minted before D53)', async () => {
+      const legacyId = await grantQ.createItemGrant(
+        db,
+        {
+          subjectKind: 'link',
+          subjectId: 'legacy_hash_no_token_enc',
+          documentId: docId,
+          actions: ['read'],
+          grantedBy: editor.id,
+          expiresAt: null,
+          tokenEnc: null,
+        },
+        NOW,
+      );
+      const links = await listShareLinks(db, editor, 'notes', docId, SECRET, BASE_URL, NOW);
+      const link = links.find((l) => l.id === legacyId);
+      expect(link?.url).toBeNull();
+    });
+
+    it('gating is unchanged: a reader still cannot list links even with the url field added', async () => {
+      await expect(listShareLinks(db, reader, 'notes', docId, SECRET, BASE_URL, NOW)).rejects.toBeInstanceOf(ForbiddenError);
     });
   });
 });

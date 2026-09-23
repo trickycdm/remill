@@ -13,6 +13,7 @@ import type { CollectionDefinition } from '@/fields/types';
 import { ForbiddenError } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
+const SECRET = 's'.repeat(32);
 const LATER = '2026-07-05T12:00:00Z';
 
 const POSTS: CollectionDefinition = {
@@ -227,6 +228,7 @@ describe('access control — the full model (Phase 3)', () => {
         db,
         admin,
         { collection: 'posts', documentId: post.id, actions: ['read'] },
+        SECRET,
         NOW,
       );
       const resolved = await access.resolveShareLink(db, token, NOW);

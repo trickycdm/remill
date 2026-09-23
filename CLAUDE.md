@@ -73,6 +73,12 @@ rendered public pages + share links.)
 > **rich, priority-chained public SEO head** (D52, `src/lib/seo.ts`'s `buildDocumentHead` — shared
 > by the article route and open share links — og/twitter/JSON-LD, `seo_title`/`meta_description`/
 > `social_image` convention fields on the blog/docs/portfolio packs).
+> **D53 shipped 2026-09-23**: share-link tokens stay **copyable, not show-once** —
+> `item_grants.token_enc` stores the token as AES-GCM ciphertext (keyed off `SESSION_SECRET` via
+> HKDF, `src/lib/share-token-crypto.ts`) alongside the unchanged lookup hash, so `listShareLinks`
+> can decrypt and re-display the URL from the Share panel (which gains a Copy control per link and
+> opens "New share link" by default on a private/draft document with none yet) at any time, like a
+> Google Docs link rather than a one-time API key.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.

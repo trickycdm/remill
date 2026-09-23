@@ -20,6 +20,7 @@ import * as auditQ from '@/db/queries/audit';
 import { generateToken, generateShareToken, generateJoinToken, hashToken } from '@/lib/token';
 import { hashPassword, verifyPassword } from '@/lib/password';
 import { signUnlock, verifyUnlock } from '@/lib/share-unlock';
+import { encryptToken, decryptToken } from '@/lib/share-token-crypto';
 import type { EmailTransport } from '@/lib/email';
 import { shareNotificationEmail } from '@/lib/email/templates';
 import type { PermissionSpec, RoleSpec } from '@/access/policy';
@@ -227,8 +228,9 @@ export async function revokeItem(db: Database, principal: Principal, grantId: st
  * Create a SHARE LINK (C3): an item grant whose subject is the hashed link token
  * (`subjectKind: 'link'`) — the same additive grant machinery as principals and
  * roles, so expiry, revocation (the Share panel's revoke works unchanged), the
- * access matrix, and audit all come free. Returns the plaintext token exactly
- * once (API-token discipline); only its hash is stored.
+ * access matrix, and audit all come free. Returns the plaintext token (also
+ * stored encrypted in `token_enc`, D53, so `listShareLinks` can re-display the
+ * URL later — the lookup itself still matches only on the hash).
  */
 const LABEL_MAX_LENGTH = 80;
 
@@ -252,6 +254,8 @@ export async function createShareLink(
     /** Optional human label shown in the Share panel, trimmed and capped. */
     label?: string;
   },
+  /** SESSION_SECRET — keys the AES-GCM encryption of the stored token (D53). */
+  secret: string,
   now: string,
 ): Promise<{ grantId: string; token: string; hasPassword: boolean; label: string | null; expiresAt: string | null }> {
   // D26: gated by the dedicated `share_link` action, NOT manage_access — so the
@@ -303,6 +307,7 @@ export async function createShareLink(
       expiresAt,
       passwordHash,
       label,
+      tokenEnc: await encryptToken(secret, token),
     },
     now,
   );
@@ -380,18 +385,36 @@ export async function unlockShareLink(
   return { ok: true, cookieValue, maxAgeSeconds };
 }
 
+/** A share-link grant as listed in the Share panel — `url` is the decrypted,
+ *  ready-to-copy link (D53), or null when it can't be recovered: a legacy row
+ *  minted before `token_enc` existed, or decryption failed (wrong/rotated
+ *  secret, tampered ciphertext). Never carries the hash or the ciphertext
+ *  itself. */
+export interface ShareLinkListItem extends grantQ.ItemGrantRecord {
+  readonly url: string | null;
+}
+
 /** List only the LINK grants on a document (Share panel's "Share links"
- *  section). Gated on `share_link` — anyone who can mint links can see the
- *  ones already minted, without needing install-wide `manage_access`. */
+ *  section), each with its re-copyable URL (D53). Gated on `share_link` —
+ *  anyone who can mint links can see the ones already minted, without needing
+ *  install-wide `manage_access`. */
 export async function listShareLinks(
   db: Database,
   principal: Principal,
   collection: string,
   documentId: string,
+  secret: string,
+  baseUrl: string,
   now: string,
-): Promise<grantQ.ItemGrantRecord[]> {
+): Promise<ShareLinkListItem[]> {
   await authorize(db, principal, 'share_link', { collection, documentId }, now);
-  return grantQ.listLinkGrantsForDocument(db, documentId, now);
+  const links = await grantQ.listLinkGrantsForDocument(db, documentId, now);
+  return Promise.all(
+    links.map(async ({ tokenEnc, ...grant }) => {
+      const token = tokenEnc ? await decryptToken(secret, tokenEnc) : null;
+      return { ...grant, url: token ? `${baseUrl}/s/${token}` : null };
+    }),
+  );
 }
 
 /** Revoke a share LINK grant — gated on `share_link` (the same capability
