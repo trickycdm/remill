@@ -12,6 +12,7 @@ import { ForbiddenError } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
 const FUTURE = '2026-08-01T12:00:00Z';
+const SECRET = 's'.repeat(32);
 
 const NOTES: CollectionDefinition = {
   slug: 'notes',
@@ -40,6 +41,7 @@ describe('share_link action (D26) — grantable link-minting, agents included', 
       db,
       agent,
       { collection: 'notes', documentId: docId, actions: ['read'], expiresAt: FUTURE },
+      SECRET,
       NOW,
     );
     expect(token).toMatch(/^rms_/);
@@ -61,7 +63,7 @@ describe('share_link action (D26) — grantable link-minting, agents included', 
   it('an agent WITHOUT share_link is refused — and the deny is audited', async () => {
     const agent = await makePrincipal(db, NOW, { id: 'prn_reader_bot', kind: 'agent', role: 'reader', surface: 'mcp' });
     await expect(
-      access.createShareLink(db, agent, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW),
+      access.createShareLink(db, agent, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW),
     ).rejects.toBeInstanceOf(ForbiddenError);
     const audit = await recentAudit(db, 100);
     expect(audit.find((a) => a.action === 'share_link' && a.allowed === 0)).toBeTruthy();
@@ -76,23 +78,23 @@ describe('share_link action (D26) — grantable link-minting, agents included', 
       NOW,
     );
 
-    const { token } = await access.createShareLink(db, agent, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW);
+    const { token } = await access.createShareLink(db, agent, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW);
     expect(token).toMatch(/^rms_/);
 
     // The grant is document-scoped: another doc still refuses.
     const other = await docs.createDocument(db, admin, 'notes', { title: 'Other' }, NOW);
     await expect(
-      access.createShareLink(db, agent, { collection: 'notes', documentId: other.id, actions: ['read'] }, NOW),
+      access.createShareLink(db, agent, { collection: 'notes', documentId: other.id, actions: ['read'] }, SECRET, NOW),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it('humans keep working: admin and editor roles hold share_link out of the box', async () => {
     const editor = await makePrincipal(db, NOW, { id: 'prn_ed', role: 'editor' });
     await expect(
-      access.createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW),
+      access.createShareLink(db, editor, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW),
     ).resolves.toBeTruthy();
     await expect(
-      access.createShareLink(db, admin, { collection: 'notes', documentId: docId, actions: ['read'] }, NOW),
+      access.createShareLink(db, admin, { collection: 'notes', documentId: docId, actions: ['read'] }, SECRET, NOW),
     ).resolves.toBeTruthy();
   });
 });

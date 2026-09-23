@@ -147,12 +147,13 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   'unlisted' | 'private'}`. Publish-gated (changing a document's exposure is a publication
   decision), allowed on drafts (remembered, takes effect on publish). Document payloads in
   list/get responses carry `visibility`.
-- **Share links (D51)**: `POST /api/c/:collection/:id/share-links` with body
+- **Share links (D51/D53)**: `POST /api/c/:collection/:id/share-links` with body
   `{expiresAt, password?, label?}` → `201 {grantId, url, expiresAt, hasPassword, label}` (password
   never echoed back; `expiresAt` required, validated, clamped to 30 days and echoed normalized —
   `createShareLink`'s `maxTtlDays`, the same rule as the MCP tool below). `GET` lists the
-  document's unexpired links (no hashes); `DELETE /api/c/:collection/:id/share-links/:grantId`
-  revokes. All gated on `share_link`.
+  document's unexpired links (no hashes), each including `url` — the decrypted, re-copyable link
+  (D53; null for a link minted before `token_enc` existed, or a decryption failure);
+  `DELETE /api/c/:collection/:id/share-links/:grantId` revokes. All gated on `share_link`.
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
   Static (non-generated) endpoints like `/api/trash` must be hand-added in `staticPaths()`

@@ -80,8 +80,9 @@ function DisclosureChevron(): JSX.Element {
 /** A readonly value + "Copy" button, wired via Datastar (no client island): the
  *  button reads the input's current DOM value, writes it to the clipboard, and
  *  flips a per-instance signal that drives an aria-live "Copied" announcement.
- *  Shared between the Visibility card's unlisted URL and the Details card's ID. */
-function CopyField({
+ *  Shared between the Visibility card's unlisted URL, the Details card's ID,
+ *  and the Share card's link rows (share-panel.tsx). */
+export function CopyField({
   id,
   label,
   value,

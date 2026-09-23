@@ -69,6 +69,7 @@ export const onRequestPost = factory.createHandlers(async (c) => {
         UPLOAD_RATE_LIMIT,
         principal.tokenId ?? clientKey(c),
       ),
+    secret: c.env.SESSION_SECRET,
   };
 
   // Support a single request or a batch.

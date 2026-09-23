@@ -80,6 +80,10 @@ export function isMcpTextResult(value: unknown): value is McpTextResult {
 export interface McpToolContext {
   readonly media?: R2Bucket;
   readonly consumeUploadLimit?: () => Promise<unknown>;
+  /** SESSION_SECRET — keys the AES-GCM encryption of minted share-link tokens
+   *  (D53), so `share_link_<slug>` can store a re-copyable `token_enc` like
+   *  the admin Share panel does. */
+  readonly secret?: string;
 }
 
 /** Whether `principal` could ever perform `action` on `collection` — for tool
@@ -630,6 +634,7 @@ export async function buildToolsForPrincipal(
               password: typeof args.password === 'string' && args.password ? args.password : undefined,
               label: typeof args.label === 'string' && args.label ? args.label : undefined,
             },
+            ctx.secret ?? '',
             nowIso,
           );
           // The plaintext token intentionally enters the agent's context — that

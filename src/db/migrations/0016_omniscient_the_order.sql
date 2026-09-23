@@ -1,0 +1,1 @@
+ALTER TABLE `item_grants` ADD `token_enc` text;

@@ -14,12 +14,14 @@
 
 import type { JSX } from 'hono/jsx/jsx-runtime';
 import type { ItemGrantRecord } from '@/db/queries/grants';
+import type { ShareLinkListItem } from '@/services/access';
 import { personaOf, PERSONA_LABEL } from '@/lib/persona';
 import { isAnonymouslyReadable } from '@/lib/def-helpers';
 import { formatDate } from '@/lib/format-date';
 import type { Visibility } from '@/lib/visibility';
 import type { CollectionDefinition } from '@/fields/types';
 import type { SiteSettings } from '@/services/settings';
+import { CopyField } from '@/components/admin/editor-sidebar';
 import {
   Card,
   CardHeader,
@@ -87,11 +89,15 @@ function LinksSection({
   id: string;
   def: CollectionDefinition;
   doc: ShareDoc;
-  links: ItemGrantRecord[];
+  links: ShareLinkListItem[];
   action: string;
   settings?: SiteSettings;
 }) {
   const alreadyPublic = isAnonymouslyReadable(def, doc);
+  // A private (or still-draft) document with no links yet needs its next step
+  // to be obvious — open the disclosure instead of hiding it behind a click.
+  const isPrivate = doc.visibility === 'private' || doc.status === 'draft';
+  const openByDefault = isPrivate && links.length === 0;
 
   return (
     <div class="flex flex-col gap-3">
@@ -103,32 +109,41 @@ function LinksSection({
         </div>
       ) : null}
 
-      <div class="flex flex-col gap-2">
+      <div class="flex flex-col gap-3">
         {links.length === 0 ? (
           <p class="text-sm text-ink-subtle">No links yet.</p>
         ) : (
           links.map((g) => (
-            <div class="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2">
-              <div class="flex min-w-0 flex-col gap-0.5">
-                <span class="truncate text-sm font-medium text-ink">{g.label ?? 'Untitled link'}</span>
-                <span class="flex items-center gap-1 font-mono text-xs text-ink-subtle">
-                  {g.hasPassword ? 'Password' : 'No password'}
-                  <ExpiryMeta expiresAt={g.expiresAt} settings={settings} />
-                </span>
+            <div class="flex flex-col gap-2 rounded-md border border-border px-3 py-2">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex min-w-0 flex-col gap-0.5">
+                  <span class="truncate text-sm font-medium text-ink">{g.label ?? 'Untitled link'}</span>
+                  <span class="flex items-center gap-1 font-mono text-xs text-ink-subtle">
+                    {g.hasPassword ? 'Password' : 'No password'}
+                    <ExpiryMeta expiresAt={g.expiresAt} settings={settings} />
+                  </span>
+                </div>
+                <form method="post" action={action}>
+                  <input type="hidden" name="op" value="revoke_link" />
+                  <input type="hidden" name="grantId" value={g.id} />
+                  <Button type="submit" variant="ghost" size="sm">
+                    Revoke
+                  </Button>
+                </form>
               </div>
-              <form method="post" action={action}>
-                <input type="hidden" name="op" value="revoke_link" />
-                <input type="hidden" name="grantId" value={g.id} />
-                <Button type="submit" variant="ghost" size="sm">
-                  Revoke
-                </Button>
-              </form>
+              {g.url ? (
+                <CopyField id={`share-link-url-${g.id}`} label="URL" value={g.url} mono />
+              ) : (
+                <p class="text-xs text-ink-subtle">
+                  This link can't be shown again — revoke it and create a new one.
+                </p>
+              )}
             </div>
           ))
         )}
       </div>
 
-      <details class="group">
+      <details class="group" open={openByDefault || undefined}>
         <summary class="inline-flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           <DisclosureChevron />
           New share link
@@ -310,7 +325,7 @@ export function SharePanel({
    *  subsection above People & roles. */
   def?: CollectionDefinition;
   doc?: ShareDoc;
-  links?: ItemGrantRecord[];
+  links?: ShareLinkListItem[];
   baseUrl?: string;
   settings?: SiteSettings;
 }) {

@@ -309,6 +309,12 @@ export const itemGrants = sqliteTable(
     // Share links only (subject_kind='link', D51). scrypt hash, never plaintext.
     passwordHash: text('password_hash'),
     label: text('label'), // optional human label shown in the share panel
+    // Share links only (subject_kind='link', D53). AES-GCM ciphertext of the
+    // plaintext token, keyed off SESSION_SECRET — lets the token be re-shown in
+    // the Share panel. Lookup stays by subject_id (the hash); this column is
+    // only for re-display. Null for links minted before D53 or when
+    // encryption somehow failed.
+    tokenEnc: text('token_enc'),
   },
   (t) => [index('item_grants_document_idx').on(t.documentId)],
 );

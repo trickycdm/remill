@@ -28,6 +28,15 @@ export interface ItemGrantRecord {
   readonly hasPassword: boolean;
 }
 
+/** Internal shape used only by the link-listing path that needs to re-decrypt
+ *  the token for re-display (D53) — `tokenEnc` never rides on the public
+ *  `ItemGrantRecord`, mirroring how `passwordHash` stays query-layer-only. */
+export interface ItemGrantRecordWithTokenEnc extends ItemGrantRecord {
+  /** AES-GCM ciphertext of the plaintext token, or null for a link minted
+   *  before this column existed. */
+  readonly tokenEnc: string | null;
+}
+
 function toDomain(r: typeof itemGrants.$inferSelect): ItemGrantRecord {
   return {
     id: r.id,
@@ -40,6 +49,10 @@ function toDomain(r: typeof itemGrants.$inferSelect): ItemGrantRecord {
     label: r.label,
     hasPassword: r.passwordHash != null,
   };
+}
+
+function toDomainWithTokenEnc(r: typeof itemGrants.$inferSelect): ItemGrantRecordWithTokenEnc {
+  return { ...toDomain(r), tokenEnc: r.tokenEnc };
 }
 
 /** The subject-match predicate: the principal itself, any of its roles, any of
@@ -186,7 +199,11 @@ export async function listNonLinkGrantsForDocument(db: Database, documentId: str
 /** Unexpired share-link grants on a document, newest first (the Share panel's
  *  "Share links" section — an expired link is dead weight, not something to
  *  still list and let someone try to revoke twice). */
-export async function listLinkGrantsForDocument(db: Database, documentId: string, now: string): Promise<ItemGrantRecord[]> {
+export async function listLinkGrantsForDocument(
+  db: Database,
+  documentId: string,
+  now: string,
+): Promise<ItemGrantRecordWithTokenEnc[]> {
   const rows = await db
     .select()
     .from(itemGrants)
@@ -198,7 +215,7 @@ export async function listLinkGrantsForDocument(db: Database, documentId: string
       ),
     )
     .orderBy(itemGrants.createdAt);
-  return rows.map(toDomain);
+  return rows.map(toDomainWithTokenEnc);
 }
 
 /** Input to createItemGrant. Deliberately NOT `Omit<ItemGrantRecord, 'id'>`: the
@@ -214,6 +231,9 @@ export interface CreateItemGrantInput {
   /** Share links only (D51); scrypt hash, never plaintext. */
   readonly passwordHash?: string | null;
   readonly label?: string | null;
+  /** Share links only (D53); AES-GCM ciphertext of the plaintext token, for
+   *  re-display — see ItemGrantRecordWithTokenEnc. */
+  readonly tokenEnc?: string | null;
 }
 
 export async function createItemGrant(
@@ -232,6 +252,7 @@ export async function createItemGrant(
     expiresAt: grant.expiresAt,
     passwordHash: grant.passwordHash ?? null,
     label: grant.label ?? null,
+    tokenEnc: grant.tokenEnc ?? null,
     createdAt: now,
   });
   return id;

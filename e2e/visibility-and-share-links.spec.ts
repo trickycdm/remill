@@ -99,7 +99,13 @@ test.describe.serial('Document visibility + share links', () => {
     await loginAsAdmin(page);
     await page.goto(editUrl);
 
-    await page.locator('summary', { hasText: 'New share link' }).click();
+    // The doc is already Private (previous test) with no links yet, so "New
+    // share link" opens by default — its next step should be obvious without
+    // a click.
+    const summary = page.locator('summary', { hasText: 'New share link' });
+    const details = page.locator('details', { has: summary });
+    await expect(details).toHaveAttribute('open', '');
+
     await page.getByLabel('Label (optional)').fill(`Review copy ${runId}`);
     await page.getByLabel('Password (optional)').fill(PASSWORD);
     await page.getByRole('button', { name: 'Create link', exact: true }).click();
@@ -107,6 +113,16 @@ test.describe.serial('Document visibility + share links', () => {
     await expect(page.getByRole('heading', { name: 'Share link created' })).toBeVisible();
     shareLinkUrl = await page.getByLabel('Share link URL').inputValue();
     expect(shareLinkUrl).toMatch(/\/s\/[^/]+$/);
+  });
+
+  test('the Share card lists the link with a Copy control matching the created URL', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto(editUrl);
+
+    const linkRow = page.locator('label', { hasText: 'URL' }).locator('..');
+    const urlInput = linkRow.locator('input[readonly]');
+    await expect(urlInput).toHaveValue(shareLinkUrl);
+    await expect(linkRow.getByRole('button', { name: 'Copy' })).toBeVisible();
   });
 
   test('anonymous: the link is protected, no title/OG leak, axe clean, then unlocks with the right password', async ({

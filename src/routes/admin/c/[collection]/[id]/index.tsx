@@ -67,7 +67,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         teams: await listTeams(db),
       }
     : null;
-  const shareLinks = canShareLink ? await listShareLinks(db, principal, slug, id, now) : null;
+  const shareLinks = canShareLink
+    ? await listShareLinks(db, principal, slug, id, c.env.SESSION_SECRET, resolveBaseUrl(c.env, settings, c.req.url), now)
+    : null;
 
   // Title the page by the document's primary display value (its first list field),
   // falling back to a generic edit label for an untitled doc.
