@@ -105,7 +105,11 @@ function LinksSection({
 
   return (
     <div class="flex flex-col gap-3">
-      <Eyebrow>Links</Eyebrow>
+      <Eyebrow>Read-only links</Eyebrow>
+      <p class="text-xs text-ink-muted">
+        People with these links can read this document but not comment. To collect feedback, create a review link
+        below.
+      </p>
 
       {alreadyPublic ? (
         <div role="status" class="rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm text-warning">
@@ -121,7 +125,10 @@ function LinksSection({
             <div class="flex flex-col gap-2 rounded-md border border-border px-3 py-2">
               <div class="flex items-center justify-between gap-2">
                 <div class="flex min-w-0 flex-col gap-0.5">
-                  <span class="truncate text-sm font-medium text-ink">{g.label ?? 'Untitled link'}</span>
+                  <span class="flex items-center gap-2">
+                    <span class="truncate text-sm font-medium text-ink">{g.label ?? 'Untitled link'}</span>
+                    <Badge tone="neutral">Read only</Badge>
+                  </span>
                   <span class="flex items-center gap-1 font-mono text-xs text-ink-subtle">
                     {g.hasPassword ? 'Password' : 'No password'}
                     <ExpiryMeta expiresAt={g.expiresAt} settings={settings} />

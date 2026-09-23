@@ -15,10 +15,19 @@
  * `preview` (optional, D49) renders the author-facing preview banner above the
  * masthead — only the public route sets it, and only for a session-principal
  * `?preview=1` render. An `/admin/...` href is wayfinding, not an admin import.
+ * Its optional `reviewToggle` (D55) is the owner's way in and out of the
+ * review overlay ("Show comments" / "Hide comments").
+ *
+ * `reviewInvite` (optional, D55) renders the reviewer-facing banner on a review
+ * link — the first thing a reviewer reads, telling them they can comment and
+ * how, before the article starts.
  */
 
 import type { SiteSettings } from '@/services/settings';
 import { Wordmark } from '@/components/ui/wordmark';
+
+const BANNER_LINK =
+  'rounded-sm font-medium underline decoration-1 underline-offset-4 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 const FOOTER_LINK =
   'rounded-sm hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -27,11 +36,17 @@ export function PublicShell({
   settings,
   indexLink,
   preview,
+  reviewInvite,
   children,
 }: {
   settings: SiteSettings;
   indexLink?: { readonly href: string; readonly label: string };
-  preview?: { readonly editHref: string; readonly status: 'draft' | 'published' };
+  preview?: {
+    readonly editHref: string;
+    readonly status: 'draft' | 'published';
+    readonly reviewToggle?: { readonly href: string; readonly label: string };
+  };
+  reviewInvite?: boolean;
   children?: unknown;
 }) {
   const siteName = settings.siteName?.trim() || 'remill';
@@ -50,11 +65,29 @@ export function PublicShell({
               ? 'Draft preview — this page is not publicly visible.'
               : 'Preview — this is the live published page.'}
           </span>
-          <a
-            href={preview.editHref}
-            class="rounded-sm font-medium underline decoration-1 underline-offset-4 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            Back to editor
+          <span class="flex flex-wrap items-center gap-4">
+            {preview.reviewToggle ? (
+              <a href={preview.reviewToggle.href} class={BANNER_LINK}>
+                {preview.reviewToggle.label}
+              </a>
+            ) : null}
+            <a href={preview.editHref} class={BANNER_LINK}>
+              Back to editor
+            </a>
+          </span>
+        </div>
+      ) : null}
+      {reviewInvite ? (
+        <div
+          role="note"
+          class="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-md bg-pop-soft px-4 py-2 text-sm text-ink"
+        >
+          <span>
+            <strong class="font-semibold">You've been asked to review this.</strong> Select any text to comment
+            on it, or leave a general comment.
+          </span>
+          <a href="#rm-review-panel" class={BANNER_LINK}>
+            Go to comments
           </a>
         </div>
       ) : null}

@@ -108,6 +108,9 @@ test.describe.serial('Document review — review links, anchored comments, the o
   test('a personal-link reviewer comments on selected text and on a figure; highlights paint', async ({ browser }) => {
     const alice = await reviewerPage(browser, links.alice);
     await expect(panel(alice).getByText('Reviewing as')).toContainText('Alice');
+    // Signposting: the invite banner above the article and the panel's how-to.
+    await expect(alice.getByRole('note')).toContainText("You've been asked to review this.");
+    await expect(panel(alice).getByText('Select any text in the page to comment on it')).toBeVisible();
     await expect(panel(alice).getByText('Other reviewers on group links can see your comments.')).toBeVisible();
 
     await selectText(alice, 'grew 12%');
@@ -187,8 +190,15 @@ test.describe.serial('Document review — review links, anchored comments, the o
     await page.goto(editUrl);
     await expect(page.getByRole('heading', { name: 'Comments' })).toBeVisible();
     await expect(page.getByText(/^5 open/)).toBeVisible();
+    // The Share card says which links can comment.
+    await expect(page.getByText('Can comment').first()).toBeVisible();
 
-    await page.goto(`/reports/${docId}?preview=1&review=1`);
+    // The owner's way in: the preview banner offers "Show comments".
+    await page.goto(`/reports/${docId}?preview=1`);
+    await expect(panel(page)).toHaveCount(0);
+    await page.getByRole('link', { name: 'Show comments' }).click();
+    await expect(panel(page)).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Hide comments' })).toBeVisible();
     const thread = panel(page).locator('article', { hasText: 'What is the source for this?' });
     await thread.getByLabel(/^Reply to Alice/).fill('Finance deck, slide 4');
     await thread.getByRole('button', { name: 'Reply' }).click();
@@ -229,5 +239,34 @@ test.describe.serial('Document review — review links, anchored comments, the o
     await expect(page.getByRole('alert')).toContainText('someone else saved first');
     await page.reload();
     await expect(page.getByLabel(/^title/i)).toHaveValue(`${TITLE} (agent)`);
+  });
+});
+
+// On a phone the panel flows after the article, so the sticky "Comments" button
+// is how a reviewer finds it. Its own report + link, independent of the
+// serial block above.
+test.describe('Document review — narrow screens', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('a reviewer on a phone sees the invite and a sticky button that jumps to comments', async ({ page, browser }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/c/reports/new');
+    await page.getByLabel(/^title/i).fill(`Mobile review ${RUN}`);
+    await page.getByLabel(/^page/i).fill('<p>A short page to review on a phone.</p>');
+    await page.getByRole('button', { name: /Create Reports/i }).click();
+    await page.waitForURL(/\/admin\/c\/reports\/doc_/);
+    await page.getByText('New review link').click();
+    await page.getByRole('button', { name: 'Create review link' }).click();
+    const url = await linkUrl(page, 'Open review link');
+
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+    const reviewer = await ctx.newPage();
+    await reviewer.goto(url);
+    await expect(reviewer.getByRole('note')).toBeInViewport();
+    const jump = reviewer.getByRole('link', { name: /^Comments \(0\)$/ });
+    await expect(jump).toBeInViewport();
+    await jump.click();
+    await expect(reviewer.getByRole('textbox', { name: /^Your name/ })).toBeInViewport();
+    await ctx.close();
   });
 });

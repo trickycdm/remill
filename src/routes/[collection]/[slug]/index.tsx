@@ -2,7 +2,7 @@ import { createFactory } from 'hono/factory';
 import type { Env } from '@/types';
 import { pathParam } from '@/lib/http';
 import { getDb } from '@/db/client';
-import { anonymousPrincipal, principalFromSession } from '@/access';
+import { anonymousPrincipal, principalFromSession, canAuthorize } from '@/access';
 import { getSessionUser } from '@/lib/auth';
 import {
   getDocument,
@@ -135,11 +135,22 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     // principal's review panel. A principal who may read but not comment just
     // gets the plain preview — never an error page.
     let reviewPanel: unknown = null;
-    if (preview && c.req.query('review') != null && hasAnnotatableFields(def)) {
-      try {
-        reviewPanel = await principalPanel(db, principal, collection, doc.id, now);
-      } catch (e) {
-        if (!(e instanceof ForbiddenError)) throw e;
+    let reviewToggle: { href: string; label: string } | undefined;
+    if (preview && hasAnnotatableFields(def)) {
+      const reviewing = c.req.query('review') != null;
+      if (reviewing) {
+        try {
+          reviewPanel = await principalPanel(db, principal, collection, doc.id, now);
+        } catch (e) {
+          if (!(e instanceof ForbiddenError)) throw e;
+        }
+      }
+      // The owner's way in and out of review mode, offered only to someone who
+      // may comment (a non-auditing probe — this is navigation, not an action).
+      if (reviewPanel || (!reviewing && (await canAuthorize(db, principal, 'comment', { collection, documentId: doc.id }, now)))) {
+        reviewToggle = reviewPanel
+          ? { href: `${requestUrl.pathname}?preview=1`, label: 'Hide comments' }
+          : { href: `${requestUrl.pathname}?preview=1&review=1`, label: 'Show comments' };
       }
     }
 
@@ -154,7 +165,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         }
         preview={
           preview
-            ? { editHref: `/admin/c/${collection}/${doc.id}`, status: doc.status }
+            ? { editHref: `/admin/c/${collection}/${doc.id}`, status: doc.status, reviewToggle }
             : undefined
         }
       >

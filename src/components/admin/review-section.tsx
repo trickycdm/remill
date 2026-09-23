@@ -58,6 +58,7 @@ export function ReviewLinksSection({
             <div class="flex min-w-0 flex-col gap-1">
               <span class="truncate text-sm font-medium text-ink">{l.label ?? 'Review link'}</span>
               <span class="flex flex-wrap items-center gap-1">
+                <Badge tone="success">Can comment</Badge>
                 <Badge tone={l.personal ? 'accent' : 'neutral'}>{l.personal ? 'Personal' : 'Open'}</Badge>
                 <Badge tone={l.reviewMode === 'group' ? 'info' : 'neutral'}>
                   {l.reviewMode === 'group' ? 'Group' : 'Individual'}

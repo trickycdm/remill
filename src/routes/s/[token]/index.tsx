@@ -195,7 +195,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       c.header('Cache-Control', 'private, no-store');
       const panel = await reviewerPanel(await reviewerRequest(c));
       return c.render(
-        <PublicShell settings={settings}>
+        <PublicShell settings={settings} reviewInvite>
           {content}
           {panel}
           <Script src="/src/client/review.ts" />
