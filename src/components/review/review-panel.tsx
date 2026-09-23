@@ -317,7 +317,7 @@ function ReviewerHeader({ base, viewer }: { base: string; viewer: Extract<Review
 function NameForm({ base }: { base: string }) {
   return (
     <form class="flex flex-col gap-3" data-on:submit={post(`${base}/identify`)}>
-      <p class="text-sm text-ink">Add your name to start commenting. It's shown next to your comments.</p>
+      <p class="text-sm text-ink">Your name is shown next to your comments.</p>
       <FormField fieldId="rm-review-name" label="Your name" required>
         <Input id="rm-review-name" name="name" required maxlength={MAX_REVIEWER_NAME_CHARS} autocomplete="name" />
       </FormField>
@@ -334,14 +334,30 @@ export function ReviewPanel({ base, viewer, threads, blocks, flash }: ReviewPane
   return (
     <aside
       id={REVIEW_PANEL_ID}
-      class="rm-review-panel flex flex-col gap-4 border-l border-border bg-surface p-4"
+      // Focusable so the "Go to comments" links land keyboard focus here, not
+      // just scroll (on wide screens the panel is fixed and never scrolls).
+      tabindex={-1}
+      class="rm-review-panel flex flex-col gap-4 border-l border-border bg-surface p-4 focus-visible:outline-2 focus-visible:outline-ring"
       aria-label="Review comments"
       data-rm-review
     >
+      {/* Narrow screens: the panel flows after the article, so a reader at the
+          top can't see it — a sticky jump button keeps it one tap away. */}
+      <a
+        href={`#${REVIEW_PANEL_ID}`}
+        class="fixed right-4 bottom-4 z-40 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:hidden"
+      >
+        Comments ({open.length})
+      </a>
       <header class="flex flex-col gap-2">
         <h2 class="font-display text-lg text-ink">
           Review <span class="text-sm font-normal text-ink-muted">· {open.length} open</span>
         </h2>
+        <p class="text-sm text-ink-muted">
+          {viewer.kind === 'needs_name'
+            ? 'Add your name below, then select any text in the page to comment on it.'
+            : 'Select any text in the page to comment on it, or leave a general comment below.'}
+        </p>
         {viewer.kind === 'reviewer' ? <ReviewerHeader base={base} viewer={viewer} /> : null}
       </header>
       {flash ? (
