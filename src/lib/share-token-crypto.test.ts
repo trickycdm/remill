@@ -19,10 +19,12 @@ describe('share-token-crypto', () => {
   it('returns null for a tampered ciphertext', async () => {
     const enc = await encryptToken(SECRET, TOKEN);
     const parts = enc.split('.');
-    // Flip the last character of the ciphertext segment.
-    const last = parts[2].slice(-1);
-    const flipped = last === 'A' ? 'B' : 'A';
-    parts[2] = `${parts[2].slice(0, -1)}${flipped}`;
+    // Change the FIRST ciphertext character: all six of its bits are payload.
+    // (The last base64url character can carry unused padding bits, so
+    // changing it may decode to identical bytes.)
+    const first = parts[2][0];
+    const changed = first === 'A' ? 'B' : 'A';
+    parts[2] = `${changed}${parts[2].slice(1)}`;
     expect(await decryptToken(SECRET, parts.join('.'))).toBeNull();
   });
 
