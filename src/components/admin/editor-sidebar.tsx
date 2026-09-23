@@ -1,17 +1,23 @@
 /**
- * EditorSidebar — the document editor's action/metadata rail (item 4). The form
+ * EditorSidebar — the document editor's action/metadata rail. The form
  * (GeneratedForm) is content-only; every action and all metadata live here in a
- * sticky right column, with one clear hierarchy: a single primary Save, a
- * secondary Publish, and an isolated destructive Delete.
+ * right column that scrolls independently once it's taller than the viewport, with
+ * one clear hierarchy: a single primary Save, a secondary Publish, a Visibility
+ * card, a Sharing slot, Details, Revisions, and an isolated destructive action
+ * quietly footed at the end.
  *
  * The Save button lives here but drives the form in the left column via
  * `form="editor-form"` association — an associated submit fires the form's own
  * `@post`, so there are no nested forms and no route changes. `$busy` is a
  * page-global Datastar signal (seeded by the form), so the spinner works across
- * columns. Publish/Restore/Delete are their own small native forms (siblings).
+ * columns. Publish/Schedule/Restore/Delete are their own small native forms
+ * (siblings), so they keep working with no JavaScript at all.
  *
- * `mode: 'create'` shows only the Actions card (nothing exists yet to publish,
- * revise, or delete); `'edit'` adds Details, Revisions, and Delete.
+ * `mode: 'create'` shows only the Save card (nothing exists yet to publish,
+ * revise, share, or delete); `'edit'` adds the rest. The `shareSlot` prop is a
+ * composition seam — the route passes `<SharePanel />` through it so this file
+ * never imports that component's internals, but the two still render as one
+ * sticky rail.
  */
 
 import type { JSX } from 'hono/jsx/jsx-runtime';
@@ -21,7 +27,7 @@ import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { publicUrlOf } from '@/lib/def-helpers';
-import { Button, Badge, Card, CardHeader, CardTitle, CardContent, Dialog, Input } from '@/components/ui';
+import { Button, Card, CardHeader, CardTitle, CardContent, Dialog, Input } from '@/components/ui';
 
 type Revision = { readonly revision: number; readonly savedAt: string };
 
@@ -30,7 +36,6 @@ type EditorSidebarProps =
       mode: 'create';
       formId: string;
       submitLabel: string;
-      cancelHref: string;
       def: CollectionDefinition;
       settings?: SiteSettings;
     }
@@ -38,30 +43,84 @@ type EditorSidebarProps =
       mode: 'edit';
       formId: string;
       submitLabel: string;
-      cancelHref: string;
       def: CollectionDefinition;
       slug: string;
       id: string;
       doc: DocumentRecord;
       revisions: readonly Revision[];
+      authorName: string;
       settings?: SiteSettings;
       /** The site's absolute base URL (resolveBaseUrl), for showing the unlisted
        *  doc_ URL (D50). Falls back to a relative path when absent. */
       baseUrl?: string;
+      /** The Share card (SharePanel), composed in — undefined when neither
+       *  share_link nor manage_access is held. */
+      shareSlot?: unknown;
     };
 
 const VISIBILITY_OPTIONS: { value: Visibility; label: string; help: string }[] = [
-  { value: 'public', label: 'Public', help: 'Listed on the site, in feeds and search.' },
-  {
-    value: 'unlisted',
-    label: 'Unlisted',
-    help: 'Anyone with the link can read it. Not listed anywhere; not indexed.',
-  },
-  { value: 'private', label: 'Private', help: 'Only people you share a link or access with.' },
+  { value: 'public', label: 'Public', help: 'Listed on the site, in feeds and search' },
+  { value: 'unlisted', label: 'Unlisted', help: 'Only people with the link' },
+  { value: 'private', label: 'Private', help: 'Only through share links' },
 ];
 
 const RADIO_BASE =
   'mt-0.5 size-4 shrink-0 border border-border-strong bg-surface accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+/** A tiny `<details>` chevron shared by every rail disclosure — matches the
+ *  ScopePicker "Individual actions" precedent (a plain glyph, no icon import). */
+function DisclosureChevron(): JSX.Element {
+  return (
+    <span class="transition-transform group-open:rotate-90" aria-hidden="true">
+      ›
+    </span>
+  );
+}
+
+/** A readonly value + "Copy" button, wired via Datastar (no client island): the
+ *  button reads the input's current DOM value, writes it to the clipboard, and
+ *  flips a per-instance signal that drives an aria-live "Copied" announcement.
+ *  Shared between the Visibility card's unlisted URL and the Details card's ID. */
+function CopyField({
+  id,
+  label,
+  value,
+  mono = true,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  mono?: boolean;
+}): JSX.Element {
+  const signal = `copied_${id.replace(/[^a-zA-Z0-9]/g, '')}`;
+  return (
+    <div class="flex flex-col gap-1" data-signals={`{${signal}: false}`}>
+      <label for={id} class="text-[13px] font-medium text-ink-muted">
+        {label}
+      </label>
+      <div class="flex items-center gap-2">
+        <Input
+          id={id}
+          type="text"
+          value={value}
+          readonly
+          size="sm"
+          class={mono ? 'font-mono text-xs' : undefined}
+          data-on:focus="evt.target.select()"
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          data-on:click={`navigator.clipboard.writeText(document.getElementById('${id}').value).then(() => { $${signal} = true; setTimeout(() => $${signal} = false, 2000) })`}
+        >
+          Copy
+        </Button>
+      </div>
+      <span role="status" aria-live="polite" class="sr-only" data-text={`$${signal} ? 'Copied' : ''`} />
+    </div>
+  );
+}
 
 /** One `<dl>` row: a mono-caps label and its value. */
 function MetaRow({ label, children }: { label: string; children: unknown }): JSX.Element {
@@ -75,10 +134,13 @@ function MetaRow({ label, children }: { label: string; children: unknown }): JSX
 
 export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
   return (
-    <aside class="flex flex-col gap-5 self-start lg:sticky lg:top-24" aria-label="Document actions">
-      {/* ── Actions ─────────────────────────────────────────────────────────── */}
+    <aside
+      class="flex min-w-0 flex-col gap-5 self-start lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-x-hidden lg:overflow-y-auto lg:overscroll-contain lg:p-1"
+      aria-label="Document actions"
+    >
+      {/* ── Publish ───────────────────────────────────────────────────────── */}
       <Card>
-        <CardContent class="flex flex-col gap-3">
+        <CardContent class="flex flex-col gap-3 pt-5">
           {/* Associated submit: fires #editor-form's @post from outside the form. */}
           <Button type="submit" form={props.formId} busy="$busy" class="w-full">
             {props.submitLabel}
@@ -111,85 +173,30 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
                 </Button>
               </form>
             ) : (
-              <form
-                method="post"
-                action={`/admin/c/${props.slug}/${props.id}/schedule`}
-                class="flex flex-col gap-2 border-t border-border pt-3"
-              >
-                <label for="rm-publish-at" class="text-sm font-medium text-ink-muted">
-                  Publish at
-                </label>
-                <Input id="rm-publish-at" name="publish_at" type="datetime-local" size="sm" required />
-                <Button type="submit" variant="secondary" size="sm" class="w-full">
-                  Schedule
-                </Button>
-              </form>
+              <details class="group border-t border-border pt-3">
+                <summary class="inline-flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  <DisclosureChevron />
+                  Schedule for later
+                </summary>
+                <form
+                  method="post"
+                  action={`/admin/c/${props.slug}/${props.id}/schedule`}
+                  class="mt-3 flex flex-col gap-2"
+                >
+                  <label for="rm-publish-at" class="text-sm font-medium text-ink-muted">
+                    Publish at
+                  </label>
+                  <Input id="rm-publish-at" name="publish_at" type="datetime-local" size="sm" required />
+                  <Button type="submit" variant="secondary" size="sm" class="w-full">
+                    Schedule
+                  </Button>
+                </form>
+              </details>
             )
           ) : null}
 
-          {/* Visibility (D50) — only meaningful when the collection is
-              publicRead; without it, everything is already private. */}
-          {props.mode === 'edit' && props.def.access?.publicRead ? (
-            <form
-              method="post"
-              action={`/admin/c/${props.slug}/${props.id}/visibility`}
-              class="flex flex-col gap-3 border-t border-border pt-3"
-            >
-              <fieldset class="flex flex-col gap-3">
-                <legend class="text-sm font-medium text-ink-muted">Visibility</legend>
-                {VISIBILITY_OPTIONS.map((opt) => (
-                  <label class="flex items-start gap-2">
-                    <input
-                      type="radio"
-                      name="visibility"
-                      value={opt.value}
-                      checked={props.doc.visibility === opt.value}
-                      class={RADIO_BASE}
-                    />
-                    <span class="flex flex-col gap-0.5">
-                      <span class="text-sm font-medium text-ink">{opt.label}</span>
-                      <span class="text-[13px] leading-normal text-ink-muted">
-                        {opt.help}
-                        {opt.value !== 'public' && props.doc.visibility === 'public'
-                          ? ' Switching away from Public means the current slug link will stop working.'
-                          : ''}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
-
-              {props.doc.visibility === 'unlisted' && props.doc.status === 'published' ? (
-                <div class="flex flex-col gap-1">
-                  <label for="rm-unlisted-url" class="text-[13px] font-medium text-ink-muted">
-                    Unlisted URL
-                  </label>
-                  <Input
-                    id="rm-unlisted-url"
-                    type="text"
-                    value={publicUrlOf(props.def, props.doc, props.baseUrl ?? '')}
-                    readonly
-                    aria-label="Unlisted document URL"
-                    data-on:focus="evt.target.select()"
-                  />
-                </div>
-              ) : null}
-
-              <Button type="submit" variant="secondary" size="sm" class="w-full">
-                Update visibility
-              </Button>
-            </form>
-          ) : null}
-
-          <a
-            href={props.cancelHref}
-            class="rounded-md py-1 text-center text-sm text-ink-muted hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            Cancel
-          </a>
-
           {/* Morph target for the inline save-error fragment (200, #form-result). */}
-          <div id="form-result" />
+          <div id="form-result" class="empty:hidden" />
         </CardContent>
       </Card>
 
@@ -201,6 +208,70 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
         </p>
       ) : (
         <>
+          {/* ── Visibility (D50) — only meaningful when the collection is
+              publicRead; without it, everything is already private. ────────── */}
+          {props.def.access?.publicRead ? (
+            <Card>
+              <CardHeader>
+                <CardTitle as="h2">Visibility</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form
+                  method="post"
+                  action={`/admin/c/${props.slug}/${props.id}/visibility`}
+                  class="flex flex-col gap-3"
+                  data-signals={`{visibility: '${props.doc.visibility ?? 'public'}'}`}
+                >
+                  <fieldset class="flex flex-col gap-3">
+                    <legend class="sr-only">Visibility</legend>
+                    {VISIBILITY_OPTIONS.map((opt) => (
+                      <label class="flex items-start gap-2">
+                        <input
+                          type="radio"
+                          name="visibility"
+                          value={opt.value}
+                          checked={props.doc.visibility === opt.value}
+                          class={RADIO_BASE}
+                          data-bind="visibility"
+                        />
+                        <span class="flex flex-col gap-0.5">
+                          <span class="text-sm font-medium text-ink">{opt.label}</span>
+                          <span class="text-[13px] leading-normal text-ink-muted">{opt.help}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+
+                  {(props.doc.visibility ?? 'public') === 'public' ? (
+                    <p class="text-[13px] leading-normal text-ink-subtle">
+                      Unlisted and Private retire the slug URL.
+                    </p>
+                  ) : null}
+
+                  {props.doc.visibility === 'unlisted' && props.doc.status === 'published' ? (
+                    <CopyField
+                      id="rm-unlisted-url"
+                      label="Unlisted URL"
+                      value={publicUrlOf(props.def, props.doc, props.baseUrl ?? '')}
+                    />
+                  ) : null}
+
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    size="sm"
+                    class="self-start"
+                    data-attr:disabled={`$visibility === '${props.doc.visibility ?? 'public'}'`}
+                  >
+                    Apply
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {props.shareSlot}
+
           {/* ── Details ───────────────────────────────────────────────────────── */}
           <Card>
             <CardHeader>
@@ -208,22 +279,22 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
             </CardHeader>
             <CardContent>
               <dl class="flex flex-col gap-2.5 text-sm">
-                {/* lifecycle:'none' suppresses the status affordances (B4). */}
-                {hasLifecycle(props.def) ? (
-                  <MetaRow label="Status">
-                    <Badge tone={props.doc.status === 'published' ? 'success' : 'neutral'}>{props.doc.status}</Badge>
+                <MetaRow label="Updated">
+                  <time dateTime={props.doc.updatedAt}>{formatDate(props.doc.updatedAt, props.settings)}</time>
+                </MetaRow>
+                <MetaRow label="Created">
+                  <time dateTime={props.doc.createdAt}>{formatDate(props.doc.createdAt, props.settings)}</time>
+                </MetaRow>
+                {hasLifecycle(props.def) && props.doc.publishedAt ? (
+                  <MetaRow label="Published">
+                    <time dateTime={props.doc.publishedAt}>{formatDate(props.doc.publishedAt, props.settings)}</time>
                   </MetaRow>
                 ) : null}
-                <MetaRow label="Updated">{formatDate(props.doc.updatedAt, props.settings)}</MetaRow>
-                <MetaRow label="Created">{formatDate(props.doc.createdAt, props.settings)}</MetaRow>
-                {hasLifecycle(props.def) && props.doc.publishedAt ? (
-                  <MetaRow label="Published">{formatDate(props.doc.publishedAt, props.settings)}</MetaRow>
-                ) : null}
-                <MetaRow label="Author">{props.doc.createdBy ?? '—'}</MetaRow>
-                <MetaRow label="ID">
-                  <code class="font-mono text-xs">{props.doc.id}</code>
-                </MetaRow>
+                <MetaRow label="Author">{props.authorName}</MetaRow>
               </dl>
+              <div class="mt-3 border-t border-border pt-3">
+                <CopyField id="rm-doc-id" label="ID" value={props.doc.id} />
+              </div>
             </CardContent>
           </Card>
 
@@ -249,7 +320,9 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
                     <span class="font-mono text-xs text-ink-subtle">
                       #{r.revision} · {r.savedAt.slice(0, 16).replace('T', ' ')}
                     </span>
-                    {r.revision !== props.revisions[0]?.revision && (
+                    {r.revision === props.revisions[0]?.revision ? (
+                      <span class="text-xs font-medium text-ink-subtle">Current</span>
+                    ) : (
                       <form method="post" action={`/admin/c/${props.slug}/${props.id}/restore`} class="contents">
                         <input type="hidden" name="revision" value={String(r.revision)} />
                         <button type="submit" class="rounded-sm text-xs text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
@@ -263,14 +336,15 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
             </CardContent>
           </Card>
 
-          {/* ── Delete (isolated destructive action) ──────────────────────────── */}
+          {/* ── Delete (isolated destructive action, quietly footed) ────────── */}
           <div class="border-t border-border pt-4">
             <Button
-              variant="danger"
+              variant="ghost"
               size="sm"
+              class="text-danger! hover:bg-danger-soft hover:text-danger!"
               data-on:click="document.getElementById('rm-delete-doc').showModal()"
             >
-              Delete…
+              Move to trash…
             </Button>
             <Dialog
               id="rm-delete-doc"

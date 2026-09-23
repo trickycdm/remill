@@ -144,8 +144,10 @@ test.describe.serial('Roadmap — relations, graph, lifecycle, publish & share',
     // A draft in `posts` (not publicRead) — maximally private.
     const docId = await createDoc(page, 'posts', { title: 'Secret Share Target' });
 
-    // Mint the link from the Share panel; the plaintext URL is shown exactly once.
-    await page.getByRole('button', { name: /Create share link/i }).click();
+    // Mint the link from the Share panel (behind a disclosure); the plaintext
+    // URL is shown exactly once.
+    await page.locator('summary', { hasText: 'New share link' }).click();
+    await page.getByRole('button', { name: 'Create link', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Share link created' })).toBeVisible();
     const url = await page.getByLabel('Share link URL').inputValue();
     expect(url).toContain('/s/rms_');

@@ -38,7 +38,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         ]}
         title={`New ${def.name}`}
       />
-      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div class="max-w-2xl">
           <GeneratedForm
             def={def}
@@ -48,13 +48,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             renderActions={false}
           />
         </div>
-        <EditorSidebar
-          mode="create"
-          formId="editor-form"
-          submitLabel={`Create ${def.name}`}
-          cancelHref={`/admin/c/${slug}`}
-          def={def}
-        />
+        <EditorSidebar mode="create" formId="editor-form" submitLabel={`Create ${def.name}`} def={def} />
       </div>
     </AdminShell>,
   );

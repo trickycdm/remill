@@ -1,20 +1,29 @@
 /**
- * Share panel — two independent sections on the edit view (D51):
+ * SharePanel — the editor rail's Share card (D51). One Card, two independently
+ * gated subsections, divided by a hairline:
  *
- *  - **Share links**, shown to anyone holding `share_link` on the document
- *    (editors included). Optional label, password, and expiry; no email
- *    field — email is a secondary action on the result page (`share.tsx`),
- *    decoupled from creation.
- *  - **People & roles**, the pre-existing item-grant form — `manage_access` only.
+ *  - **Links**, shown to anyone holding `share_link` on the document (editors
+ *    included). Optional label, password, and expiry; no email field — email is
+ *    a secondary action on the result page (`share.tsx`), decoupled from
+ *    creation.
+ *  - **People & roles**, the item-grant form — `manage_access` only.
+ *
+ * Composed into the rail through `EditorSidebar`'s `shareSlot` prop, so this
+ * file stays presentational and doesn't need to know about Publish/Details/etc.
  */
 
+import type { JSX } from 'hono/jsx/jsx-runtime';
 import type { ItemGrantRecord } from '@/db/queries/grants';
 import { personaOf, PERSONA_LABEL } from '@/lib/persona';
-import { publicUrlOf, isAnonymouslyReadable } from '@/lib/def-helpers';
+import { isAnonymouslyReadable } from '@/lib/def-helpers';
+import { formatDate } from '@/lib/format-date';
 import type { Visibility } from '@/lib/visibility';
 import type { CollectionDefinition } from '@/fields/types';
+import type { SiteSettings } from '@/services/settings';
 import {
   Card,
+  CardHeader,
+  CardTitle,
   CardContent,
   Badge,
   Button,
@@ -22,12 +31,34 @@ import {
   Select,
   Input,
   Checkbox,
-  ScopePicker,
   ACCESS_ACTION_LABELS,
 } from '@/components/ui';
 
 /** Actions meaningful to grant on a single document. */
 const SHARE_ACTIONS = ['read', 'update', 'delete', 'publish'] as const;
+
+/** A tiny `<details>` chevron shared with editor-sidebar.tsx's disclosures. */
+function DisclosureChevron(): JSX.Element {
+  return (
+    <span class="transition-transform group-open:rotate-90" aria-hidden="true">
+      ›
+    </span>
+  );
+}
+
+function Eyebrow({ children }: { children: unknown }): JSX.Element {
+  return (
+    <p class="font-mono text-eyebrow font-medium tracking-[0.1em] text-ink-subtle uppercase">{children}</p>
+  );
+}
+
+function ExpiryMeta({ expiresAt, settings }: { expiresAt: string | null; settings?: SiteSettings }): JSX.Element {
+  return (
+    <span class="font-mono text-xs text-ink-subtle">
+      {expiresAt ? `· expires ${formatDate(expiresAt, settings)}` : '· never expires'}
+    </span>
+  );
+}
 
 export interface ShareSubject {
   readonly id: string;
@@ -45,98 +76,212 @@ export interface ShareDoc {
   readonly visibility?: Visibility;
 }
 
-function ShareLinksSection({
-  slug,
+function LinksSection({
   id,
   def,
   doc,
   links,
-  baseUrl,
+  action,
+  settings,
 }: {
-  slug: string;
   id: string;
   def: CollectionDefinition;
   doc: ShareDoc;
   links: ItemGrantRecord[];
-  baseUrl: string;
+  action: string;
+  settings?: SiteSettings;
 }) {
-  const action = `/admin/c/${slug}/${id}/share`;
   const alreadyPublic = isAnonymouslyReadable(def, doc);
-  const publicUrl = alreadyPublic ? publicUrlOf(def, doc, baseUrl) : null;
 
   return (
-    <Card class="mt-8">
-      <CardContent class="pt-6">
-        <h2 class="mb-1 font-display text-display-sm">Share links</h2>
-        <p class="mb-4 text-sm text-ink-subtle">
-          Mint a read-only link anyone can open — no account needed. Optionally require a password.
-        </p>
+    <div class="flex flex-col gap-3">
+      <Eyebrow>Links</Eyebrow>
 
-        {alreadyPublic && publicUrl ? (
-          <div role="status" class="mb-4 rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm text-warning">
-            This document is already readable at <span class="font-mono">{publicUrl}</span>. Links and
-            passwords don't restrict that — set visibility to Private to require a link.
-          </div>
-        ) : null}
-
-        <div class="mb-5 flex flex-col gap-2">
-          {links.length === 0 ? (
-            <p class="text-sm text-ink-subtle">No share links yet.</p>
-          ) : (
-            links.map((g) => (
-              <div class="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2">
-                <span class="text-sm font-medium text-ink">
-                  {g.label ?? `link …${g.subjectId.slice(0, 8)}`}
-                </span>
-                {g.hasPassword ? <Badge tone="accent">Password</Badge> : null}
-                {g.expiresAt && (
-                  <span class="font-mono text-xs text-ink-subtle">until {g.expiresAt.slice(0, 16).replace('T', ' ')}</span>
-                )}
-                <form method="post" action={action} class="ml-auto">
-                  <input type="hidden" name="op" value="revoke_link" />
-                  <input type="hidden" name="grantId" value={g.id} />
-                  <Button type="submit" variant="ghost" size="sm">
-                    Revoke
-                  </Button>
-                </form>
-              </div>
-            ))
-          )}
+      {alreadyPublic ? (
+        <div role="status" class="rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm text-warning">
+          Anyone can already read this at its public URL. Set visibility to Private to require a link.
         </div>
+      ) : null}
 
-        <form
-          method="post"
-          action={action}
-          class="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-end"
-        >
+      <div class="flex flex-col gap-2">
+        {links.length === 0 ? (
+          <p class="text-sm text-ink-subtle">No links yet.</p>
+        ) : (
+          links.map((g) => (
+            <div class="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2">
+              <div class="flex min-w-0 flex-col gap-0.5">
+                <span class="truncate text-sm font-medium text-ink">{g.label ?? 'Untitled link'}</span>
+                <span class="flex items-center gap-1 font-mono text-xs text-ink-subtle">
+                  {g.hasPassword ? 'Password' : 'No password'}
+                  <ExpiryMeta expiresAt={g.expiresAt} settings={settings} />
+                </span>
+              </div>
+              <form method="post" action={action}>
+                <input type="hidden" name="op" value="revoke_link" />
+                <input type="hidden" name="grantId" value={g.id} />
+                <Button type="submit" variant="ghost" size="sm">
+                  Revoke
+                </Button>
+              </form>
+            </div>
+          ))
+        )}
+      </div>
+
+      <details class="group">
+        <summary class="inline-flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <DisclosureChevron />
+          New share link
+        </summary>
+        <form method="post" action={action} class="mt-3 flex flex-col gap-3">
           <input type="hidden" name="op" value="link" />
           <FormField fieldId={`share-link-label-${id}`} label="Label (optional)">
-            <Input id={`share-link-label-${id}`} name="label" type="text" placeholder="e.g. Acme review" />
+            <Input id={`share-link-label-${id}`} name="label" type="text" placeholder="e.g. Acme review" size="sm" />
           </FormField>
           <FormField fieldId={`share-link-password-${id}`} label="Password (optional)">
-            <div class="flex items-center gap-2">
+            <div class="relative" data-signals={`{showLinkPassword_${id}: false}`}>
               <Input
                 id={`share-link-password-${id}`}
                 name="password"
                 type="password"
                 placeholder="At least 8 characters"
-                data-attr:type="$showLinkPassword ? 'text' : 'password'"
+                size="sm"
+                class="pr-16"
+                data-attr:type={`$showLinkPassword_${id} ? 'text' : 'password'`}
               />
-              <label class="flex items-center gap-1.5 whitespace-nowrap text-xs text-ink-subtle">
-                <Checkbox aria-label="Show password" data-bind="showLinkPassword" />
+              <button
+                type="button"
+                class="absolute top-1/2 right-2 -translate-y-1/2 rounded-sm text-xs font-medium text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                aria-controls={`share-link-password-${id}`}
+                data-attr:aria-pressed={`$showLinkPassword_${id}`}
+                data-on:click={`$showLinkPassword_${id} = !$showLinkPassword_${id}`}
+                data-text={`$showLinkPassword_${id} ? 'Hide' : 'Show'`}
+              >
                 Show
-              </label>
+              </button>
             </div>
           </FormField>
           <FormField fieldId={`share-link-expiry-${id}`} label="Expires (optional)">
-            <Input id={`share-link-expiry-${id}`} name="expiresAt" type="datetime-local" />
+            <Input id={`share-link-expiry-${id}`} name="expiresAt" type="datetime-local" size="sm" />
           </FormField>
-          <Button type="submit" variant="secondary">
-            Create share link
+          <Button type="submit" variant="secondary" size="sm" class="w-full">
+            Create link
           </Button>
         </form>
-      </CardContent>
-    </Card>
+      </details>
+    </div>
+  );
+}
+
+function GrantsSection({
+  id,
+  grants,
+  principals,
+  roles,
+  teams,
+  action,
+  settings,
+}: {
+  id: string;
+  grants: ItemGrantRecord[];
+  principals: ShareSubject[];
+  roles: { slug: string; name: string }[];
+  teams: { id: string; name: string }[];
+  action: string;
+  settings?: SiteSettings;
+}) {
+  const nameById = new Map(principals.map((p) => [p.id, p.name]));
+  const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
+
+  return (
+    <div class="flex flex-col gap-3 border-t border-border pt-4">
+      <Eyebrow>People &amp; roles</Eyebrow>
+
+      <div class="flex flex-col gap-2">
+        {grants.length === 0 ? (
+          <p class="text-sm text-ink-subtle">No one has item-level access.</p>
+        ) : (
+          grants.map((g) => (
+            <div class="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2">
+              <div class="flex min-w-0 flex-col gap-0.5">
+                <span class="flex items-center gap-1.5">
+                  <span class="truncate text-sm font-medium text-ink">
+                    {g.subjectKind === 'principal'
+                      ? (nameById.get(g.subjectId) ?? g.subjectId)
+                      : g.subjectKind === 'team'
+                        ? (teamNameById.get(g.subjectId) ?? g.subjectId)
+                        : g.subjectId}
+                  </span>
+                  <Badge tone={g.subjectKind === 'role' ? 'accent' : g.subjectKind === 'team' ? 'success' : 'info'}>
+                    {g.subjectKind}
+                  </Badge>
+                </span>
+                <span class="font-mono text-xs text-ink-subtle">
+                  {g.actions.join(', ')} <ExpiryMeta expiresAt={g.expiresAt} settings={settings} />
+                </span>
+              </div>
+              <form method="post" action={action}>
+                <input type="hidden" name="op" value="revoke" />
+                <input type="hidden" name="grantId" value={g.id} />
+                <Button type="submit" variant="ghost" size="sm">
+                  Revoke
+                </Button>
+              </form>
+            </div>
+          ))
+        )}
+      </div>
+
+      <details class="group">
+        <summary class="inline-flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <DisclosureChevron />
+          Add person or role
+        </summary>
+        <form method="post" action={action} class="mt-3 flex flex-col gap-3">
+          <input type="hidden" name="op" value="grant" />
+          <FormField fieldId={`share-subject-${id}`} label="Grant to">
+            <Select id={`share-subject-${id}`} name="subject" size="sm">
+              <optgroup label="People, services & agents">
+                {principals.map((p) => (
+                  <option value={`principal:${p.id}`}>
+                    {p.name} · {PERSONA_LABEL[personaOf(p.kind, p.subtype)]}
+                  </option>
+                ))}
+              </optgroup>
+              {teams.length > 0 && (
+                <optgroup label="Teams">
+                  {teams.map((t) => (
+                    <option value={`team:${t.id}`}>{t.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Roles">
+                {roles.map((r) => (
+                  <option value={`role:${r.slug}`}>{r.name}</option>
+                ))}
+              </optgroup>
+            </Select>
+          </FormField>
+          <fieldset>
+            <legend class="mb-2 text-sm font-medium text-ink">Can</legend>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+              {SHARE_ACTIONS.map((a) => (
+                <label class="flex items-center gap-2 text-sm text-ink">
+                  <Checkbox name="action" value={a} checked={a === 'read'} />
+                  {ACCESS_ACTION_LABELS[a]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <FormField fieldId={`share-expiry-${id}`} label="Expires (optional)">
+            <Input id={`share-expiry-${id}`} name="expiresAt" type="datetime-local" size="sm" />
+          </FormField>
+          <Button type="submit" variant="secondary" size="sm" class="w-full">
+            Grant access
+          </Button>
+        </form>
+      </details>
+    </div>
   );
 }
 
@@ -151,132 +296,51 @@ export function SharePanel({
   doc,
   links,
   baseUrl,
+  settings,
 }: {
   slug: string;
   id: string;
   /** Present only for principals holding `manage_access` — renders the
-   *  People & roles section below Share links. */
+   *  People & roles subsection below Links. */
   grants?: ItemGrantRecord[];
   principals?: ShareSubject[];
   roles?: { slug: string; name: string }[];
   teams?: { id: string; name: string }[];
-  /** Present only for principals holding `share_link` — renders the Share
-   *  links section above the People & roles grants. */
+  /** Present only for principals holding `share_link` — renders the Links
+   *  subsection above People & roles. */
   def?: CollectionDefinition;
   doc?: ShareDoc;
   links?: ItemGrantRecord[];
   baseUrl?: string;
+  settings?: SiteSettings;
 }) {
   const action = `/admin/c/${slug}/${id}/share`;
-  const nameById = new Map((principals ?? []).map((p) => [p.id, p.name]));
-  const teamNameById = new Map((teams ?? []).map((t) => [t.id, t.name]));
+  const hasLinks = !!(def && doc && links && baseUrl);
+  const hasGrants = !!(grants && principals && roles && teams);
+
+  if (!hasLinks && !hasGrants) return null;
 
   return (
-    <>
-      {def && doc && links && baseUrl ? (
-        <ShareLinksSection slug={slug} id={id} def={def} doc={doc} links={links} baseUrl={baseUrl} />
-      ) : null}
-
-      {grants && principals && roles && teams ? (
-      <Card class="mt-8">
-        <CardContent class="pt-6">
-          <h2 class="mb-1 font-display text-display-sm">People & roles</h2>
-          <p class="mb-4 text-sm text-ink-subtle">
-            Grant a specific person, service, agent, or role scoped access to this item — without changing
-            their collection-wide role. Grants can expire.
-          </p>
-
-          {/* Active grants */}
-          <div class="mb-5 flex flex-col gap-2">
-            {grants.length === 0 ? (
-              <p class="text-sm text-ink-subtle">No one has been granted item-level access yet.</p>
-            ) : (
-              grants.map((g) => (
-                <div class="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2">
-                  <Badge
-                    tone={
-                      g.subjectKind === 'role'
-                        ? 'accent'
-                        : g.subjectKind === 'team'
-                          ? 'success'
-                          : 'info'
-                    }
-                  >
-                    {g.subjectKind}
-                  </Badge>
-                  <span class="text-sm font-medium text-ink">
-                    {g.subjectKind === 'principal'
-                      ? (nameById.get(g.subjectId) ?? g.subjectId)
-                      : g.subjectKind === 'team'
-                        ? (teamNameById.get(g.subjectId) ?? g.subjectId)
-                        : g.subjectId}
-                  </span>
-                  <span class="flex flex-wrap gap-1">
-                    {g.actions.map((a) => (
-                      <Badge tone="neutral">{a}</Badge>
-                    ))}
-                  </span>
-                  {g.expiresAt && (
-                    <span class="font-mono text-xs text-ink-subtle">until {g.expiresAt.slice(0, 16).replace('T', ' ')}</span>
-                  )}
-                  <form method="post" action={action} class="ml-auto">
-                    <input type="hidden" name="op" value="revoke" />
-                    <input type="hidden" name="grantId" value={g.id} />
-                    <Button type="submit" variant="ghost" size="sm">
-                      Revoke
-                    </Button>
-                  </form>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Grant form */}
-          <form
-            method="post"
+    <Card>
+      <CardHeader>
+        <CardTitle as="h2">Share</CardTitle>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-4">
+        {hasLinks ? (
+          <LinksSection id={id} def={def!} doc={doc!} links={links!} action={action} settings={settings} />
+        ) : null}
+        {hasGrants ? (
+          <GrantsSection
+            id={id}
+            grants={grants!}
+            principals={principals!}
+            roles={roles!}
+            teams={teams!}
             action={action}
-            class="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-end"
-          >
-            <input type="hidden" name="op" value="grant" />
-            <FormField fieldId={`share-subject-${id}`} label="Grant to">
-              <Select id={`share-subject-${id}`} name="subject">
-                <optgroup label="People, services & agents">
-                  {principals.map((p) => (
-                    <option value={`principal:${p.id}`}>
-                      {p.name} · {PERSONA_LABEL[personaOf(p.kind, p.subtype)]}
-                    </option>
-                  ))}
-                </optgroup>
-                {teams.length > 0 && (
-                  <optgroup label="Teams">
-                    {teams.map((t) => (
-                      <option value={`team:${t.id}`}>{t.name}</option>
-                    ))}
-                  </optgroup>
-                )}
-                <optgroup label="Roles">
-                  {roles.map((r) => (
-                    <option value={`role:${r.slug}`}>{r.name}</option>
-                  ))}
-                </optgroup>
-              </Select>
-            </FormField>
-            <ScopePicker
-              idPrefix={`share-${id}`}
-              name="action"
-              groups={[{ label: 'Actions', actions: SHARE_ACTIONS.map((a) => ({ value: a, label: ACCESS_ACTION_LABELS[a] })) }]}
-              checked={new Set(['read'])}
-            />
-            <FormField fieldId={`share-expiry-${id}`} label="Expires (optional)">
-              <Input id={`share-expiry-${id}`} name="expiresAt" type="datetime-local" />
-            </FormField>
-            <Button type="submit" variant="secondary">
-              Grant access
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-      ) : null}
-    </>
+            settings={settings}
+          />
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

@@ -79,9 +79,11 @@ test.describe.serial('Teams — join links, team grants, shared-with-me', () => 
     await page.getByRole('button', { name: /Create /i }).click();
     await page.waitForURL(new RegExp(`/admin/c/${MEMOS}/doc_`));
 
-    // Share panel: pick the team subject (read is pre-checked) and grant.
+    // Share card: pick the team subject (read is pre-checked) and grant, behind
+    // the disclosure.
+    await page.locator('summary', { hasText: 'Add person or role' }).click();
     await page.getByLabel('Grant to').selectOption({ label: TEAM });
-    await page.getByRole('button', { name: /Grant access/i }).click();
+    await page.getByRole('button', { name: 'Grant access', exact: true }).click();
     await expect(page.getByText('team', { exact: true }).first()).toBeVisible();
 
     // The matrix shows the team grant with its resolved name.

@@ -22,7 +22,7 @@ test.describe('D29 — recoverable delete (trash)', () => {
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 
     // Delete via the editor's confirm dialog.
-    await page.getByRole('button', { name: /^Delete/ }).click();
+    await page.getByRole('button', { name: /^Move to trash/ }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
@@ -49,7 +49,7 @@ test.describe('D29 — recoverable delete (trash)', () => {
     await fillMarkdown(page, /^body/i, 'x');
     await page.getByRole('button', { name: /Create Posts/i }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
-    await page.getByRole('button', { name: /^Delete/ }).click();
+    await page.getByRole('button', { name: /^Move to trash/ }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
 
     await page.goto('/admin/trash');

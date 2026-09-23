@@ -151,18 +151,19 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await page.getByRole('button', { name: /Create Posts/i }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 
-    // The Share panel (D51) is visible for a manager, split into "Share links"
-    // and "People & roles" sections.
-    await expect(page.getByRole('heading', { name: 'People & roles', exact: true })).toBeVisible();
+    // The Share card (D51) is visible for a manager, split into "Links" and
+    // "People & roles" subsections.
+    await expect(page.getByText('People & roles', { exact: true })).toBeVisible();
 
-    // Grant read (checked by default) to the reader role.
+    // Grant read (checked by default) to the reader role, behind the disclosure.
+    await page.locator('summary', { hasText: 'Add person or role' }).click();
     await page.getByLabel('Grant to').selectOption('role:reader');
-    await page.getByRole('button', { name: 'Grant access' }).click();
+    await page.getByRole('button', { name: 'Grant access', exact: true }).click();
 
     // The grant now shows with a revoke control.
     await expect(page.getByText('reader', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Revoke' }).click();
-    await expect(page.getByText('No one has been granted item-level access yet.')).toBeVisible();
+    await expect(page.getByText('No one has item-level access.')).toBeVisible();
   });
 
   test('invite a person with a password, then sign in as them', async ({ page, context }) => {

@@ -21,20 +21,24 @@ test.describe('D32 — scheduled publishing', () => {
     await page.getByRole('button', { name: /Create Posts/i }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 
-    // Drafts offer the schedule affordance.
+    // Drafts offer the schedule affordance, behind a disclosure.
+    await page.locator('summary', { hasText: 'Schedule for later' }).click();
     const publishAt = page.getByLabel('Publish at');
     await expect(publishAt).toBeVisible();
     await publishAt.fill('2030-01-01T12:00');
     await page.getByRole('button', { name: 'Schedule', exact: true }).click();
 
-    // Pending state: the scheduled time replaces the input.
+    // Pending state: the scheduled time replaces the input; the header badge
+    // reflects it too.
     await expect(page.getByText(/Scheduled for/i)).toBeVisible();
     await expect(page.getByLabel('Publish at')).toHaveCount(0);
+    await expect(page.getByText('Scheduled', { exact: true })).toBeVisible();
 
     // Cancel restores the schedule form; the doc stays a draft.
     await page.getByRole('button', { name: 'Cancel schedule' }).click();
+    await page.locator('summary', { hasText: 'Schedule for later' }).click();
     await expect(page.getByLabel('Publish at')).toBeVisible();
-    await expect(page.getByText('draft', { exact: true })).toBeVisible();
+    await expect(page.getByText('Draft', { exact: true })).toBeVisible();
   });
 
   test('a published document offers no schedule affordance', async ({ page }) => {
@@ -47,7 +51,7 @@ test.describe('D32 — scheduled publishing', () => {
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 
     await page.getByRole('button', { name: 'Publish', exact: true }).click();
-    await expect(page.getByText('published', { exact: true })).toBeVisible();
+    await expect(page.locator('header').getByText('Published', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Publish at')).toHaveCount(0);
   });
 });
