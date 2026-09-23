@@ -9,7 +9,7 @@
  * document, its index, and its history never drift apart (DATABASE_STANDARDS.md).
  */
 
-import { and, or, eq, sql, desc, count, inArray, type SQL } from 'drizzle-orm';
+import { and, or, eq, sql, desc, count, inArray, getTableColumns, type SQL } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { Database } from '@/db/client';
 import { documents, documentIndex, documentRevisions } from '@/db/schema';
@@ -38,6 +38,10 @@ export interface DocumentRecord {
    *  cleared by the drain, by manual publish, and by cancel. */
   readonly publishAt: string | null;
   readonly visibility: Visibility;
+  /** The current revision number (D54) — MAX(document_revisions.revision), 0
+   *  before the first save lands. Callers echo it back as `expectedRevision` so a
+   *  save based on a stale copy fails instead of overwriting newer work. */
+  readonly revision: number;
 }
 
 /** Which document_index column a field's values live in: number/boolean field
@@ -56,7 +60,17 @@ export interface IndexValue {
   readonly uniqueKey: string | null;
 }
 
-type Row = typeof documents.$inferSelect;
+/** Every document read selects the table's columns plus the current revision
+ *  (D54). The correlated MAX is a single seek on the (document_id, revision)
+ *  unique index. Column names are table-qualified by hand: Drizzle renders
+ *  single-table selects unqualified, and a bare "id" inside the subquery would
+ *  bind to document_revisions.id instead of the outer documents.id. */
+const docColumns = {
+  ...getTableColumns(documents),
+  revision: sql<number>`(SELECT COALESCE(MAX("document_revisions"."revision"), 0) FROM "document_revisions" WHERE "document_revisions"."document_id" = "documents"."id")`,
+};
+
+type Row = typeof documents.$inferSelect & { revision: number };
 
 function toDomain(row: Row): DocumentRecord {
   return {
@@ -70,6 +84,7 @@ function toDomain(row: Row): DocumentRecord {
     publishedAt: row.publishedAt,
     publishAt: row.publishAt,
     visibility: row.visibility as Visibility,
+    revision: Number(row.revision ?? 0),
   };
 }
 
@@ -167,7 +182,7 @@ export async function getDocument(
   _grant: Grant,
 ): Promise<DocumentRecord | null> {
   const rows = await db
-    .select()
+    .select(docColumns)
     .from(documents)
     .where(and(eq(documents.collection, collection), eq(documents.id, id)))
     .limit(1);
@@ -289,7 +304,7 @@ export async function listDocuments(
     ? sql`(SELECT ${opts.sort.kind === 'num' ? documentIndex.valueNum : documentIndex.valueText} FROM ${documentIndex} WHERE ${documentIndex.documentId} = ${documents.id} AND ${documentIndex.fieldKey} = ${opts.sort.fieldKey}) ${opts.sort.dir === 'asc' ? sql`ASC` : sql`DESC`}`
     : sql`${documents.createdAt} DESC, ${documents.id} DESC`;
 
-  let q = db.select().from(documents).where(rowsWhere).orderBy(orderBy).limit(opts.limit).$dynamic();
+  let q = db.select(docColumns).from(documents).where(rowsWhere).orderBy(orderBy).limit(opts.limit).$dynamic();
   if (!useCursor && opts.offset) q = q.offset(opts.offset);
   const rows = await q;
 
@@ -363,7 +378,7 @@ export async function getDocumentsByIds(
   const out: DocumentRecord[] = [];
   for (let i = 0; i < ids.length; i += CHUNK) {
     const rows = await db
-      .select()
+      .select(docColumns)
       .from(documents)
       .where(
         and(
@@ -393,7 +408,7 @@ export async function listBacklinks(
 ): Promise<DocumentRecord[]> {
   if (!fieldKeys.length) return [];
   const rows = await db
-    .select()
+    .select(docColumns)
     .from(documents)
     .where(
       and(
@@ -405,15 +420,6 @@ export async function listBacklinks(
     .orderBy(sql`${documents.createdAt} DESC, ${documents.id} DESC`)
     .limit(limit);
   return rows.map(toDomain);
-}
-
-/** The next 1-based revision number for a document. */
-export async function nextRevisionNumber(db: Database, documentId: string): Promise<number> {
-  const rows = await db
-    .select({ max: sql<number>`COALESCE(MAX(${documentRevisions.revision}), 0)` })
-    .from(documentRevisions)
-    .where(eq(documentRevisions.documentId, documentId));
-  return (rows[0]?.max ?? 0) + 1;
 }
 
 /** Whether a value already exists for an indexed+unique field (excluding one id).

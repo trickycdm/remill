@@ -14,6 +14,7 @@ import { rateLimit, SHARE_EMAIL_RATE_LIMIT } from '@/middleware/rate-limit';
 import { jsonForScript } from '@/lib/json-for-script';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Card, CardContent, Input, Button } from '@/components/ui';
+import { createReviewLink, previewReviewModeFlip, setReviewMode, type ReviewMode } from '@/services/comments';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -42,6 +43,95 @@ export const onRequestPost = factory.createHandlers(requireAuth(), rateLimit('sh
   if (String(body.op) === 'revoke_link') {
     await revokeShareLink(db, principal, collection, id, String(body.grantId ?? ''), now);
     return c.redirect(back, 303);
+  }
+
+  // ── Review links (D55) ────────────────────────────────────────────────
+  if (String(body.op) === 'review_link') {
+    const rawExpiry = String(body.expiresAt ?? '').trim();
+    const name = String(body.reviewerName ?? '').trim();
+    const email = String(body.reviewerEmail ?? '').trim();
+    const password = String(body.password ?? '');
+    const { token } = await createReviewLink(
+      db,
+      principal,
+      {
+        collection,
+        documentId: id,
+        mode: String(body.mode) === 'individual' ? 'individual' : 'group',
+        reviewer: name ? { name, email: email || undefined } : undefined,
+        expiresAt: rawExpiry ? new Date(rawExpiry).toISOString() : undefined,
+        password: password || undefined,
+      },
+      c.env.SESSION_SECRET,
+      now,
+    );
+    // The link stays copyable from the Share card (D53); emailing it is an
+    // optional convenience through the same gated service as share links.
+    if (email) {
+      const settings = await getSettings(db);
+      const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
+      await emailShareLink(
+        db,
+        principal,
+        { collection, documentId: id, url: `${baseUrl}/s/${token}`, email, baseUrl },
+        getEmailTransport(c.env, settings),
+        settings.siteName,
+        now,
+      );
+    }
+    return c.redirect(back, 303);
+  }
+
+  if (String(body.op) === 'review_mode') {
+    const mode: ReviewMode = String(body.mode) === 'individual' ? 'individual' : 'group';
+    await setReviewMode(db, principal, collection, id, String(body.grantId ?? ''), mode, now);
+    return c.redirect(back, 303);
+  }
+
+  // Flipping a mode re-scopes every PAST comment made through the link, so it
+  // goes through a confirmation that says exactly what changes.
+  if (String(body.op) === 'review_mode_preview') {
+    const grantId = String(body.grantId ?? '');
+    const flip = await previewReviewModeFlip(db, principal, collection, id, grantId, now);
+    const people = `${flip.reviewers} reviewer${flip.reviewers === 1 ? '' : 's'}`;
+    const things = `${flip.comments} comment${flip.comments === 1 ? '' : 's'}`;
+    const warning =
+      flip.to === 'group'
+        ? `This will make ${things} from ${people} visible to everyone reviewing this document through a group link.`
+        : `This will hide ${things} from ${people} from other reviewers. Only you (and people with accounts) will still see them.`;
+    return c.render(
+      <AdminShell user={getUser(c)} current="content">
+        <PageHeader
+          breadcrumb={[{ label: 'Content', href: '/admin/c' }, { label: 'Review link' }]}
+          title={flip.to === 'group' ? 'Switch to group review?' : 'Switch to individual review?'}
+        />
+        <Card class="max-w-2xl">
+          <CardContent class="flex flex-col gap-4 pt-6">
+            <p role="alert" class="rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm text-warning">
+              {warning}
+            </p>
+            <p class="text-sm text-ink-muted">
+              {flip.to === 'group'
+                ? 'Reviewers on this link will also start seeing other group reviewers’ comments.'
+                : 'Reviewers on this link will only see their own comments and your shared notes.'}
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <form method="post" action={action}>
+                <input type="hidden" name="op" value="review_mode" />
+                <input type="hidden" name="grantId" value={grantId} />
+                <input type="hidden" name="mode" value={flip.to} />
+                <Button type="submit" variant="primary" size="sm">
+                  {flip.to === 'group' ? 'Switch to group' : 'Switch to individual'}
+                </Button>
+              </form>
+              <Button href={back} variant="secondary" size="sm">
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </AdminShell>,
+    );
   }
 
   if (String(body.op) === 'link') {

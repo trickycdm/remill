@@ -47,6 +47,16 @@ const ARTICLES_FIELDS_JSON = JSON.stringify([
 const ARTICLES_WORKFLOW_JSON = JSON.stringify({ draftPublish: true });
 const ARTICLES_ACCESS_JSON = JSON.stringify({ publicRead: true });
 
+// The `reports` collection the document-review spec drives (D55): an `html`
+// field (rich pages with figures — the block-comment case) plus a markdown
+// summary, rendered through the generic shell. Not publicRead: reviewers reach
+// it through review links, the owner through preview.
+const REPORTS_FIELDS_JSON = JSON.stringify([
+  { key: 'title', type: 'text', required: true, admin: { showInList: true } },
+  { key: 'summary', type: 'markdown' },
+  { key: 'page', type: 'html' },
+]);
+
 // A media row the seeded article references as its hero. No R2 object is needed —
 // the reading spec asserts the <img> alt + placement, not the bytes.
 const HERO_MEDIA_ID = 'med_e2ehero00000000';
@@ -71,6 +81,9 @@ function main(): void {
     // `articles` collection — templated ('article'), publicRead.
     `INSERT OR IGNORE INTO collections (slug, name, shape, fields_json, workflow_json, access_json, protected, template, created_at, updated_at) VALUES (` +
       `'articles', 'Articles', 'collection', ${sqlString(ARTICLES_FIELDS_JSON)}, ${sqlString(ARTICLES_WORKFLOW_JSON)}, ${sqlString(ARTICLES_ACCESS_JSON)}, 0, 'article', ${sqlString(CREATED_AT)}, ${sqlString(CREATED_AT)});`,
+    // `reports` collection — html + markdown, for document review (D55).
+    `INSERT OR IGNORE INTO collections (slug, name, shape, fields_json, workflow_json, access_json, protected, created_at, updated_at) VALUES (` +
+      `'reports', 'Reports', 'collection', ${sqlString(REPORTS_FIELDS_JSON)}, NULL, NULL, 0, ${sqlString(CREATED_AT)}, ${sqlString(CREATED_AT)});`,
     // Hero media row for the seeded article (no R2 object needed).
     `INSERT OR IGNORE INTO media (id, r2_key, filename, mime, size, width, height, duration, alt, variants_json, created_by, created_at) VALUES (` +
       `${sqlString(HERO_MEDIA_ID)}, 'e2e/hero', 'hero.png', 'image/png', 1024, 1200, 630, NULL, ${sqlString(HERO_ALT)}, NULL, NULL, ${sqlString(CREATED_AT)});`,
@@ -88,7 +101,7 @@ function main(): void {
   }
 
   console.log(
-    `\ne2e fixtures seeded on local D1: 'posts' + 'articles' (templated) collections, a hero media row + ${AUTHOR_EMAIL}.`,
+    `\ne2e fixtures seeded on local D1: 'posts' + 'articles' (templated) + 'reports' collections, a hero media row + ${AUTHOR_EMAIL}.`,
   );
 }
 

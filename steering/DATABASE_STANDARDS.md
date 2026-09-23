@@ -46,7 +46,13 @@ Content tables (Phase 1–2), from plan §3:
 | `api_tokens` | principal id, name, **token hash** (never plaintext), narrowing scope mask, expires_at, last_used_at |
 
 Access tables (Phase 3, from plan §4 / ACCESS_CONTROL.md): `principals`, `roles`, `role_permissions`,
-`principal_roles`, `item_grants`, and append-only `audit_log`. **Dynamic content never alters this
+`principal_roles`, `item_grants`, and append-only `audit_log`. Document review (D55): `comments`
+(flat threads — `thread_id` null on a root; anchor + revision + status on roots; CHECK-constrained
+enums; document FK cascade, reviewer FK set-null so a revoked reviewer's comments survive under
+their `author_name` snapshot) and `review_reviewers` (grant FK cascade). A document's current
+revision is `MAX(document_revisions.revision)`, read by a correlated subquery on every document
+select and written as `existing.revision + 1`; the `(document_id, revision)` unique index is the
+optimistic-concurrency backstop (D54). **Dynamic content never alters this
 schema — that is the entire point.** Adding a content type is a row in `collections`, not a migration.
 
 ## `document_index` — the EAV compromise (decision D4)
@@ -95,6 +101,9 @@ The FTS5 escape hatch is realized. Rules that keep it safe:
   `document_trash`, delete the original row (FK cascades clear index/revisions/item_grants),
   delete the FTS row explicitly. There is deliberately NO hard `deleteDocument` query — don't add
   one back.
+- Comments and review links are NOT in the snapshot: deleting a document cascades its
+  `comments`, `review_reviewers` and link grants, so a restored document comes back without its
+  review threads (D55, recorded as out of scope).
 - `document_trash.collection` has **no FK**: the snapshot must survive collection deletion
   (restore then 409s with a recreate-the-collection message).
 - **Restore** re-inserts under the ORIGINAL document id (backlinks/relations resume), re-computing

@@ -8,6 +8,7 @@
 import type { FC } from 'hono/jsx';
 import { resolveField } from '@/fields/registry';
 import type { FieldDescriptor, ExpandedReference, MediaMeta } from '@/fields/types';
+import { ANNOTATABLE_FIELD_TYPES } from '@/lib/anchor/canonical';
 
 export function FieldView({
   field,
@@ -23,6 +24,17 @@ export function FieldView({
   surface: 'admin' | 'public';
 }) {
   const { ft, config } = resolveField(field);
+  // Public html/markdown output is the annotatable prose of a document (D55):
+  // the wrapper tells the review island which field a selection is in, and is
+  // the region whose text the server's canonical text mirrors (src/lib/anchor).
+  if (surface === 'public' && ANNOTATABLE_FIELD_TYPES.has(field.type) && value) {
+    const View = ft.ViewComponent as unknown as FC<{ field: FieldDescriptor; config: unknown; value: unknown; surface: 'public' }>;
+    return (
+      <div data-rm-annotatable data-rm-field={field.key}>
+        <View field={field} config={config} value={value} surface={surface} />
+      </div>
+    );
+  }
   if (ft.ViewComponent) {
     const View = ft.ViewComponent as unknown as FC<{
       field: FieldDescriptor;

@@ -9,6 +9,8 @@
 import { jsonSchemaFor } from '@/fields/registry';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { rendersFor } from '@/templates/renders';
+import { hasAnnotatableFields } from '@/lib/anchor/canonical';
+import { COMMENT_INTENTS } from '@/db/queries/comments';
 import { VISIBILITIES } from '@/lib/visibility';
 import type { CollectionDefinition, JSONSchema } from '@/fields/types';
 
@@ -27,6 +29,73 @@ function documentSchema(def: CollectionDefinition): JSONSchema {
   };
 }
 
+/** Review-thread endpoints (D55) — present on collections with annotatable
+ *  (html/markdown) fields; every call requires the `comment` action. */
+function commentPaths(slug: string, tag: string): Record<string, unknown> {
+  const id = { name: 'id', in: 'path', required: true, schema: { type: 'string' } };
+  const commentId = { name: 'commentId', in: 'path', required: true, schema: { type: 'string' } };
+  const json = (properties: Record<string, unknown>, required: string[] = []) => ({
+    required: true,
+    content: { 'application/json': { schema: { type: 'object', properties, required } } },
+  });
+  return {
+    [`/api/c/${slug}/{id}/comments`]: {
+      parameters: [id],
+      get: {
+        tags: [tag],
+        summary: 'List review threads (roots with replies)',
+        parameters: [
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['open', 'resolved'] } },
+          { name: 'intent', in: 'query', schema: { type: 'string', enum: [...COMMENT_INTENTS] } },
+        ],
+        responses: { '200': { description: 'Threads visible to the caller' } },
+      },
+      post: {
+        tags: [tag],
+        summary: 'Start a review thread',
+        description:
+          'anchor: {kind:"text", quote, field?, prefix?, suffix?, start?, blockId?} | {kind:"block", blockId, field?} | {kind:"document"}; omit for a general comment. A quote not found in the current text falls back to its block, then the document. visibility: internal (default, principals only) | shared (review-link reviewers see it).',
+        requestBody: json(
+          {
+            body: { type: 'string' },
+            anchor: { type: 'object' },
+            intent: { type: 'string', enum: [...COMMENT_INTENTS] },
+            visibility: { type: 'string', enum: ['internal', 'shared'] },
+          },
+          ['body'],
+        ),
+        responses: { '201': { description: 'The new thread' } },
+      },
+    },
+    [`/api/c/${slug}/{id}/comments/{commentId}`]: {
+      parameters: [id, commentId],
+      delete: {
+        tags: [tag],
+        summary: 'Delete a comment (own, or any with update on the document)',
+        responses: { '200': { description: 'Deleted' } },
+      },
+    },
+    [`/api/c/${slug}/{id}/comments/{commentId}/replies`]: {
+      parameters: [id, commentId],
+      post: {
+        tags: [tag],
+        summary: 'Reply to a thread',
+        requestBody: json({ body: { type: 'string' } }, ['body']),
+        responses: { '201': { description: 'The reply' } },
+      },
+    },
+    [`/api/c/${slug}/{id}/comments/{commentId}/resolve`]: {
+      parameters: [id, commentId],
+      post: {
+        tags: [tag],
+        summary: 'Resolve (or with {resolved:false} reopen) a thread',
+        requestBody: json({ resolved: { type: 'boolean' } }),
+        responses: { '200': { description: 'The thread root' } },
+      },
+    },
+  };
+}
+
 function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
   const ref = { $ref: `#/components/schemas/${def.slug}` };
   const tag = def.name;
@@ -36,8 +105,11 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
   const lifecycle = hasLifecycle(def);
   // Visibility (D50) only matters for collections readable by the public.
   const publicRead = def.access?.publicRead === true;
-  // Collections whose template declares text renders advertise ?render=/&budget= (D47).
-  const renders = rendersFor(def.template);
+  // Collections whose template declares text renders advertise ?render=/&budget= (D47);
+  // any collection with annotatable fields adds the `review` render and the
+  // comment endpoints (D55).
+  const annotatable = hasAnnotatableFields(def);
+  const renders = [...rendersFor(def.template), ...(annotatable ? ['review'] : [])];
   return {
     [`/api/c/${def.slug}`]: {
       get: {
@@ -108,13 +180,35 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
               ],
             }
           : {}),
-        responses: { '200': { description: 'The document' } },
+        responses: {
+          '200': {
+            description: 'The document',
+            headers: {
+              ETag: {
+                description: 'The current revision (D54) — send it back as If-Match on PATCH.',
+                schema: { type: 'string' },
+              },
+            },
+          },
+        },
       },
       patch: {
         tags: [tag],
         summary: `Update a ${def.name}`,
+        parameters: [
+          {
+            name: 'If-Match',
+            in: 'header',
+            schema: { type: 'string' },
+            description:
+              'The revision this edit is based on (the ETag from GET). A stale value fails with 409 STALE_REVISION instead of overwriting newer work (D54).',
+          },
+        ],
         requestBody: body,
-        responses: { '200': { description: 'Updated' } },
+        responses: {
+          '200': { description: 'Updated' },
+          '409': { description: 'STALE_REVISION — the document changed since the If-Match revision' },
+        },
       },
       delete: {
         tags: [tag],
@@ -186,6 +280,7 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
           },
         }
       : {}),
+    ...(annotatable ? commentPaths(def.slug, tag) : {}),
     [`/api/c/${def.slug}/{id}/revisions`]: {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       get: {

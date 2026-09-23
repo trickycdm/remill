@@ -6,7 +6,14 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
-import { getDocument, updateDocument, listRevisions, getBacklinks, getAuthorName } from '@/services/documents';
+import {
+  getDocument,
+  updateDocument,
+  listRevisions,
+  getBacklinks,
+  getAuthorName,
+  parseExpectedRevision,
+} from '@/services/documents';
 import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { publicUrlOf } from '@/lib/def-helpers';
@@ -30,6 +37,8 @@ import { EditorSidebar } from '@/components/admin/editor-sidebar';
 import { SharePanel } from '@/components/admin/share-panel';
 import { BacklinksPanel } from '@/components/admin/backlinks-panel';
 import { renderSaveError } from '@/lib/save-error';
+import { hasAnnotatableFields, listReviewLinks, listThreads } from '@/services/comments';
+import { CommentsCard } from '@/components/admin/review-section';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -70,6 +79,15 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const shareLinks = canShareLink
     ? await listShareLinks(db, principal, slug, id, c.env.SESSION_SECRET, resolveBaseUrl(c.env, settings, c.req.url), now)
     : null;
+  // Document review (D55): review links ride the Share card; the Comments card
+  // needs `comment`. Both only for collections with something to annotate.
+  const reviewable = hasAnnotatableFields(def);
+  const reviewLinks =
+    reviewable && canShareLink
+      ? await listReviewLinks(db, principal, slug, id, c.env.SESSION_SECRET, resolveBaseUrl(c.env, settings, c.req.url), now)
+      : undefined;
+  const canComment = reviewable && (await canAuthorize(db, principal, 'comment', { collection: slug, documentId: id }, now));
+  const threads = canComment ? await listThreads(db, { kind: 'principal', principal }, slug, id, {}, now) : null;
 
   // Title the page by the document's primary display value (its first list field),
   // falling back to a generic edit label for an untitled doc.
@@ -185,11 +203,13 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
                 def={shareLinks ? def : undefined}
                 doc={shareLinks ? doc : undefined}
                 links={shareLinks ?? undefined}
+                reviewLinks={reviewLinks}
                 baseUrl={shareLinks ? resolveBaseUrl(c.env, settings, c.req.url) : undefined}
                 settings={settings}
               />
             ) : undefined
           }
+          reviewSlot={threads ? <CommentsCard slug={slug} id={id} threads={threads} /> : undefined}
         />
       </div>
     </AdminShell>,
@@ -207,9 +227,13 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   const body = await c.req.parseBody({ all: true });
   const input = coerceAdminForm(def, body);
   try {
-    await updateDocument(db, requirePrincipal(c), slug, id, input, nowIso());
+    await updateDocument(db, requirePrincipal(c), slug, id, input, nowIso(), {
+      expectedRevision: parseExpectedRevision(body._revision),
+    });
     return dsRedirect(c, `/admin/c/${slug}/${id}`);
   } catch (err) {
-    return renderSaveError(c, err);
+    return renderSaveError(c, err, 'form-result', {
+      staleLinks: { reload: `/admin/c/${slug}/${id}`, compare: `/admin/c/${slug}/${id}/revisions` },
+    });
   }
 });

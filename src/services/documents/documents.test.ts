@@ -15,6 +15,7 @@ import {
   ForbiddenError,
   NotFoundError,
   BadRequestError,
+  StaleRevisionError,
 } from '@/lib/errors';
 
 const NOW = '2026-07-04T12:00:00Z';
@@ -757,6 +758,124 @@ const METRICS: CollectionDefinition = {
     { key: 'active', type: 'boolean', index: true },
   ],
 };
+
+// D54 — optimistic concurrency: a save based on a stale copy fails loudly.
+describe('documents service — optimistic concurrency (D54)', () => {
+  let db: Database;
+  let admin: Principal;
+
+  beforeEach(async () => {
+    db = getDb(createTestD1());
+    await seedRoles(db, NOW);
+    admin = await makePrincipal(db, NOW, { id: 'prn_admin', role: 'admin' });
+    await collectionsService.createCollection(db, admin, POSTS, NOW);
+  });
+
+  it('reports the current revision on create, read, update and publish', async () => {
+    const created = await docs.createDocument(db, admin, 'posts', { title: 'Rev' }, NOW);
+    expect(created.revision).toBe(1);
+    expect((await docs.getDocument(db, admin, 'posts', created.id, NOW)).revision).toBe(1);
+    const updated = await docs.updateDocument(db, admin, 'posts', created.id, { body: 'x' }, NOW);
+    expect(updated.revision).toBe(2);
+    const published = await docs.setPublished(db, admin, 'posts', created.id, true, NOW);
+    expect(published.revision).toBe(3);
+    const { rows } = await docs.listDocuments(db, admin, 'posts', {}, NOW);
+    expect(rows[0].revision).toBe(3);
+  });
+
+  it('saves when expectedRevision matches the current revision', async () => {
+    const created = await docs.createDocument(db, admin, 'posts', { title: 'Match' }, NOW);
+    const updated = await docs.updateDocument(db, admin, 'posts', created.id, { body: 'v2' }, NOW, {
+      expectedRevision: 1,
+    });
+    expect(updated.revision).toBe(2);
+    expect(updated.data.body).toBe('v2');
+  });
+
+  it('rejects a stale expectedRevision without writing anything', async () => {
+    const created = await docs.createDocument(db, admin, 'posts', { title: 'Stale' }, NOW);
+    await docs.updateDocument(db, admin, 'posts', created.id, { body: 'gui edit' }, NOW);
+
+    const err = await docs
+      .updateDocument(db, admin, 'posts', created.id, { body: 'agent edit' }, NOW, {
+        expectedRevision: 1,
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(StaleRevisionError);
+    expect(err).toMatchObject({ code: 'STALE_REVISION', status: 409, expected: 1, current: 2 });
+
+    const current = await docs.getDocument(db, admin, 'posts', created.id, NOW);
+    expect(current.data.body).toBe('gui edit'); // the newer save survived
+    expect(await docs.listRevisions(db, admin, 'posts', created.id, NOW)).toHaveLength(2);
+  });
+
+  it('without expectedRevision, saves last-write-wins (backwards compatible)', async () => {
+    const created = await docs.createDocument(db, admin, 'posts', { title: 'Lww' }, NOW);
+    await docs.updateDocument(db, admin, 'posts', created.id, { body: 'a' }, NOW);
+    const second = await docs.updateDocument(db, admin, 'posts', created.id, { body: 'b' }, NOW);
+    expect(second.revision).toBe(3);
+  });
+
+  it('two simultaneous saves from the same base: one wins, the other is STALE_REVISION', async () => {
+    const created = await docs.createDocument(db, admin, 'posts', { title: 'Race' }, NOW);
+    // Both read revision 1 before either writes; both claim revision 2, and the
+    // (document_id, revision) unique index rejects the loser atomically.
+    const results = await Promise.allSettled([
+      docs.updateDocument(db, admin, 'posts', created.id, { body: 'one' }, NOW),
+      docs.updateDocument(db, admin, 'posts', created.id, { body: 'two' }, NOW),
+    ]);
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(StaleRevisionError);
+    expect(await docs.listRevisions(db, admin, 'posts', created.id, NOW)).toHaveLength(2);
+  });
+
+  it('a duplicate unique field is still reported as a field conflict, not a stale revision', async () => {
+    await docs.createDocument(db, admin, 'posts', { title: 'Taken' }, NOW);
+    const other = await docs.createDocument(db, admin, 'posts', { title: 'Other' }, NOW);
+    const err = await docs
+      .updateDocument(db, admin, 'posts', other.id, { slug: 'taken' }, NOW, { expectedRevision: 1 })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictError);
+    expect(err).not.toBeInstanceOf(StaleRevisionError);
+  });
+
+  it('restoreRevision honours expectedRevision', async () => {
+    const created = await docs.createDocument(db, admin, 'posts', { title: 'Restore' }, NOW);
+    await docs.updateDocument(db, admin, 'posts', created.id, { body: 'v2' }, NOW);
+    await expect(
+      docs.restoreRevision(db, admin, 'posts', created.id, 1, NOW, { expectedRevision: 1 }),
+    ).rejects.toBeInstanceOf(StaleRevisionError);
+    const restored = await docs.restoreRevision(db, admin, 'posts', created.id, 1, NOW, {
+      expectedRevision: 2,
+    });
+    expect(restored.revision).toBe(3);
+  });
+});
+
+describe('parseExpectedRevision (D54)', () => {
+  it('accepts integers, numeric strings and entity tags', () => {
+    expect(docs.parseExpectedRevision(4)).toBe(4);
+    expect(docs.parseExpectedRevision('4')).toBe(4);
+    expect(docs.parseExpectedRevision('"4"')).toBe(4);
+    expect(docs.parseExpectedRevision('W/"4"')).toBe(4);
+    expect(docs.parseExpectedRevision(0)).toBe(0);
+  });
+
+  it('treats absent, empty and * as "no check"', () => {
+    expect(docs.parseExpectedRevision(undefined)).toBeUndefined();
+    expect(docs.parseExpectedRevision(null)).toBeUndefined();
+    expect(docs.parseExpectedRevision('')).toBeUndefined();
+    expect(docs.parseExpectedRevision('*')).toBeUndefined();
+  });
+
+  it('rejects anything else rather than silently skipping the check', () => {
+    for (const bad of ['abc', '-1', '1.5', 'W/"x"', Number.NaN]) {
+      expect(() => docs.parseExpectedRevision(bad)).toThrow(InputValidationError);
+    }
+  });
+});
 
 describe('documents service — numeric/boolean filter & sort (COR-3)', () => {
   let db: Database;

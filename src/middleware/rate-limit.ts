@@ -54,6 +54,12 @@ export const SHARE_UNLOCK_LINK_RATE_LIMIT: RateLimitTier = { limit: 20, windowSe
 // a real transport is configured — its own tier, independent of the mint
 // tier, on the admin Share panel's op=email_link POST.
 export const SHARE_EMAIL_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
+// D55: review links are the one anonymous WRITE surface — comment/reply/name
+// posts through /s/:token/review/*. Per-IP for one noisy client, plus a
+// per-link bucket (keyed by the token hash) so a leaked link can't be used
+// to flood a document from many addresses.
+export const REVIEW_POST_RATE_LIMIT: RateLimitTier = { limit: 20, windowSeconds: 60 };
+export const REVIEW_POST_LINK_RATE_LIMIT: RateLimitTier = { limit: 300, windowSeconds: 60 * 60 };
 
 /** What the limiter records on the context for `apiJson` to surface as headers. */
 export interface RateLimitInfo {

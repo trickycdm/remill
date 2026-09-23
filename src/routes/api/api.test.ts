@@ -151,6 +151,96 @@ describe('REST API — integration through the Hono app', () => {
     expect(del.status).toBe(200);
   });
 
+  it('D54: GET returns the revision as an ETag; PATCH with a stale If-Match is 409 STALE_REVISION', async () => {
+    const created = await req('/api/c/posts', {
+      method: 'POST',
+      headers: { ...auth(editorToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Etag REST' }),
+    });
+    const id = created.json.data.id;
+
+    const got = await req(`/api/c/posts/${id}`, { headers: auth(editorToken) });
+    expect(got.headers.get('ETag')).toBe('"1"');
+    expect(got.json.data.revision).toBe(1);
+
+    const ok = await req(`/api/c/posts/${id}`, {
+      method: 'PATCH',
+      headers: { ...auth(editorToken), 'Content-Type': 'application/json', 'If-Match': '"1"' },
+      body: JSON.stringify({ body: 'first' }),
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('ETag')).toBe('"2"');
+
+    const stale = await req(`/api/c/posts/${id}`, {
+      method: 'PATCH',
+      headers: { ...auth(editorToken), 'Content-Type': 'application/json', 'If-Match': '"1"' },
+      body: JSON.stringify({ body: 'stale' }),
+    });
+    expect(stale.status).toBe(409);
+    expect(stale.json.code).toBe('STALE_REVISION');
+
+    const after = await req(`/api/c/posts/${id}`, { headers: auth(editorToken) });
+    expect(after.json.data.data.body).toBe('first');
+  });
+
+  it('D55: comment threads over REST — create, list, reply, resolve, review render; readers denied', async () => {
+    await collectionsService.createCollection(
+      db,
+      admin,
+      {
+        slug: 'reports',
+        name: 'Reports',
+        shape: 'collection',
+        fields: [
+          { key: 'title', type: 'text', required: true },
+          { key: 'page', type: 'html' },
+        ],
+      },
+      NOW,
+    );
+    const json = { 'Content-Type': 'application/json' };
+    const doc = await req('/api/c/reports', {
+      method: 'POST',
+      headers: { ...auth(editorToken), ...json },
+      body: JSON.stringify({ title: 'Q3', page: '<p>Revenue grew 12% in Q3.</p>' }),
+    });
+    const id = doc.json.data.id;
+    const base = `/api/c/reports/${id}/comments`;
+
+    const created = await req(base, {
+      method: 'POST',
+      headers: { ...auth(editorToken), ...json },
+      body: JSON.stringify({ body: 'Source?', intent: 'question', anchor: { kind: 'text', quote: 'grew 12%' } }),
+    });
+    expect(created.status).toBe(201);
+    const threadId = created.json.data.root.id;
+
+    const reply = await req(`${base}/${threadId}/replies`, {
+      method: 'POST',
+      headers: { ...auth(editorToken), ...json },
+      body: JSON.stringify({ body: 'Finance deck, slide 4' }),
+    });
+    expect(reply.status).toBe(201);
+
+    const resolved = await req(`${base}/${threadId}/resolve`, {
+      method: 'POST',
+      headers: { ...auth(editorToken), ...json },
+      body: JSON.stringify({}),
+    });
+    expect(resolved.json.data).toMatchObject({ status: 'resolved', resolvedRevision: 1 });
+
+    const listed = await req(`${base}?status=resolved`, { headers: auth(editorToken) });
+    expect(listed.json.data).toHaveLength(1);
+    expect(listed.json.data[0].replies).toHaveLength(1);
+
+    const res = await app.request(`/api/c/reports/${id}?render=review`, { headers: auth(editorToken) }, env);
+    expect(res.headers.get('Content-Type')).toContain('text/markdown');
+    expect(await res.text()).toContain('{==grew 12%==}');
+
+    const denied = await req(base, { headers: auth(readerToken) });
+    expect(denied.status).toBe(403);
+  });
+
   it('D50: POST /api/c/:collection/:id/visibility sets visibility; document JSON carries it; gated to publish', async () => {
     const created = await req('/api/c/posts', {
       method: 'POST',

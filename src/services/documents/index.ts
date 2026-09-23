@@ -50,11 +50,16 @@ import {
   InputValidationError,
   NotFoundError,
   ConflictError,
+  StaleRevisionError,
   BadRequestError,
   ForbiddenError,
   type ErrorDetails,
 } from '@/lib/errors';
 import { VISIBILITIES, type DocumentRecord, type Visibility } from '@/db/queries/documents';
+import { reanchorComments } from '@/services/comments';
+import { getLogger } from '@/lib/logger';
+
+const log = getLogger('documents');
 
 export type { DocumentRecord, Visibility } from '@/db/queries/documents';
 export { VISIBILITIES } from '@/db/queries/documents';
@@ -235,6 +240,26 @@ export function buildSearchText(
  *  race-proof backstop behind the app-level `checkUnique` pre-check. */
 function isUniqueConstraintError(e: unknown): boolean {
   return e instanceof Error && /UNIQUE constraint failed/i.test(e.message);
+}
+
+/** True when a save lost the race for its revision number (D54): two saves based
+ *  on the same revision both append `revision + 1`, and the
+ *  (document_id, revision) unique index rejects the second — the atomic backstop
+ *  behind the `expectedRevision` pre-check. Checked BEFORE the field-uniqueness
+ *  mapping so it isn't misreported as "a unique field value is taken". */
+function isRevisionCollision(e: unknown): boolean {
+  return (
+    e instanceof Error &&
+    /UNIQUE constraint failed:[^\n]*document_revisions\.revision/i.test(e.message)
+  );
+}
+
+/** Map a failed save batch to the right conflict (D54 revision race vs COR-8
+ *  field uniqueness); anything else is rethrown untouched. */
+function mapSaveError(e: unknown, expected: number | null): never {
+  if (isRevisionCollision(e)) throw new StaleRevisionError(expected, null);
+  if (isUniqueConstraintError(e)) throw new ConflictError('A unique field value is already taken.');
+  throw e;
 }
 
 async function checkUnique(
@@ -1055,7 +1080,31 @@ export async function createDocument(
     publishedAt,
     publishAt: null,
     visibility: overrides?.visibility ?? 'public',
+    revision: 1,
   };
+}
+
+/**
+ * Parse a caller-supplied expected revision (D54) from any surface: an MCP
+ * integer arg, an admin form's hidden `_revision` string, or a REST `If-Match`
+ * entity tag (`"5"`, `W/"5"`, `5`). Absent/empty/`*` → undefined (no check);
+ * anything else that isn't a non-negative integer is a validation error rather
+ * than a silently skipped check.
+ */
+export function parseExpectedRevision(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const text = String(raw)
+    .trim()
+    .replace(/^W\//, '')
+    .replace(/^"(.*)"$/, '$1');
+  if (text === '' || text === '*') return undefined;
+  const n = Number(text);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new InputValidationError([
+      { path: 'expectedRevision', message: 'Must be the integer revision the edit is based on.' },
+    ]);
+  }
+  return n;
 }
 
 export async function updateDocument(
@@ -1065,6 +1114,7 @@ export async function updateDocument(
   id: string,
   input: Record<string, unknown>,
   now: string,
+  opts: { readonly expectedRevision?: number } = {},
 ): Promise<DocumentRecord> {
   const def = await loadCollection(db, collectionSlug);
   const readGrant = await authorize(
@@ -1076,6 +1126,13 @@ export async function updateDocument(
   );
   const existing = await dq.getDocument(db, collectionSlug, id, readGrant);
   if (!existing) throw new NotFoundError('Document');
+  // Optimistic concurrency (D54): a save based on a stale copy fails rather than
+  // silently overwriting newer work. `expectedRevision` is opt-in; without it only
+  // a genuinely simultaneous save is caught (by the revision unique index).
+  const expected = opts.expectedRevision;
+  if (expected !== undefined && expected !== existing.revision) {
+    throw new StaleRevisionError(expected, existing.revision);
+  }
 
   const grant = await authorize(
     db,
@@ -1112,7 +1169,7 @@ export async function updateDocument(
         now,
         publishedAt: existing.publishedAt,
         publishAt: existing.publishAt, // an ordinary edit never touches the schedule
-        revision: await dq.nextRevisionNumber(db, id),
+        revision: existing.revision + 1,
         index: buildIndex(def, data),
         search: buildSearchText(def, data),
         event: {
@@ -1126,9 +1183,15 @@ export async function updateDocument(
       grant,
     );
   } catch (e) {
-    if (isUniqueConstraintError(e))
-      throw new ConflictError('A unique field value is already taken.');
-    throw e;
+    mapSaveError(e, expected ?? existing.revision);
+  }
+  // Keep review threads pointing at the right text (D55). Best-effort: the save
+  // has committed, so a failure here must not fail it — anchors keep their last
+  // position and the next save re-locates them.
+  try {
+    await reanchorComments(db, grant, def, { id, data, revision: existing.revision + 1 });
+  } catch (e) {
+    log.error({ documentId: id, collection: collectionSlug, err: String(e) }, 'comment re-anchoring failed');
   }
   // Construct the written record from known values (existing immutables + new data)
   // instead of a re-fetch round-trip (TD-9).
@@ -1138,6 +1201,7 @@ export async function updateDocument(
     status: existing.status,
     updatedAt: now,
     publishedAt: existing.publishedAt,
+    revision: existing.revision + 1,
   };
 }
 
@@ -1200,34 +1264,45 @@ export async function setPublished(
   );
   const status = publish ? 'published' : 'draft';
   const publishedAt = publish ? (existing.publishedAt ?? now) : null;
-  await dq.updateDocument(
-    db,
-    {
-      id,
-      collection: collectionSlug,
-      data: existing.data,
-      status,
-      savedBy: revisionAuthor(principal),
-      now,
-      publishedAt,
-      // Publishing consumes any pending schedule (D32); unpublishing can't
-      // leave one behind (a published doc never holds a schedule).
-      publishAt: null,
-      revision: await dq.nextRevisionNumber(db, id),
-      index: buildIndex(def, existing.data),
-      search: buildSearchText(def, existing.data),
-      event: {
-        type: publish ? 'document.published' : 'document.unpublished',
+  try {
+    await dq.updateDocument(
+      db,
+      {
+        id,
         collection: collectionSlug,
-        resource: id,
-        principalId: principal.id,
-        at: now,
+        data: existing.data,
+        status,
+        savedBy: revisionAuthor(principal),
+        now,
+        publishedAt,
+        // Publishing consumes any pending schedule (D32); unpublishing can't
+        // leave one behind (a published doc never holds a schedule).
+        publishAt: null,
+        revision: existing.revision + 1,
+        index: buildIndex(def, existing.data),
+        search: buildSearchText(def, existing.data),
+        event: {
+          type: publish ? 'document.published' : 'document.unpublished',
+          collection: collectionSlug,
+          resource: id,
+          principalId: principal.id,
+          at: now,
+        },
       },
-    },
-    grant,
-  );
+      grant,
+    );
+  } catch (e) {
+    mapSaveError(e, existing.revision);
+  }
   // Construct the written record from known values — no re-fetch round-trip (TD-9).
-  return { ...existing, status, updatedAt: now, publishedAt, publishAt: null };
+  return {
+    ...existing,
+    status,
+    updatedAt: now,
+    publishedAt,
+    publishAt: null,
+    revision: existing.revision + 1,
+  };
 }
 
 /**
@@ -1497,6 +1572,7 @@ export async function restoreRevision(
   id: string,
   revision: number,
   now: string,
+  opts: { readonly expectedRevision?: number } = {},
 ): Promise<DocumentRecord> {
   const readGrant = await authorize(
     db,
@@ -1508,7 +1584,7 @@ export async function restoreRevision(
   const revs = await dq.listRevisions(db, id, readGrant);
   const target = revs.find((r) => r.revision === revision);
   if (!target) throw new NotFoundError(`Revision ${revision}`);
-  return updateDocument(db, principal, collectionSlug, id, target.data, now);
+  return updateDocument(db, principal, collectionSlug, id, target.data, now, opts);
 }
 
 // ---------------------------------------------------------------------------

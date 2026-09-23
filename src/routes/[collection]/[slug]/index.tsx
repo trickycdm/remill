@@ -22,6 +22,8 @@ import { nowIso } from '@/lib/now';
 import { PublicShell, PublicNotFound } from '@/components/layouts/public-shell';
 import { DocumentView, rawPageHtml } from '@/components/document-view';
 import { Script } from 'vite-ssr-components/hono';
+import { hasAnnotatableFields } from '@/services/comments';
+import { principalPanel } from '@/lib/review-http';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -129,6 +131,18 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" settings={settings} />
     );
 
+    // Review overlay (D55): `?preview=1&review=1` with a session adds the
+    // principal's review panel. A principal who may read but not comment just
+    // gets the plain preview — never an error page.
+    let reviewPanel: unknown = null;
+    if (preview && c.req.query('review') != null && hasAnnotatableFields(def)) {
+      try {
+        reviewPanel = await principalPanel(db, principal, collection, doc.id, now);
+      } catch (e) {
+        if (!(e instanceof ForbiddenError)) throw e;
+      }
+    }
+
     return c.render(
       <PublicShell
         settings={settings}
@@ -146,6 +160,8 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       >
         {content}
         {wants.shareBar ? <Script src="/src/client/share.ts" /> : null}
+        {reviewPanel}
+        {reviewPanel ? <Script src="/src/client/review.ts" /> : null}
       </PublicShell>,
       head,
     );

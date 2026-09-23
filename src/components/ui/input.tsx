@@ -31,6 +31,7 @@ interface InputProps {
   max?: string | number;
   step?: string | number;
   pattern?: string;
+  maxlength?: number;
   class?: string;
   'aria-describedby'?: string;
   'aria-label'?: string;

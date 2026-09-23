@@ -1,7 +1,7 @@
 # Access Control
 
 > **STATUS: IMPLEMENTED (Phase 3 engine + Track A management surfaces + sharing fabric v2 — teams
-> D24, `share_link` D26).** The choke point + `Grant`
+> D24, `share_link` D26; document review — `comment` + review links D55).** The choke point + `Grant`
 > witness + audit landed in Phase 2 ("born authorized"); the full model — roles-as-data, scoped
 > assignments, item grants with expiry, token scope masks, conditions `own`/`published`, publicRead
 > sugar, and SQL-compiled list filters — landed in Phase 3. Track A added the management UI: personas,
@@ -34,10 +34,14 @@
 1. **Roles** — data-defined (like collections), so least-privilege custom roles can be created at
    runtime from admin UI or MCP. Seeded system roles: `admin`, `editor`, `author`, `reader`,
    `anonymous`. A role holds permission rows `(collection | *, action, condition?)`.
-   - **Closed action vocabulary**: `read, create, update, delete, publish, manage_schema,
-     manage_access, share_link`. `share_link` (D26) is the narrow right to mint an anonymous,
+   - **Closed action vocabulary**: `read, create, update, delete, publish, share_link, comment,
+     manage_schema, manage_access`. `share_link` (D26) is the narrow right to mint an anonymous,
      expiring, read-only share link for a document — held by `admin`/`editor` system roles by
-     default. Extending the vocabulary requires a decision-log entry.
+     default. `comment` (D55) is the right to read and write a document's review threads — held by
+     `admin`/`editor`, and by `author` on their own documents (`own`). Extending the vocabulary
+     requires a decision-log entry, and a new system-role permission ships in a MIGRATION as well
+     as `seed.sql`: production deploys apply migrations but never re-run the seed (migration 0017
+     is the precedent).
    - **Closed condition enum**: `own` (created_by = principal), `published` (status = published).
      Never arbitrary code. Extending it requires a decision-log entry.
    - Role *assignments* are collection-scopable: `(principal, role, collection | *)` —
@@ -78,6 +82,21 @@
      honest. Expiry and revocation are the ordinary item-grant mechanics; unknown/expired/revoked
      all resolve identically (no enumeration oracle). A link grants its one document and nothing
      else — additive, like every grant.
+   - **Review links (D55) are link grants whose actions include `comment`**, with
+     `item_grants.review_mode` (`group` | `individual`). They are the ONE place an anonymous
+     caller can WRITE: comment threads on that one document, through the same item-grant path
+     (`authorize({...anonymousPrincipal, linkId}, 'comment', …)` — `decide()` is unchanged).
+     Bounded by: plain-text bodies (never rendered as HTML), size caps, a per-IP AND a per-link
+     rate limit, and revocation (which cascades the link's reviewers). A reviewer is NOT a
+     principal: a `review_reviewers` row on the grant — the one invited name on a personal link,
+     or a self-typed name on an open link, carried by an HMAC cookie bound to the grant
+     (`src/lib/reviewer-cookie.ts`). Reviewers may create, reply, delete their own, and mark
+     themselves done; resolving threads is principal-only (`assertAccountHolder` refuses the
+     link principal explicitly, since the link's `comment` would otherwise pass). Thread
+     visibility is decided in the comments service, not `authorize()`: principals see all;
+     reviewers see their own, `shared` principal threads, and — while their link is `group` —
+     other `group` links' threads, read LIVE from `review_mode` (flipping a link re-scopes its
+     past comments, behind a confirmation that states the counts).
 
 There are **no negative rules**. If you can't express a policy additively, the policy is wrong for
 this system — do not add deny rules.

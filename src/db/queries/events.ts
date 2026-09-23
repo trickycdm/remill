@@ -27,7 +27,10 @@ export interface EventInput {
     | 'media.deleted'
     | 'collection.created'
     | 'collection.updated'
-    | 'collection.deleted';
+    | 'collection.deleted'
+    | 'comment.created'
+    | 'comment.resolved'
+    | 'comment.reopened';
   readonly collection: string;
   readonly resource: string;
   readonly principalId: string;

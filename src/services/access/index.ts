@@ -253,6 +253,9 @@ export async function createShareLink(
     password?: string;
     /** Optional human label shown in the Share panel, trimmed and capped. */
     label?: string;
+    /** Makes the link a REVIEW link (D55) — only meaningful with `comment` in
+     *  `actions`; the comments service's `createReviewLink` is the caller. */
+    reviewMode?: grantQ.ReviewMode;
   },
   /** SESSION_SECRET — keys the AES-GCM encryption of the stored token (D53). */
   secret: string,
@@ -308,6 +311,7 @@ export async function createShareLink(
       passwordHash,
       label,
       tokenEnc: await encryptToken(secret, token),
+      reviewMode: input.reviewMode ?? null,
     },
     now,
   );

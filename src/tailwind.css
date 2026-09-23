@@ -288,6 +288,40 @@
     border-color: var(--color-border);
     margin-block: 1.5em;
   }
+
+  /* Document review (D55). Highlights are painted with the CSS Custom
+     Highlight API by src/client/review.ts — no DOM is inserted into the
+     author's content, so their scripts and charts are never disturbed. */
+  ::highlight(rm-review) {
+    background-color: var(--color-warning-soft);
+  }
+  ::highlight(rm-review-active) {
+    background-color: var(--color-pop-soft);
+    text-decoration: underline 2px var(--color-pop);
+  }
+  [data-rm-commented] {
+    outline: 2px dashed var(--color-warning);
+    outline-offset: 4px;
+  }
+  [data-rm-commented=active] {
+    outline-color: var(--color-pop);
+  }
+  /* Wide screens: the panel docks to the right edge and the page makes room;
+     narrow screens: it flows after the document. */
+  @media (min-width: 1024px) {
+    body.rm-reviewing {
+      padding-right: 24rem;
+    }
+    .rm-review-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 24rem;
+      overflow-y: auto;
+      z-index: 40;
+    }
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

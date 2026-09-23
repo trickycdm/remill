@@ -17,6 +17,7 @@ interface TextareaProps {
   disabled?: boolean;
   readonly?: boolean;
   rows?: number;
+  maxlength?: number;
   invalid?: boolean;
   autofocus?: boolean;
   class?: string;

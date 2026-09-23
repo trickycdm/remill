@@ -9,7 +9,10 @@ import type { Visibility } from '@/lib/visibility';
 /** The closed action vocabulary. `share_link` (D26) is the right to mint an
  *  anonymous, expiring `/s/:token` share link for a readable document — split
  *  out of `manage_access` so it can be granted to an agent WITHOUT giving it
- *  any access-management power. */
+ *  any access-management power. `comment` (D55) is the right to read and write
+ *  review comments on a document — held by roles, by item grants, and by
+ *  review links, which makes it the one action an anonymous link can use to
+ *  WRITE (bounded to that document's comment threads). */
 export const ACTIONS = [
   'read',
   'create',
@@ -17,6 +20,7 @@ export const ACTIONS = [
   'delete',
   'publish',
   'share_link',
+  'comment',
   'manage_schema',
   'manage_access',
 ] as const;
