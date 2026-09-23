@@ -6,9 +6,11 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
-import { getDocument, updateDocument, listRevisions, getBacklinks } from '@/services/documents';
+import { getDocument, updateDocument, listRevisions, getBacklinks, getAuthorName } from '@/services/documents';
 import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
+import { publicUrlOf } from '@/lib/def-helpers';
+import { hasLifecycle } from '@/lib/lifecycle';
 import {
   getPrincipalPermissions,
   listItemGrants,
@@ -22,7 +24,7 @@ import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
-import { PageHeader, Button } from '@/components/ui';
+import { PageHeader, Button, Badge } from '@/components/ui';
 import { GeneratedForm } from '@/components/admin/generated';
 import { EditorSidebar } from '@/components/admin/editor-sidebar';
 import { SharePanel } from '@/components/admin/share-panel';
@@ -73,15 +75,26 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const rawTitle = titleField ? doc.data[titleField.key] : undefined;
   const docTitle = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle : `Edit ${def.name}`;
 
-  // Preview (D49): the public render with the session principal — works for
-  // drafts AND published. Pretty slug when the doc has one, id URL otherwise
-  // (a draft's slug may still be empty; the route accepts both).
-  const slugField = def.fields.find((f) => f.type === 'slug' && f.index);
-  const slugValue = slugField ? doc.data[slugField.key] : undefined;
-  const previewRef = typeof slugValue === 'string' && slugValue ? slugValue : id;
-  const previewHref = def.access?.publicRead
-    ? `/${slug}/${encodeURIComponent(previewRef)}?preview=1`
-    : undefined;
+  // Header action: publicRead collections get exactly one — "View live ↗" once
+  // published and not private, else "Preview ↗" (D49: works for drafts AND
+  // published, through the session principal). publicUrlOf already resolves the
+  // unlisted/private doc_ id URL, so this single href works for every
+  // visibility (D50). Non-publicRead collections fall back to the internal View.
+  const publicHref = def.access?.publicRead ? publicUrlOf(def, doc, '') : undefined;
+  const isLive = doc.status === 'published' && (doc.visibility ?? 'public') !== 'private';
+  const headerAction = publicHref
+    ? {
+        href: isLive ? publicHref : `${publicHref}?preview=1`,
+        label: isLive ? 'View live ↗' : 'Preview ↗',
+        ariaLabel: isLive ? 'View the live public page (opens in new tab)' : 'Preview public page (opens in new tab)',
+      }
+    : { href: `/admin/c/${slug}/${id}/view`, label: 'View', ariaLabel: undefined };
+
+  const authorName = doc.createdBy
+    ? doc.createdBy === principal.id
+      ? 'You'
+      : await getAuthorName(db, doc.createdBy)
+    : '—';
 
   return c.render(
     <AdminShell user={user} current="content">
@@ -96,36 +109,43 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           { label: docTitle },
         ]}
         title={docTitle}
+        description={
+          // Status/visibility read at a glance under the title; lifecycle-none
+          // collections and always-public docs render nothing here.
+          (hasLifecycle(def) || (def.access?.publicRead && (doc.visibility ?? 'public') !== 'public')) ? (
+            <span class="inline-flex flex-wrap items-center gap-2">
+              {hasLifecycle(def) ? (
+                <Badge tone={doc.status === 'published' ? 'success' : doc.publishAt ? 'warning' : 'neutral'}>
+                  {doc.status === 'published' ? 'Published' : doc.publishAt ? 'Scheduled' : 'Draft'}
+                </Badge>
+              ) : null}
+              {def.access?.publicRead && (doc.visibility ?? 'public') !== 'public' ? (
+                <Badge tone={doc.visibility === 'private' ? 'warning' : 'accent'}>
+                  {doc.visibility === 'private' ? 'Private' : 'Unlisted'}
+                </Badge>
+              ) : null}
+            </span>
+          ) : undefined
+        }
         actions={
           // Header = navigation/inspection; the sidebar keeps every mutation
-          // (Save stays the page's only primary). Preview is the prominent
-          // affordance on publicRead collections; without one, the internal
-          // View steps up so the header always carries a visible action.
-          <>
-            {previewHref ? (
-              <Button
-                href={previewHref}
-                variant="secondary"
-                size="sm"
-                target="_blank"
-                rel="noopener"
-                aria-label="Preview public page (opens in new tab)"
-              >
-                Preview ↗
-              </Button>
-            ) : null}
-            <Button
-              href={`/admin/c/${slug}/${id}/view`}
-              variant={previewHref ? 'ghost' : 'secondary'}
-              size="sm"
-            >
-              View
-            </Button>
-          </>
+          // (Save stays the page's only primary). Exactly one action: the live
+          // page once published, a preview before then, or the internal View
+          // for collections with no public surface at all.
+          <Button
+            href={headerAction.href}
+            variant="secondary"
+            size="sm"
+            target={publicHref ? '_blank' : undefined}
+            rel={publicHref ? 'noopener' : undefined}
+            aria-label={headerAction.ariaLabel}
+          >
+            {headerAction.label}
+          </Button>
         }
       />
 
-      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div class="max-w-2xl">
           <GeneratedForm
             def={def}
@@ -135,39 +155,41 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             id="editor-form"
             renderActions={false}
           />
+
+          <BacklinksPanel backlinks={backlinks} />
         </div>
 
         <EditorSidebar
           mode="edit"
           formId="editor-form"
           submitLabel="Save changes"
-          cancelHref={`/admin/c/${slug}`}
           def={def}
           slug={slug}
           id={id}
           doc={doc}
           revisions={revisions}
+          authorName={authorName}
           settings={settings}
           baseUrl={resolveBaseUrl(c.env, settings, c.req.url)}
+          shareSlot={
+            share || shareLinks ? (
+              <SharePanel
+                slug={slug}
+                id={id}
+                grants={share?.grants}
+                principals={share?.principals}
+                roles={share?.roles}
+                teams={share?.teams}
+                def={shareLinks ? def : undefined}
+                doc={shareLinks ? doc : undefined}
+                links={shareLinks ?? undefined}
+                baseUrl={shareLinks ? resolveBaseUrl(c.env, settings, c.req.url) : undefined}
+                settings={settings}
+              />
+            ) : undefined
+          }
         />
       </div>
-
-      <BacklinksPanel backlinks={backlinks} />
-
-      {(share || shareLinks) && (
-        <SharePanel
-          slug={slug}
-          id={id}
-          grants={share?.grants}
-          principals={share?.principals}
-          roles={share?.roles}
-          teams={share?.teams}
-          def={shareLinks ? def : undefined}
-          doc={shareLinks ? doc : undefined}
-          links={shareLinks ?? undefined}
-          baseUrl={shareLinks ? resolveBaseUrl(c.env, settings, c.req.url) : undefined}
-        />
-      )}
     </AdminShell>,
   );
 });

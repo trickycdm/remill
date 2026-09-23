@@ -18,7 +18,7 @@ let previewUrl = '';
 let editUrl = '';
 
 test.describe.serial('Draft preview — the session-principal public render', () => {
-  test('setup: the edit page of a fresh draft carries a prominent Preview + ghost View', async ({
+  test('setup: the edit page of a fresh draft carries exactly one header action, Preview', async ({
     page,
   }) => {
     await loginAsAdmin(page);
@@ -28,15 +28,13 @@ test.describe.serial('Draft preview — the session-principal public render', ()
     await page.waitForURL(/\/admin\/c\/articles\/doc_/);
     editUrl = page.url();
 
-    // Preview: secondary, new-tab, ?preview=1 — present while still a DRAFT.
+    // Preview: secondary, new-tab, ?preview=1 — the ONE header action while
+    // still a DRAFT (publicRead collections get exactly one).
     const preview = page.getByRole('link', { name: /Preview public page/ });
     await expect(preview).toBeVisible();
     await expect(preview).toHaveAttribute('href', /^\/articles\/.+\?preview=1$/);
     await expect(preview).toHaveAttribute('target', '_blank');
     previewUrl = (await preview.getAttribute('href'))!;
-
-    // The internal admin View stays, demoted beside it.
-    await expect(page.getByRole('link', { name: 'View', exact: true })).toBeVisible();
   });
 
   test('an authed session previews the draft: page renders with banner + noindex', async ({

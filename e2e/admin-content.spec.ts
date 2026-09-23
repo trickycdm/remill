@@ -53,7 +53,7 @@ test.describe('Phase 4 — generated document admin', () => {
     // Whitelist guard is invisible to the UI but enforced server-side; here we just
     // confirm the happy path renders. Clean up by deleting via the confirm Dialog.
     await page.getByRole('link', { name: 'My First Post' }).first().click();
-    await page.getByRole('button', { name: /^Delete/ }).click(); // "Delete…" opens the dialog
+    await page.getByRole('button', { name: /^Move to trash/ }).click(); // opens the confirm dialog
     const del = page.getByRole('dialog');
     await expect(del).toBeVisible();
     await del.getByRole('button', { name: 'Delete', exact: true }).click();

@@ -26,6 +26,7 @@ import { trashDocument as trashDocumentRow } from '@/db/queries/trash';
 import { TRASH_MAX_REVISIONS } from '@/config/retention';
 import { getCollection, listCollections as listCollectionDefs } from '@/db/queries/collections';
 import { getGrantedDocumentIds } from '@/db/queries/grants';
+import { getPrincipal } from '@/db/queries/principals';
 import { getPrincipalRoleSlugs } from '@/db/queries/roles';
 import { getPrincipalTeamIds } from '@/db/queries/teams';
 import {
@@ -495,6 +496,16 @@ export async function getBacklinks(
     }
   }
   return out;
+}
+
+/** The display name of a document's author for the edit view's Details card —
+ *  a permission-free lookup (like getSettings) since it's cosmetic, not a
+ *  grant decision. Falls back to "—" for a missing/unknown principal (e.g. the
+ *  system actor, D30, has no principals row). */
+export async function getAuthorName(db: Database, principalId: string | null | undefined): Promise<string> {
+  if (!principalId) return '—';
+  const principal = await getPrincipal(db, principalId);
+  return principal?.name ?? '—';
 }
 
 /** One row of the "Shared with me" surface: a document the principal can read

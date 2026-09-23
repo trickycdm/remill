@@ -51,7 +51,7 @@ test.describe.serial('Document visibility + share links', () => {
     await loginAsAdmin(page);
     await page.goto(editUrl);
     await page.getByRole('radio', { name: /^Unlisted/ }).check();
-    await page.getByRole('button', { name: 'Update visibility' }).click();
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
     await page.waitForURL(editUrl);
     await expect(page.getByRole('radio', { name: /^Unlisted/ })).toBeChecked();
 
@@ -84,7 +84,7 @@ test.describe.serial('Document visibility + share links', () => {
     await loginAsAdmin(page);
     await page.goto(editUrl);
     await page.getByRole('radio', { name: /^Private/ }).check();
-    await page.getByRole('button', { name: 'Update visibility' }).click();
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
     await page.waitForURL(editUrl);
     await expect(page.getByRole('radio', { name: /^Private/ })).toBeChecked();
 
@@ -99,9 +99,10 @@ test.describe.serial('Document visibility + share links', () => {
     await loginAsAdmin(page);
     await page.goto(editUrl);
 
+    await page.locator('summary', { hasText: 'New share link' }).click();
     await page.getByLabel('Label (optional)').fill(`Review copy ${runId}`);
     await page.getByLabel('Password (optional)').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Create share link' }).click();
+    await page.getByRole('button', { name: 'Create link', exact: true }).click();
 
     await expect(page.getByRole('heading', { name: 'Share link created' })).toBeVisible();
     shareLinkUrl = await page.getByLabel('Share link URL').inputValue();
