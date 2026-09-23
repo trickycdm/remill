@@ -10,6 +10,7 @@ import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Button } from '@/components/ui';
 import { DocumentView } from '@/components/document-view';
+import { publicUrlOf } from '@/lib/def-helpers';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -28,14 +29,14 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const doc = await getDocument(db, principal, slug, id, now);
   const backlinks = await getBacklinks(db, principal, slug, id, now);
 
-  // The public URL: live for published docs, `?preview=1` (D49, session
-  // principal) for anything unpublished on a publicRead collection.
-  const slugField = def.fields.find((f) => f.type === 'slug' && f.index);
-  const slugValue = slugField ? doc.data[slugField.key] : undefined;
-  const publicRef = typeof slugValue === 'string' && slugValue ? slugValue : doc.id;
+  // The public URL: `publicUrlOf` (D50-aware — the doc_ id URL for
+  // unlisted/private, the slug otherwise) live for published/public docs,
+  // `?preview=1` (D49, session principal) for anything unpublished OR
+  // private on a publicRead collection.
   const isLive = doc.status === 'published';
+  const needsPreview = !isLive || doc.visibility === 'private';
   const publicHref = def.access?.publicRead
-    ? `/${slug}/${encodeURIComponent(publicRef)}${isLive ? '' : '?preview=1'}`
+    ? `${publicUrlOf(def, doc, '')}${needsPreview ? '?preview=1' : ''}`
     : undefined;
 
   return c.render(
@@ -51,7 +52,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           <div class="flex items-center gap-2">
             {publicHref ? (
               <Button href={publicHref} variant="ghost" size="sm">
-                {isLive ? 'Public page ↗' : 'Preview ↗'}
+                {needsPreview ? 'Preview ↗' : 'Public page ↗'}
               </Button>
             ) : null}
             <Button href={`/admin/c/${slug}/${id}`} variant="secondary" size="sm">

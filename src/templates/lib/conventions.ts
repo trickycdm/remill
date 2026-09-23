@@ -11,6 +11,7 @@
 
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import { titleFieldOf } from '@/lib/def-helpers';
+import { isSeoFieldKey } from '@/lib/seo-keys';
 
 /** The reading composition a convention-first template renders, resolved from a
  *  collection's field shape. Slug fields are deliberately EXCLUDED everywhere
@@ -51,13 +52,22 @@ export function resolveConventionLayout(
 
   const titleField = byKey(titleFieldOf(def));
   const titleKey = titleField?.key;
+  // SEO override fields (seo_title/meta_description/social_image, D52) are
+  // author-controlled metadata, never reading content — excluded from every
+  // slot (hero/lead/body/meta) so they can't surface as an extra picture, an
+  // arbitrary standfirst, or a stray labelled row. `buildDocumentHead`
+  // (`lib/seo.ts`) reads them directly by key instead.
   const hero = wantHero
-    ? (byKey(def.bind?.hero) ?? def.fields.find((f) => f.type === 'media'))
+    ? (byKey(def.bind?.hero) ??
+      def.fields.find((f) => f.type === 'media' && !isSeoFieldKey(f.key)))
     : undefined;
   const lead = wantLead
-    ? (byKey(def.bind?.lead) ?? def.fields.find((f) => f.type === 'text' && f.key !== titleKey))
+    ? (byKey(def.bind?.lead) ??
+      def.fields.find((f) => f.type === 'text' && f.key !== titleKey && !isSeoFieldKey(f.key)))
     : undefined;
-  const body = def.fields.filter((f) => f.type === 'markdown' || f.type === 'html');
+  const body = def.fields.filter(
+    (f) => (f.type === 'markdown' || f.type === 'html') && !isSeoFieldKey(f.key),
+  );
 
   const claimed = new Set<string>();
   if (titleField) claimed.add(titleField.key);
@@ -65,6 +75,8 @@ export function resolveConventionLayout(
   if (lead) claimed.add(lead.key);
   for (const b of body) claimed.add(b.key);
 
-  const meta = def.fields.filter((f) => !claimed.has(f.key) && f.type !== 'slug');
+  const meta = def.fields.filter(
+    (f) => !claimed.has(f.key) && f.type !== 'slug' && !isSeoFieldKey(f.key),
+  );
   return { titleField, hero, lead, body, meta };
 }

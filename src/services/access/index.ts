@@ -18,7 +18,10 @@ import { getUserByEmail } from '@/db/queries/users';
 import { recentAudit } from '@/db/queries/audit';
 import * as auditQ from '@/db/queries/audit';
 import { generateToken, generateShareToken, generateJoinToken, hashToken } from '@/lib/token';
-import { hashPassword } from '@/lib/password';
+import { hashPassword, verifyPassword } from '@/lib/password';
+import { signUnlock, verifyUnlock } from '@/lib/share-unlock';
+import type { EmailTransport } from '@/lib/email';
+import { shareNotificationEmail } from '@/lib/email/templates';
 import type { PermissionSpec, RoleSpec } from '@/access/policy';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
 import type { Action, Condition } from '@/access/types';
@@ -227,6 +230,8 @@ export async function revokeItem(db: Database, principal: Principal, grantId: st
  * access matrix, and audit all come free. Returns the plaintext token exactly
  * once (API-token discipline); only its hash is stored.
  */
+const LABEL_MAX_LENGTH = 80;
+
 export async function createShareLink(
   db: Database,
   principal: Principal,
@@ -235,9 +240,20 @@ export async function createShareLink(
     documentId: string;
     actions: Action[];
     expiresAt?: string;
+    /** When set, `expiresAt` becomes REQUIRED and is clamped to this many days
+     *  out from `now` — the one rule REST and MCP both enforce (steering
+     *  API_AND_MCP_STANDARDS.md: "same rules as the MCP tool"; both pass 30).
+     *  The admin Share panel passes none — humans may still mint open-ended
+     *  links. */
+    maxTtlDays?: number;
+    /** Optional password (D51) — minimum 8 characters, hashed with scrypt.
+     *  Never logged or returned; only `hasPassword` comes back. */
+    password?: string;
+    /** Optional human label shown in the Share panel, trimmed and capped. */
+    label?: string;
   },
   now: string,
-): Promise<{ grantId: string; token: string }> {
+): Promise<{ grantId: string; token: string; hasPassword: boolean; label: string | null; expiresAt: string | null }> {
   // D26: gated by the dedicated `share_link` action, NOT manage_access — so the
   // capability is grantable to an agent (via a role or a one-document item
   // grant) without any access-management power. The agents-never-escalate rule
@@ -248,6 +264,33 @@ export async function createShareLink(
   const bad = input.actions.filter((a) => !ACTIONS.includes(a));
   if (bad.length) throw new InputValidationError(bad.map((a) => ({ path: 'actions', message: `Unknown action '${a}'.` })));
   if (!input.actions.length) throw new InputValidationError([{ path: 'actions', message: 'Grant at least one action.' }]);
+
+  if (input.password !== undefined && input.password.length < MIN_PASSWORD_LENGTH) {
+    throw new InputValidationError([
+      { path: 'password', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` },
+    ]);
+  }
+
+  if (input.maxTtlDays !== undefined && !input.expiresAt) {
+    throw new InputValidationError([{ path: 'expiresAt', message: 'expiresAt is required.' }]);
+  }
+  let expiresAt: string | null = null;
+  if (input.expiresAt !== undefined) {
+    const parsed = Date.parse(input.expiresAt);
+    if (Number.isNaN(parsed)) {
+      throw new InputValidationError([{ path: 'expiresAt', message: 'A valid ISO-8601 expiry is required.' }]);
+    }
+    let ms = parsed;
+    if (input.maxTtlDays !== undefined) {
+      const maxMs = new Date(now).getTime() + input.maxTtlDays * 24 * 60 * 60 * 1000;
+      ms = Math.min(ms, maxMs);
+    }
+    expiresAt = new Date(ms).toISOString();
+  }
+
+  const passwordHash = input.password ? hashPassword(input.password) : null;
+  const label = input.label?.trim().slice(0, LABEL_MAX_LENGTH) || null;
+
   const token = generateShareToken();
   const grantId = await grantQ.createItemGrant(
     db,
@@ -257,11 +300,13 @@ export async function createShareLink(
       documentId: input.documentId,
       actions: input.actions,
       grantedBy: principal.id,
-      expiresAt: input.expiresAt ?? null,
+      expiresAt,
+      passwordHash,
+      label,
     },
     now,
   );
-  return { grantId, token };
+  return { grantId, token, hasPassword: passwordHash !== null, label, expiresAt };
 }
 
 /**
@@ -278,6 +323,129 @@ export async function resolveShareLink(
   return grantQ.findLinkGrantByHash(db, await hashToken(token), now);
 }
 
+/**
+ * Resolve a share-link token to its OPEN/LOCKED/absent state (D51). A grant
+ * with no password is always 'open'. A grant WITH a password is 'open' only
+ * when the presented `rm_unlock` cookie verifies against the grant's CURRENT
+ * password hash (`share-unlock.ts` — a password change or revoke invalidates
+ * every outstanding cookie because the hash it was signed against is gone).
+ * The route uses this exclusively (never `resolveShareLink` directly) so the
+ * password check can never be forgotten.
+ */
+export async function openShareLink(
+  db: Database,
+  token: string,
+  unlockCookie: string | undefined,
+  secret: string,
+  now: string,
+): Promise<{ state: 'open' | 'locked'; grant: grantQ.ItemGrantRecord } | null> {
+  const found = await grantQ.findLinkGrantWithHashByTokenHash(db, await hashToken(token), now);
+  if (!found) return null;
+  const { grant, passwordHash } = found;
+  if (!grant.hasPassword) return { state: 'open', grant };
+  // Fail CLOSED, not open: `hasPassword` said yes but the hash didn't come
+  // back (deleted out from under the grant, storage inconsistency, …) — never
+  // treat that as "no password required" (fail closed).
+  if (!passwordHash) return { state: 'locked', grant };
+  const unlocked = await verifyUnlock(secret, grant.id, passwordHash, unlockCookie ?? '', now);
+  return { state: unlocked ? 'open' : 'locked', grant };
+}
+
+/**
+ * Verify a presented password against a share link's token and, on success,
+ * mint the `rm_unlock` cookie value + its max-age. Unknown token, expired
+ * grant, no password on the grant, or a wrong password are all
+ * indistinguishable `{ ok: false }` — no enumeration oracle.
+ */
+export async function unlockShareLink(
+  db: Database,
+  token: string,
+  password: string,
+  secret: string,
+  now: string,
+): Promise<{ ok: true; cookieValue: string; maxAgeSeconds: number } | { ok: false }> {
+  if (!password) return { ok: false };
+  const found = await grantQ.findLinkGrantWithHashByTokenHash(db, await hashToken(token), now);
+  if (!found || !found.grant.hasPassword || !found.passwordHash) return { ok: false };
+  const { grant, passwordHash } = found;
+  if (!verifyPassword(password, passwordHash)) return { ok: false };
+
+  const DAY_SECONDS = 24 * 60 * 60;
+  const untilExpiry = grant.expiresAt
+    ? Math.floor((new Date(grant.expiresAt).getTime() - new Date(now).getTime()) / 1000)
+    : DAY_SECONDS;
+  const maxAgeSeconds = Math.max(1, Math.min(DAY_SECONDS, untilExpiry));
+  const exp = new Date(new Date(now).getTime() + maxAgeSeconds * 1000).toISOString();
+  const cookieValue = await signUnlock(secret, grant.id, passwordHash, exp);
+  return { ok: true, cookieValue, maxAgeSeconds };
+}
+
+/** List only the LINK grants on a document (Share panel's "Share links"
+ *  section). Gated on `share_link` — anyone who can mint links can see the
+ *  ones already minted, without needing install-wide `manage_access`. */
+export async function listShareLinks(
+  db: Database,
+  principal: Principal,
+  collection: string,
+  documentId: string,
+  now: string,
+): Promise<grantQ.ItemGrantRecord[]> {
+  await authorize(db, principal, 'share_link', { collection, documentId }, now);
+  return grantQ.listLinkGrantsForDocument(db, documentId, now);
+}
+
+/** Revoke a share LINK grant — gated on `share_link` (the same capability
+ *  that mints them), and rejects revoking any other grant kind or a grant
+ *  belonging to a different document (both surfaced as NotFound, no detail). */
+export async function revokeShareLink(
+  db: Database,
+  principal: Principal,
+  collection: string,
+  documentId: string,
+  grantId: string,
+  now: string,
+): Promise<void> {
+  await authorize(db, principal, 'share_link', { collection, documentId }, now);
+  const grants = await grantQ.listGrantsForDocument(db, documentId);
+  const grant = grants.find((g) => g.id === grantId);
+  if (!grant || grant.subjectKind !== 'link') throw new NotFoundError('Share link');
+  await grantQ.revokeItemGrant(db, grantId);
+}
+
+/** Escape a string for literal use inside a RegExp. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Email a just-minted share link (the admin Share panel's "Send" action,
+ * D51). Gated on `share_link` — the SAME capability that mints links, not a
+ * bare "logged in" check — so a document's viewer can't turn the panel into
+ * an arbitrary spam/phishing relay by pasting any URL and any address. `url`
+ * MUST be exactly `${baseUrl}/s/<token>` for THIS install (never an arbitrary
+ * redirect target), and `email` must look like an email address.
+ */
+export async function emailShareLink(
+  db: Database,
+  principal: Principal,
+  input: { collection: string; documentId: string; url: string; email: string; baseUrl: string },
+  transport: EmailTransport,
+  siteName: string | undefined,
+  now: string,
+): Promise<void> {
+  await authorize(db, principal, 'share_link', { collection: input.collection, documentId: input.documentId }, now);
+
+  const urlPattern = new RegExp(`^${escapeRegExp(input.baseUrl)}/s/[A-Za-z0-9_-]+$`);
+  if (!urlPattern.test(input.url)) {
+    throw new InputValidationError([{ path: 'url', message: 'Not a valid share link for this install.' }]);
+  }
+  if (!EMAIL_RE.test(input.email)) {
+    throw new InputValidationError([{ path: 'email', message: 'Enter a valid email address.' }]);
+  }
+
+  await transport.send({ to: input.email, ...shareNotificationEmail({ url: input.url, siteName }) });
+}
+
 /** Every item grant in the install (for the access overview). Requires install-wide
  *  `manage_access`. */
 export async function listAllItemGrants(
@@ -289,8 +457,13 @@ export async function listAllItemGrants(
   return grantQ.listAllGrants(db);
 }
 
-/** List the item grants on a document (for the Share surface). Requires `manage_access`
- *  on that document — the same gate that grants/revokes them. */
+/** List the item grants on a document (for the People & roles section of the
+ *  Share surface). Requires `manage_access` on that document — the same gate
+ *  that grants/revokes them. Excludes `link` grants (D51) — those are share
+ *  links, shown exclusively in the dedicated Share links section
+ *  (`listShareLinks`); listing them here too duplicated the row (with a
+ *  nonsensical "link" persona and a raw token hash as the subject) and gave
+ *  it a second, differently-behaved Revoke control. */
 export async function listItemGrants(
   db: Database,
   principal: Principal,
@@ -299,7 +472,7 @@ export async function listItemGrants(
   now: string,
 ): Promise<grantQ.ItemGrantRecord[]> {
   await authorize(db, principal, 'manage_access', { collection, documentId }, now);
-  return grantQ.listGrantsForDocument(db, documentId);
+  return grantQ.listNonLinkGrantsForDocument(db, documentId);
 }
 
 export async function listAudit(db: Database, principal: Principal, now: string, limit = 100) {

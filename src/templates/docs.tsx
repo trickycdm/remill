@@ -21,6 +21,7 @@ export const docsTemplate: RenderTemplate = {
     'Documentation page: section eyebrow, title, markdown body, with related links and ' +
     'backlinks surfaced right after the body. Binds best to title/section/body/related fields.',
   wants: {},
+  layoutOptions: { wantHero: false, wantLead: false },
   Component: ({ def, doc, backlinks }) => {
     const layout = resolveConventionLayout(def, { wantHero: false, wantLead: false });
     const titleRaw = layout.titleField ? doc.data[layout.titleField.key] : undefined;

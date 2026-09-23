@@ -88,8 +88,12 @@ export function sitemapXml(urls: readonly { readonly loc: string; readonly lastm
   ].join('\n');
 }
 
-/** robots.txt — protected surfaces disallowed; share links (/s/) are unlisted
- *  by design (capability URLs must not be crawled). */
+/** robots.txt — protected surfaces disallowed. Share links (/s/) are NOT
+ *  disallowed (D51): every /s/ response already carries `noindex` (meta +
+ *  `X-Robots-Tag`), which is the correct "don't index" signal — a Disallow
+ *  would additionally stop crawlers and link-preview bots (X, LinkedIn, …)
+ *  from ever fetching the page to read those tags or render an unlock/OG
+ *  preview at all. */
 export function robotsTxt(baseUrl: string): string {
   return [
     'User-agent: *',
@@ -97,7 +101,6 @@ export function robotsTxt(baseUrl: string): string {
     'Disallow: /api',
     'Disallow: /mcp',
     'Disallow: /auth',
-    'Disallow: /s/',
     `Sitemap: ${baseUrl}/sitemap.xml`,
     '',
   ].join('\n');

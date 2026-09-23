@@ -38,6 +38,7 @@ const DOC: ExpandedDocument = {
   updatedAt: NOW,
   publishedAt: NOW,
   publishAt: null,
+  visibility: 'public',
   media: { hero: { id: 'med_x', alt: 'A hero photo', width: 1200, height: 630 } },
 };
 

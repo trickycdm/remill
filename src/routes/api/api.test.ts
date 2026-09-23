@@ -151,6 +151,35 @@ describe('REST API — integration through the Hono app', () => {
     expect(del.status).toBe(200);
   });
 
+  it('D50: POST /api/c/:collection/:id/visibility sets visibility; document JSON carries it; gated to publish', async () => {
+    const created = await req('/api/c/posts', {
+      method: 'POST',
+      headers: { ...auth(editorToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Visibility REST' }),
+    });
+    const id = created.json.data.id;
+    expect(created.json.data.visibility).toBe('public'); // default
+
+    const set = await req(`/api/c/posts/${id}/visibility`, {
+      method: 'POST',
+      headers: { ...auth(editorToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visibility: 'unlisted' }),
+    });
+    expect(set.status).toBe(200);
+    expect(set.json.data.visibility).toBe('unlisted');
+
+    const got = await req(`/api/c/posts/${id}`, { headers: auth(editorToken) });
+    expect(got.json.data.visibility).toBe('unlisted');
+
+    // A reader (no `publish`) is forbidden.
+    const denied = await req(`/api/c/posts/${id}/visibility`, {
+      method: 'POST',
+      headers: { ...auth(readerToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visibility: 'private' }),
+    });
+    expect(denied.status).toBe(403);
+  });
+
   it('publicRead: anonymous sees published docs only; drafts never leak', async () => {
     // editor creates one published + one draft
     const a = await req('/api/c/posts', {
@@ -276,6 +305,8 @@ describe('REST API — integration through the Hono app', () => {
     expect(r.json.openapi).toBe('3.1.0');
     expect(r.json.paths['/api/c/posts']).toBeTruthy();
     expect(r.json.components.schemas.posts.properties.title).toBeTruthy();
+    // D50: the visibility path is advertised for publicRead collections.
+    expect(r.json.paths['/api/c/posts/{id}/visibility']).toBeTruthy();
   });
 
   it('D46: a private collection vanishes from anonymous discovery, /api/collections/:slug, and OpenAPI', async () => {

@@ -30,6 +30,7 @@ export const warpTemplate: RenderTemplate = {
     'panel, then state and open questions as labelled sections. Binds best to ' +
     'title/task/state/next-action fields.',
   wants: {},
+  layoutOptions: { wantHero: false, wantLead: false },
   Component: ({ def, doc, backlinks }) => {
     const layout = resolveConventionLayout(def, { wantHero: false, wantLead: false });
     const titleRaw = layout.titleField ? doc.data[layout.titleField.key] : undefined;

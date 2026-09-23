@@ -143,6 +143,16 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   Response `{created, updated, failed, errors:[{line, id?, error}]}` — per-line errors, the run
   never aborts. Body-cap table: REST JSON 1 MiB · /mcp 8 MiB · import 10 MiB · media multipart
   25 MiB (service cap).
+- **Visibility (D50)**: `POST /api/c/:collection/:id/visibility` with body `{visibility: 'public' |
+  'unlisted' | 'private'}`. Publish-gated (changing a document's exposure is a publication
+  decision), allowed on drafts (remembered, takes effect on publish). Document payloads in
+  list/get responses carry `visibility`.
+- **Share links (D51)**: `POST /api/c/:collection/:id/share-links` with body
+  `{expiresAt, password?, label?}` → `201 {grantId, url, expiresAt, hasPassword, label}` (password
+  never echoed back; `expiresAt` required, validated, clamped to 30 days and echoed normalized —
+  `createShareLink`'s `maxTtlDays`, the same rule as the MCP tool below). `GET` lists the
+  document's unexpired links (no hashes); `DELETE /api/c/:collection/:id/share-links/:grantId`
+  revokes. All gated on `share_link`.
 - **OpenAPI**: `/api/openapi.json` is generated from the **live** collection definitions via each
   field type's `jsonSchema` — surface (5). Never hand-write or hand-patch it; regenerate.
   Static (non-generated) endpoints like `/api/trash` must be hand-added in `staticPaths()`
@@ -174,7 +184,10 @@ tokens** as REST.
     collections only; `{id, publish_at? | cancel?}` — exactly one of the two, validated in the
     handler — D32),
     `share_<slug>` (item grant; `subjectKind: 'principal' | 'role' | 'team'`; visible only with
-    `manage_access`), and `share_link_<slug>` (anonymous share link, D26 — see below)
+    `manage_access`), `share_link_<slug>` (anonymous share link, D26 — see below), and
+    `visibility_<slug>` (D50 — `{id, visibility}`, publish-gated; visible when the caller could
+    both `publicRead` the collection and `publish`, since visibility is meaningless on a
+    non-publicRead collection)
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
   - Schema management: `list_collections`, `create_collection`, `update_collection`
     (require `manage_schema`).
@@ -204,11 +217,13 @@ tokens** as REST.
     ignored, `nextCursor` omitted — spec-compliant). Unknown/unpublished/non-prompt/forbidden
     all map to ONE `-32602` shape — no existence oracle. `listChanged` deliberately not
     declared (no push channel; clients poll).
-- **`share_link_<slug>` (D26)** mints an anonymous share link for one document. Visibility and
+- **`share_link_<slug>` (D26/D51)** mints an anonymous share link for one document. Visibility and
   gating key on the `share_link` action — not `manage_access`, and not agent-refused. The grant is
   read-only (`actions: ['read']` hardcoded); `expiresAt` is REQUIRED and clamped to 30 days; the
-  tool returns `{ grantId, url, expiresAt }`. The plaintext URL **intentionally enters agent
-  context** — the grant is revocable at any time from the Share panel or the access matrix.
+  tool returns `{ grantId, url, expiresAt, hasPassword, label }`. Optional `password` (min 8 chars,
+  hashed, never echoed back) and `label` (trimmed, max 80 chars) args, D51. The plaintext URL
+  **intentionally enters agent context** — the grant is revocable at any time from the Share panel
+  or the access matrix; a password (delivered out of band) still gates the human recipient.
 - **Absolute URLs come from `resolveBaseUrl`** (`src/lib/base-url.ts`: `env.BASE_URL` >
   `settings.siteUrl` > request origin), threaded route → `handleMcp` → `buildToolsForPrincipal`, so
   URL-minting tools never hand-build an origin. Admin share/invite links use the same resolver.

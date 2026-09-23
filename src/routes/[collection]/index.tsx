@@ -4,6 +4,7 @@ import { pathParam } from '@/lib/http';
 import { getDb } from '@/db/client';
 import { collectionIndex } from '@/services/discovery';
 import { getSettings } from '@/services/settings';
+import { DEFAULT_LOCALE } from '@/lib/seo';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { formatDate } from '@/lib/format-date';
 import { NotFoundError, ForbiddenError } from '@/lib/errors';
@@ -31,6 +32,8 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     const { def, docs } = await collectionIndex(db, nowIso(), slug);
     const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
     const siteName = settings.siteName?.trim() || 'remill';
+
+    const description = settings.siteDescription?.trim() || undefined;
 
     return c.render(
       <PublicShell settings={settings}>
@@ -69,7 +72,11 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       </PublicShell>,
       {
         title: `${def.name} — ${siteName}`,
+        description,
         canonical: `${baseUrl}/${def.slug}`,
+        ogType: 'website',
+        siteName,
+        locale: DEFAULT_LOCALE,
         feedUrl: `/rss.xml?collection=${encodeURIComponent(def.slug)}`,
       },
     );
@@ -80,6 +87,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
         <PublicShell settings={settings}>
           <PublicNotFound />
         </PublicShell>,
+        { noindex: true },
       );
     }
     throw e;

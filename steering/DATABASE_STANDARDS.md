@@ -38,7 +38,7 @@ Content tables (Phase 1–2), from plan §3:
 | Table | Purpose |
 |---|---|
 | `collections` | slug, name, shape (`collection`/`singleton`), `fields_json`, workflow/api flags, timestamps |
-| `documents` | nanoid id, collection slug, `data_json`, status (`draft`/`published`), created/updated/published_at, created_by |
+| `documents` | nanoid id, collection slug, `data_json`, status (`draft`/`published`), `visibility` (`public`/`unlisted`/`private`, CHECK-constrained, default `public` — D50), created/updated/published_at, created_by |
 | `document_revisions` | document id, revision number, `data_json`, saved_by, saved_at — **append-only** |
 | `document_index` | document id, field key, `value_text`, `value_num` — the query/sort/filter surface for JSON content; synced on save (see below) |
 | `media` | nanoid id, r2_key, filename, mime, size, width/height/duration, alt, `variants_json` |

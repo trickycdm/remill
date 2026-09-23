@@ -97,9 +97,13 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     expect(sitemap).toContain(`/stories/launch-post-${runId}`);
 
     const robots = await (await anonPage.request.get('/robots.txt')).text();
-    for (const path of ['/admin', '/api', '/mcp', '/auth', '/s/']) {
+    for (const path of ['/admin', '/api', '/mcp', '/auth']) {
       expect(robots).toContain(`Disallow: ${path}`);
     }
+    // Share links (/s/, D51) are deliberately NOT disallowed — every /s/
+    // response already carries noindex (meta + X-Robots-Tag), and a Disallow
+    // would additionally block link-preview bots from reading those tags.
+    expect(robots).not.toContain('Disallow: /s/');
     expect(robots).toMatch(/Sitemap: .*\/sitemap\.xml/);
 
     await anon.close();
@@ -251,8 +255,10 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     await expect(anonPage).toHaveTitle(new RegExp(`^${PUB} — `));
     const canonical = anonPage.locator('link[rel="canonical"]');
     await expect(canonical).toHaveAttribute('href', /\/stories\/launch-post/);
+    // og:title (D52) is the bare document title — no " — SiteName" suffix,
+    // since og:site_name already carries the site name as its own property.
     const ogTitle = anonPage.locator('meta[property="og:title"]');
-    await expect(ogTitle).toHaveAttribute('content', new RegExp(`^${PUB} — `));
+    await expect(ogTitle).toHaveAttribute('content', PUB);
     const ogType = anonPage.locator('meta[property="og:type"]');
     await expect(ogType).toHaveAttribute('content', 'article');
     const feed = anonPage.locator('link[rel="alternate"][type="application/rss+xml"]');

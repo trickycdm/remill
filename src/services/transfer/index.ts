@@ -21,7 +21,7 @@ import type { Principal } from '@/access';
 import { authorize } from '@/access';
 import type { CollectionDefinition } from '@/fields/types';
 import { getCollection, listCollections } from '@/db/queries/collections';
-import { getDocumentCollection } from '@/db/queries/documents';
+import { getDocumentCollection, VISIBILITIES, type Visibility } from '@/db/queries/documents';
 import { listMedia as listMediaRows } from '@/db/queries/media';
 import * as docs from '@/services/documents';
 import { toNdjson, parseNdjson } from '@/lib/ndjson';
@@ -42,6 +42,7 @@ interface DocumentLine {
   readonly updatedAt: string;
   readonly publishedAt: string | null;
   readonly createdBy: string | null;
+  readonly visibility: Visibility;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +82,7 @@ export async function exportCollection(
         updatedAt: row.updatedAt,
         publishedAt: row.publishedAt,
         createdBy: row.createdBy,
+        visibility: row.visibility,
       };
       lines.push(line);
       count++;
@@ -132,6 +134,9 @@ function asDocumentLine(value: unknown): Partial<DocumentLine> & { data: Record<
   if (v.status !== undefined && v.status !== 'draft' && v.status !== 'published') {
     throw new BadRequestError("'status' must be 'draft' or 'published'.");
   }
+  if (v.visibility !== undefined && !VISIBILITIES.includes(v.visibility as Visibility)) {
+    throw new BadRequestError(`'visibility' must be one of ${VISIBILITIES.join(', ')}.`);
+  }
   return v as Partial<DocumentLine> & { data: Record<string, unknown> };
 }
 
@@ -177,11 +182,17 @@ export async function importCollection(
   // Publish gate (SEC tightening beyond the plan): a line arriving with
   // status 'published' is a publish decision — authorize it ONCE per run so
   // import can't smuggle drafts live past "agent drafts, human publishes".
-  const wantsPublished = parsed
-    .slice(1)
-    .some((l) => !l.error && (l.value as { status?: unknown } | null)?.status === 'published');
+  const wantsPublished = parsed.slice(1).some((l) => {
+    if (l.error) return false;
+    const v = l.value as { status?: unknown; visibility?: unknown } | null;
+    return v?.status === 'published' || (v?.visibility !== undefined && v.visibility !== 'public');
+  });
+  // Gated regardless of `hasLifecycle`: a non-public `visibility` is a
+  // publish-adjacent decision even on a lifecycle-none collection (visibility
+  // lives on every document row, D50), so it must not bypass the same gate a
+  // `status: 'published'` line does.
   let publishDenied: string | null = null;
-  if (wantsPublished && hasLifecycle(def) && !dryRun) {
+  if (wantsPublished && !dryRun) {
     try {
       await authorize(db, principal, 'publish', { collection }, now);
     } catch (e) {
@@ -199,7 +210,10 @@ export async function importCollection(
       // lifecycle-none collections are always published (B4); otherwise the
       // line's status (default draft) — publish-gated above.
       const status = !hasLifecycle(def) ? 'published' : (line.status ?? 'draft');
-      if (status === 'published' && publishDenied !== null) throw new ForbiddenError(publishDenied, { action: 'publish', collection });
+      const visibility = line.visibility ?? 'public';
+      if ((status === 'published' || visibility !== 'public') && publishDenied !== null) {
+        throw new ForbiddenError(publishDenied, { action: 'publish', collection });
+      }
 
       const exists = id ? await isExistingDocument(db, collection, id) : false;
       if (dryRun) {
@@ -211,6 +225,13 @@ export async function importCollection(
       }
       if (exists) {
         await docs.updateDocument(db, principal, collection, id!, line.data, now);
+        // `visibility` is otherwise ignored on update (only `createDocument`
+        // takes it as create-time metadata) — apply it explicitly when the
+        // line carries one, through the same authorized, no-op-safe path the
+        // admin visibility route uses.
+        if (line.visibility !== undefined) {
+          await docs.setVisibility(db, principal, collection, id!, visibility, now);
+        }
         updated++;
       } else {
         await docs.createDocument(db, principal, collection, line.data, now, {
@@ -218,6 +239,7 @@ export async function importCollection(
           status,
           createdAt: typeof line.createdAt === 'string' ? line.createdAt : undefined,
           publishedAt: typeof line.publishedAt === 'string' ? line.publishedAt : undefined,
+          visibility,
         });
         created++;
       }

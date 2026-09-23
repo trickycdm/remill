@@ -21,7 +21,7 @@ import { documentFts } from '@/db/fts-table';
 import { eventInsert, type EventInput } from '@/db/queries/events';
 import { newId } from '@/lib/id';
 import type { Grant } from '@/access/grant';
-import type { IndexValue, SearchText } from '@/db/queries/documents';
+import type { IndexValue, SearchText, Visibility } from '@/db/queries/documents';
 
 type Batch = [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]];
 
@@ -44,6 +44,7 @@ export interface TrashRecord {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly publishedAt: string | null;
+  readonly visibility: Visibility;
   readonly deletedBy: string | null;
   readonly deletedAt: string;
 }
@@ -62,6 +63,7 @@ function toDomain(row: Row): TrashRecord {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     publishedAt: row.publishedAt,
+    visibility: row.visibility as Visibility,
     deletedBy: row.deletedBy,
     deletedAt: row.deletedAt,
   };
@@ -77,6 +79,7 @@ export interface TrashInput {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly publishedAt: string | null;
+  readonly visibility: Visibility;
   readonly deletedBy: string;
   readonly deletedAt: string;
   /** Outbox event (D33) committed atomically with the trashing. */
@@ -100,6 +103,7 @@ export async function trashDocument(db: Database, input: TrashInput, _grant: Gra
       createdAt: input.createdAt,
       updatedAt: input.updatedAt,
       publishedAt: input.publishedAt,
+      visibility: input.visibility,
       deletedBy: input.deletedBy,
       deletedAt: input.deletedAt,
     }),
@@ -190,6 +194,7 @@ export interface RestoreInput {
   readonly createdAt: string;
   readonly updatedAt: string; // set to `now` by the service
   readonly publishedAt: string | null;
+  readonly visibility: Visibility;
   readonly index: IndexValue[];
   readonly search: SearchText | null;
   /** Outbox event (D33) committed atomically with the restore. */
@@ -215,6 +220,7 @@ export async function restoreTrashedDocument(
       createdAt: input.createdAt,
       updatedAt: input.updatedAt,
       publishedAt: input.publishedAt,
+      visibility: input.visibility,
     }),
     ...input.index.map((v) =>
       db.insert(documentIndex).values({

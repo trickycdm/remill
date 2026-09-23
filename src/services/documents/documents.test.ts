@@ -288,6 +288,44 @@ describe('documents service — the save pipeline', () => {
     );
   });
 
+  it('D50: unlisted — slug 404s for anonymous, doc_ id still 200 with noindex-worthy visibility; private — both 404', async () => {
+    const PAGES: CollectionDefinition = {
+      slug: 'pages2',
+      name: 'Pages2',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'slug', type: 'slug', config: { from: 'title' }, unique: true, index: true },
+      ],
+      workflow: { draftPublish: true },
+      access: { publicRead: true },
+    };
+    await collectionsService.createCollection(db, admin, PAGES, NOW);
+    const anon = anonymousPrincipal('rest');
+
+    const unlisted = await docs.createDocument(db, admin, 'pages2', { title: 'Unlisted Page' }, NOW);
+    await docs.setPublished(db, admin, 'pages2', unlisted.id, true, NOW);
+    await docs.setVisibility(db, admin, 'pages2', unlisted.id, 'unlisted', NOW);
+    // slug resolution (the list-filtered path) 404s…
+    await expect(
+      docs.getDocumentBySlug(db, anon, 'pages2', 'unlisted-page', NOW),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    // …but a direct id read still succeeds (decide() only excludes private).
+    const byId = await docs.getDocument(db, anon, 'pages2', unlisted.id, NOW);
+    expect(byId.id).toBe(unlisted.id);
+    expect(byId.visibility).toBe('unlisted');
+
+    const priv = await docs.createDocument(db, admin, 'pages2', { title: 'Private Page' }, NOW);
+    await docs.setPublished(db, admin, 'pages2', priv.id, true, NOW);
+    await docs.setVisibility(db, admin, 'pages2', priv.id, 'private', NOW);
+    await expect(
+      docs.getDocumentBySlug(db, anon, 'pages2', 'private-page', NOW),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(docs.getDocument(db, anon, 'pages2', priv.id, NOW)).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
+  });
+
   it('D49: draft preview by slug — role perms decide, fail-closed for readers', async () => {
     const PAGES: CollectionDefinition = {
       slug: 'pages',
@@ -392,6 +430,42 @@ describe('documents service — the save pipeline', () => {
     expect(await docs.getBacklinks(db, admin, 'authors', ada.id, NOW)).toEqual([]);
   });
 
+  it('D50: backlinks exclude unlisted and private source documents for anonymous', async () => {
+    const AUTHORS2: CollectionDefinition = {
+      slug: 'authors2',
+      name: 'Authors2',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+      access: { publicRead: true },
+    };
+    const BOOKS2: CollectionDefinition = {
+      slug: 'books2',
+      name: 'Books2',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'author', type: 'relation', config: { collection: 'authors2' }, index: true },
+      ],
+      workflow: { draftPublish: true },
+      access: { publicRead: true },
+    };
+    await collectionsService.createCollection(db, admin, AUTHORS2, NOW);
+    await collectionsService.createCollection(db, admin, BOOKS2, NOW);
+    const ada = await docs.createDocument(db, admin, 'authors2', { name: 'Ada' }, NOW);
+    const pub = await docs.createDocument(db, admin, 'books2', { title: 'Pub Book', author: ada.id }, NOW);
+    await docs.setPublished(db, admin, 'books2', pub.id, true, NOW);
+    const unlisted = await docs.createDocument(db, admin, 'books2', { title: 'Unlisted Book', author: ada.id }, NOW);
+    await docs.setPublished(db, admin, 'books2', unlisted.id, true, NOW);
+    await docs.setVisibility(db, admin, 'books2', unlisted.id, 'unlisted', NOW);
+    const priv = await docs.createDocument(db, admin, 'books2', { title: 'Private Book', author: ada.id }, NOW);
+    await docs.setPublished(db, admin, 'books2', priv.id, true, NOW);
+    await docs.setVisibility(db, admin, 'books2', priv.id, 'private', NOW);
+
+    const anon = anonymousPrincipal('rest');
+    const links = await docs.getBacklinks(db, anon, 'authors2', ada.id, NOW);
+    expect(links.map((l) => l.id)).toEqual([pub.id]);
+  });
+
   it('B2: a configured titleField overrides the first-text-field default', async () => {
     const TARGETS: CollectionDefinition = {
       slug: 'targets',
@@ -473,6 +547,39 @@ describe('documents service — the save pipeline', () => {
       title: null,
       collection: 'secrets',
     });
+  });
+
+  it('D50: relation expansion — an unlisted/private published target still expands with title:null for anonymous', async () => {
+    const TARGETS3: CollectionDefinition = {
+      slug: 'targets3',
+      name: 'Targets3',
+      shape: 'collection',
+      fields: [{ key: 'name', type: 'text', required: true, index: true }],
+      workflow: { draftPublish: true },
+      access: { publicRead: true },
+    };
+    const SOURCES3: CollectionDefinition = {
+      slug: 'sources3',
+      name: 'Sources3',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true, index: true },
+        { key: 'about', type: 'relation', config: { collection: 'targets3' } },
+      ],
+      workflow: { draftPublish: true },
+      access: { publicRead: true },
+    };
+    await collectionsService.createCollection(db, admin, TARGETS3, NOW);
+    await collectionsService.createCollection(db, admin, SOURCES3, NOW);
+    const target = await docs.createDocument(db, admin, 'targets3', { name: 'Hidden Target' }, NOW);
+    await docs.setPublished(db, admin, 'targets3', target.id, true, NOW);
+    await docs.setVisibility(db, admin, 'targets3', target.id, 'private', NOW);
+    const source = await docs.createDocument(db, admin, 'sources3', { title: 'S', about: target.id }, NOW);
+    await docs.setPublished(db, admin, 'sources3', source.id, true, NOW);
+
+    const anon = anonymousPrincipal('rest');
+    const asAnon = await docs.getDocument(db, anon, 'sources3', source.id, NOW);
+    expect(asAnon.relations?.about).toEqual({ id: target.id, title: null, collection: 'targets3' });
   });
 
   it('multi-valued relation: sort is rejected (non-deterministic across N rows)', async () => {
@@ -874,5 +981,31 @@ describe('buildSearchText — prose-only body', () => {
     expect(st?.body).not.toContain('med_');
     expect(st?.body).not.toContain('doc_');
     expect(st?.body).not.toContain('2026-07-09T');
+  });
+
+  it('excludes the D52 SEO override fields (seo_title/meta_description/social_image) from the body', () => {
+    const def: CollectionDefinition = {
+      slug: 'articles',
+      name: 'Articles',
+      shape: 'collection',
+      fields: [
+        { key: 'title', type: 'text', required: true },
+        { key: 'body', type: 'markdown' },
+        { key: 'seo_title', type: 'text' },
+        { key: 'meta_description', type: 'text' },
+        { key: 'social_image', type: 'media' },
+      ],
+    };
+    const st = docs.buildSearchText(def, {
+      title: 'A post',
+      body: 'Ordinary prose here.',
+      seo_title: 'Only for search engines',
+      meta_description: 'A hand-written excerpt for crawlers.',
+      social_image: 'med_social123',
+    });
+    expect(st?.body).toContain('Ordinary prose here.');
+    expect(st?.body).not.toContain('Only for search engines');
+    expect(st?.body).not.toContain('A hand-written excerpt for crawlers.');
+    expect(st?.body).not.toContain('med_social123');
   });
 });

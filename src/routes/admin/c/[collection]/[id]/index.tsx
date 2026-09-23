@@ -8,13 +8,16 @@ import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
 import { getDocument, updateDocument, listRevisions, getBacklinks } from '@/services/documents';
 import { getSettings } from '@/services/settings';
+import { resolveBaseUrl } from '@/lib/base-url';
 import {
   getPrincipalPermissions,
   listItemGrants,
   listPrincipals,
   listRoles,
   listTeams,
+  listShareLinks,
 } from '@/services/access';
+import { canAuthorize } from '@/access';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
@@ -43,10 +46,17 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const backlinks = await getBacklinks(db, principal, slug, id, now);
   const settings = await getSettings(db);
 
-  // Share panel: only for principals with install-wide manage_access (matches what
-  // listPrincipals/listRoles require). getPrincipalPermissions is un-gated (no audit).
+  // Share panel: two independently-gated sections (D51). People & roles needs
+  // install-wide manage_access (matches what listPrincipals/listRoles
+  // require); Share links only needs `share_link` on this document — editors
+  // can mint links without any access-management power. Both probed without
+  // throwing (getPrincipalPermissions is un-gated, no audit).
   const perms = await getPrincipalPermissions(db, principal.id);
   const canShare = perms.some((p) => p.action === 'manage_access' && p.collection === '*');
+  // A non-throwing, non-auditing probe through the real decision pipeline, so
+  // conditions (`own`) and item grants count exactly as listShareLinks' own
+  // authorize() will — the section shows iff the list call can succeed.
+  const canShareLink = await canAuthorize(db, principal, 'share_link', { collection: slug, documentId: id }, now);
   const share = canShare
     ? {
         grants: await listItemGrants(db, principal, slug, id, now),
@@ -55,6 +65,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         teams: await listTeams(db),
       }
     : null;
+  const shareLinks = canShareLink ? await listShareLinks(db, principal, slug, id, now) : null;
 
   // Title the page by the document's primary display value (its first list field),
   // falling back to a generic edit label for an untitled doc.
@@ -137,19 +148,24 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           doc={doc}
           revisions={revisions}
           settings={settings}
+          baseUrl={resolveBaseUrl(c.env, settings, c.req.url)}
         />
       </div>
 
       <BacklinksPanel backlinks={backlinks} />
 
-      {share && (
+      {(share || shareLinks) && (
         <SharePanel
           slug={slug}
           id={id}
-          grants={share.grants}
-          principals={share.principals}
-          roles={share.roles}
-          teams={share.teams}
+          grants={share?.grants}
+          principals={share?.principals}
+          roles={share?.roles}
+          teams={share?.teams}
+          def={shareLinks ? def : undefined}
+          doc={shareLinks ? doc : undefined}
+          links={shareLinks ?? undefined}
+          baseUrl={shareLinks ? resolveBaseUrl(c.env, settings, c.req.url) : undefined}
         />
       )}
     </AdminShell>,

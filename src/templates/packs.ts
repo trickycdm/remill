@@ -13,8 +13,40 @@
  * until the pack is defined.
  */
 
-import type { CollectionDefinition } from '@/fields/types';
+import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import type { TemplateKey } from '@/templates/keys';
+import { SEO_FIELD_KEYS } from '@/lib/seo-keys';
+
+/** Author-controlled SEO overrides (D52) — picked up by `buildDocumentHead`
+ *  (`src/lib/seo.ts`) purely by field KEY (`SEO_FIELD_KEYS`, `src/lib/seo-keys.ts`),
+ *  the same convention-by-key posture as `bind`. `resolveConventionLayout`
+ *  excludes these keys from the hero/lead/body/meta slots entirely, so they
+ *  never render as reading content on ANY template — appended at the END of
+ *  a scaffold purely for a tidy admin field order. Documented in
+ *  steering/SCHEMA_ENGINE.md. */
+const SEO_FIELDS: readonly FieldDescriptor[] = [
+  {
+    key: SEO_FIELD_KEYS[0],
+    type: 'text',
+    label: 'SEO title',
+    admin: { help: 'Overrides the page <title> and og:title. Leave blank to use the title above.' },
+  },
+  {
+    key: SEO_FIELD_KEYS[1],
+    type: 'text',
+    label: 'Meta description',
+    config: { maxLength: 160 },
+    admin: {
+      help: 'Overrides the search/social description (max 160 characters). Leave blank to use the standfirst.',
+    },
+  },
+  {
+    key: SEO_FIELD_KEYS[2],
+    type: 'media',
+    label: 'Social image',
+    admin: { help: 'Overrides the image used when this page is shared (og:image). Leave blank to use the hero.' },
+  },
+];
 
 export const PACK_KEYS = ['blog', 'changelog', 'portfolio', 'docs', 'prompts', 'collab'] as const;
 export type PackKey = (typeof PACK_KEYS)[number];
@@ -59,6 +91,7 @@ export const blogCollectionScaffold: CollectionDefinition = {
     },
     { key: 'body', type: 'markdown' },
     { key: 'tags', type: 'tags', index: true },
+    ...SEO_FIELDS,
   ],
   workflow: { draftPublish: true },
   access: { publicRead: true },
@@ -130,6 +163,7 @@ export const portfolioCollectionScaffold: CollectionDefinition = {
     },
     { key: 'body', type: 'markdown' },
     { key: 'tags', type: 'tags', index: true },
+    ...SEO_FIELDS,
   ],
   workflow: { draftPublish: true },
   access: { publicRead: true },
@@ -168,6 +202,7 @@ export const docsCollectionScaffold: CollectionDefinition = {
       config: { collection: 'docs', multiple: true },
       admin: { help: 'Other doc pages this one relates to — powers Related + Referenced by.' },
     },
+    ...SEO_FIELDS,
   ],
   workflow: { draftPublish: true },
   access: { publicRead: true },

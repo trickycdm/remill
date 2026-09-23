@@ -129,6 +129,29 @@ onto the record — any field an attacker named got written. remill's fix, from 
   principal only. Note the stateless-cookie limitation: a password change cannot revoke sessions already
   minted on other devices (documented in `services/account`; server-side revocation is post-v1).
 
+- **Password-protected share links (D51):** a `link` grant's optional password follows the same
+  scrypt-hash-never-plaintext discipline as account passwords (`item_grants.password_hash`,
+  minimum 8 characters, never logged or returned). Unlock is proved by a cookie —
+  `<exp>.<HMAC-SHA256(SESSION_SECRET, 'v1:share-unlock:' + grantId + ':' + passwordHash + ':' + exp)>`, `Path=/s/<token>`,
+  `HttpOnly; Secure; SameSite=Lax`, ≤24h — the signed `exp` makes expiry server-enforced and the
+  `v1:share-unlock:` prefix keeps this HMAC's message space apart from the session cookie's — rather than a server session (anonymous requests carry
+  none). Binding the HMAC input to the CURRENT password hash means a password change or link
+  revoke invalidates every outstanding unlock with no separate revocation list. The unlock POST
+  is rate-limited twice — per IP (`share-unlock`, 10/60s) and per link (`share-unlock-link`,
+  20/hour, keyed by the token hash) — and a wrong password gets the same generic error as an
+  unknown token. The wrong-password re-render is a 200 (the `/admin/login` convention); only the
+  JSON arm of a locked GET answers 401 `LOCKED`. Passwords are never trimmed. Emailing a link
+  (`emailShareLink`) is `share_link`-gated, rate-limited (`share-email`, 10/60s), and accepts only
+  an exact `${baseUrl}/s/<token>` URL — it must never become a mail relay. **A locked link's
+  page must leak nothing about the document it protects**: no title, description, image, or
+  OG/JSON-LD tag, `Cache-Control: private, no-store`, `noindex`.
+- **Known limitation: media on a protected or private document is not itself access-controlled.**
+  `/media/<id>` is served `public, immutable` by design (MEDIA_STANDARDS.md) with no auth check —
+  an image embedded in a password-locked or private document is reachable by anyone who has (or
+  guesses) its media id, independent of the document's lock. Media ids are unguessable nanoids and
+  never appear before the document is unlocked, but a leaked image URL bypasses the password.
+  Gating media by the documents that reference it is a separate project, not yet built.
+
 ## 5. Secrets
 
 - **No secrets in source.** Managed as Worker bindings via `wrangler secret put <NAME>`; local dev via
@@ -184,8 +207,10 @@ onto the record — any field an attacker named got written. remill's fix, from 
   (D35):** `/rss.xml`, `/sitemap.xml`, `/robots.txt`, and the `/` homepage — all read as the
   anonymous principal through the gated pipeline (published + publicRead + lifecycle only; the
   feed/sitemap can never leak a draft because the compiled read filter runs in-query), and all
-  correctly receive the public CSP. robots.txt disallows every protected prefix plus `/s/`
-  (share links are capability URLs — never crawlable).
+  correctly receive the public CSP. robots.txt disallows every protected prefix; `/s/` (share
+  links) is deliberately NOT disallowed (D51) — every `/s/` response instead carries `noindex`
+  via meta tag and `X-Robots-Tag` header, which keeps it out of search results while still
+  letting crawlers and link-unfurlers (needed for a usable preview card) fetch an unlocked link.
 - **Import (D37) is a bulk WRITE surface and is treated like one**: 10 MiB body cap
   (`MAX_IMPORT_BODY_BYTES`), its own `'import'` rate bucket (10/60s), every line through the
   whitelist-validated pipeline with per-item `authorize()`, and a publish gate — a line arriving

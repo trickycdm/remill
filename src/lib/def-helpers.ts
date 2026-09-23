@@ -7,12 +7,18 @@
  */
 
 import type { CollectionDefinition } from '@/fields/types';
+import { isListed, type Visibility } from '@/lib/visibility';
+
+export { isListed, isAnonymouslyReadable } from '@/lib/visibility';
 
 /** The minimal document shape these helpers read — structural, so queries- and
  *  service-layer records both fit without importing either layer. */
 export interface DocLike {
   readonly id: string;
   readonly data: Record<string, unknown>;
+  /** Document visibility (D50); optional — callers that don't carry it treat
+   *  the document as public. */
+  readonly visibility?: Visibility;
 }
 
 /** The collection's display-title field: an explicit binding first (`configured`
@@ -40,8 +46,15 @@ export function titleOf(def: CollectionDefinition, doc: DocLike): string {
 
 /** A document's public URL: the indexed slug-field value when present (the
  *  pretty URL the public route resolves), else the `doc_…` id (the route
- *  accepts both). Pass `baseUrl: ''` for a relative path. */
+ *  accepts both). When the document's visibility (D50) is set and not
+ *  `'public'`, the slug is NEVER used — the slug is guessable from the title,
+ *  which defeats unlisted/private — so it always returns the `doc_…` id URL
+ *  instead. A missing visibility is treated as public (unchanged behaviour).
+ *  Pass `baseUrl: ''` for a relative path. */
 export function publicUrlOf(def: CollectionDefinition, doc: DocLike, baseUrl: string): string {
+  if (!isListed(doc)) {
+    return `${baseUrl}/${def.slug}/${encodeURIComponent(doc.id)}`;
+  }
   const slugField = def.fields.find((f) => f.type === 'slug' && f.index);
   const raw = slugField ? doc.data[slugField.key] : undefined;
   const ref = typeof raw === 'string' && raw.length ? raw : doc.id;

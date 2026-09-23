@@ -4,6 +4,7 @@ import { getDb } from '@/db/client';
 import { getSettings } from '@/services/settings';
 import { publicOverview } from '@/services/discovery';
 import { resolveBaseUrl } from '@/lib/base-url';
+import { DEFAULT_LOCALE } from '@/lib/seo';
 import { nowIso } from '@/lib/now';
 import { MarketingShell } from '@/components/layouts/marketing-shell';
 import {
@@ -32,6 +33,10 @@ export const onRequestGet = factory.createHandlers(async (c) => {
   const db = getDb(c.env.DB);
   const [sections, settings] = await Promise.all([publicOverview(db, nowIso()), getSettings(db)]);
   const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
+  const siteName = settings.siteName?.trim() || 'remill';
+  const description =
+    settings.siteDescription?.trim() ||
+    'A lightweight, agent-native CMS: a GUI for people, a JSON API for apps, and permissioned MCP for AI agents.';
 
   // Narrative (the poster cut): promise → who it's for → the job ticket →
   // the setlist → the stamped guarantee → wire the agent → the dogfood index
@@ -49,11 +54,18 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     </MarketingShell>,
     {
       title: 'remill: content, milled',
-      description:
-        settings.siteDescription?.trim() ||
-        'A lightweight, agent-native CMS: a GUI for people, a JSON API for apps, and permissioned MCP for AI agents.',
+      description,
       canonical: `${baseUrl}/`,
       ogType: 'website',
+      siteName,
+      locale: DEFAULT_LOCALE,
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: siteName,
+        url: `${baseUrl}/`,
+        description,
+      },
       feedUrl: '/rss.xml',
     },
   );

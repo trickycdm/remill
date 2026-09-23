@@ -16,7 +16,8 @@ import { listTrash, restoreDocument, deleteForever, purgeExpiredTrash } from '@/
 import { createRole } from '@/services/access';
 import { searchSite } from '@/services/search';
 import { seedRoles, makePrincipal } from '@/test/access';
-import type { Principal } from '@/access';
+import { authorize, type Principal } from '@/access';
+import { setDocumentVisibility } from '@/db/queries/documents';
 import type { CollectionDefinition } from '@/fields/types';
 import { NotFoundError, ConflictError, ForbiddenError } from '@/lib/errors';
 
@@ -94,6 +95,20 @@ describe('trash — snapshot-then-delete + restore (D29)', () => {
     // Trash entry consumed.
     expect((await listTrash(db, admin, {}, LATER)).rows).toHaveLength(0);
     await expect(restoreDocument(db, admin, rows[0].id, LATER)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('restore preserves visibility (D50)', async () => {
+    const doc = await makePost('Unlisted phoenix');
+    const grant = await authorize(db, admin, 'publish', { collection: 'posts', documentId: doc.id }, NOW);
+    await setDocumentVisibility(db, { id: doc.id, collection: 'posts', visibility: 'unlisted', now: NOW }, grant);
+    await docs.deleteDocument(db, admin, 'posts', doc.id, LATER);
+
+    const { rows } = await listTrash(db, admin, {}, LATER);
+    expect(rows[0].visibility).toBe('unlisted');
+
+    await restoreDocument(db, admin, rows[0].id, LATER);
+    const back = await docs.getDocument(db, admin, 'posts', doc.id, LATER);
+    expect(back.visibility).toBe('unlisted');
   });
 
   it('409s when a unique value was re-taken since deletion', async () => {

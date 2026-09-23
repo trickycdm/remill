@@ -136,6 +136,7 @@ export async function restoreDocument(
         createdAt: record.createdAt,
         updatedAt: now,
         publishedAt: record.publishedAt,
+        visibility: record.visibility,
         index: buildIndex(def, record.data),
         search: buildSearchText(def, record.data),
         event: {

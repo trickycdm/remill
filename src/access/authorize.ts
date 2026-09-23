@@ -22,7 +22,7 @@ import { getApplicableGrants, getGrantedDocumentIds } from '@/db/queries/grants'
 import { getPrincipalTeamIds } from '@/db/queries/teams';
 import { getCollection } from '@/db/queries/collections';
 import { getDocumentMetaForAuth } from '@/db/queries/documents';
-import { ForbiddenError } from '@/lib/errors';
+import { ForbiddenError, NotFoundError } from '@/lib/errors';
 import type { SessionUser } from '@/lib/auth-constants';
 
 export { Grant } from '@/access/grant';
@@ -82,6 +82,50 @@ export async function resolveAccess(
   return { permissions, publicRead };
 }
 
+/** Resolve `resource` for a decision — the document lookup shared by
+ *  `authorize()` (which also audits) and `canAuthorize()` (which doesn't).
+ *  `ok: false` means a DIFFERENT collection actually owns this document id —
+ *  the cross-collection check (a principal must not act on a document by
+ *  claiming a collection it doesn't live in); the caller
+ *  turns that into a 404. See `authorize()` below for the full reasoning on
+ *  what's filled and when. */
+async function resolveResourceForDecision(
+  db: Database,
+  action: Action,
+  resource: Resource,
+): Promise<{ ok: true; resolved: Resource } | { ok: false }> {
+  if (!resource.documentId) return { ok: true, resolved: resource };
+  const meta = await getDocumentMetaForAuth(db, resource.documentId);
+  if (meta && meta.collection !== resource.collection) return { ok: false };
+  if (!meta) return { ok: true, resolved: resource };
+  return {
+    ok: true,
+    resolved: {
+      ...resource,
+      status: resource.status ?? meta.status,
+      createdBy: resource.createdBy ?? meta.createdBy ?? undefined,
+      visibility: action === 'read' ? (resource.visibility ?? meta.visibility) : resource.visibility,
+    },
+  };
+}
+
+/** The applicable item grants for a resolved item resource — shared by
+ *  `authorize()` and `canAuthorize()`. Empty for a collection-level resource. */
+async function grantsForDecision(
+  db: Database,
+  principal: Principal,
+  resolved: Resource,
+  now: string,
+): Promise<Awaited<ReturnType<typeof getApplicableGrants>>> {
+  if (!resolved.documentId) return [];
+  // Roles and teams are both subject-resolution inputs (D24) — resolve together.
+  const [roleSlugs, teamIds] = await Promise.all([
+    getPrincipalRoleSlugs(db, principal.id),
+    getPrincipalTeamIds(db, principal.id),
+  ]);
+  return getApplicableGrants(db, resolved.documentId, principal.id, roleSlugs, now, principal.linkId, teamIds);
+}
+
 /**
  * Authorize `principal` to perform `action` on `resource`. Writes an audit row
  * either way. Returns a Grant witness on allow; throws ForbiddenError on deny.
@@ -117,30 +161,43 @@ export async function authorize(
   const permissions = preResolved?.permissions ?? (await getPrincipalPermissions(db, principal.id));
   const publicRead = preResolved?.publicRead ?? (await collectionPublicRead(db, resource.collection));
 
-  // For an item-level decision, resolve the document's status/owner if the caller
-  // didn't supply them — otherwise the `own`/`published` conditions can't be
-  // evaluated (e.g. a plain read of a document by id).
-  let resolved = resource;
-  if (resource.documentId && (resource.status === undefined || resource.createdBy === undefined)) {
-    const meta = await getDocumentMetaForAuth(db, resource.documentId);
-    if (meta) {
-      resolved = {
-        ...resource,
-        status: resource.status ?? meta.status,
-        createdBy: resource.createdBy ?? meta.createdBy ?? undefined,
-      };
-    }
+  // For an item-level decision, ALWAYS look the document up once — never trust
+  // the caller's `resource.collection` on its own: a principal holding
+  // `share_link` (or any item action) on collection A must not be able to reach a
+  // document that actually lives in collection B by naming A in the URL and B's
+  // document id (the cross-collection exploit this check closes). A document
+  // found under a DIFFERENT collection is a 404, not a 403 — it writes a deny
+  // audit row first, so "every allow and every deny is recorded" still holds.
+  //
+  // A `documentId` with no matching `documents` row is NOT treated as a
+  // mismatch: media (D-media, its own table, not the documents pipeline) and
+  // any other id space authorize() is asked about that isn't in `documents`
+  // legitimately look up empty here — only content in the documents pipeline
+  // can be impersonated cross-collection, so only a found-but-wrong-collection
+  // row is fatal. The normal `decide()` deny path (or the resource's
+  // caller-supplied fields) still applies when nothing is found.
+  //
+  // `status`/`createdBy` are filled whenever the caller didn't supply them
+  // (needed for `own`/`published`/publicRead conditions on any action).
+  // `visibility` is only filled for `read` — no other action's decision depends
+  // on it, so non-read callers don't pay for a field they don't use.
+  const step = await resolveResourceForDecision(db, action, resource);
+  if (!step.ok) {
+    await appendAudit(db, {
+      principalId: principal.id,
+      tokenId: principal.tokenId,
+      surface: principal.surface,
+      action,
+      resource: resourceKey(resource),
+      collection: resource.collection,
+      allowed: false,
+      now,
+    });
+    throw new NotFoundError('Document');
   }
+  const resolved = step.resolved;
 
-  let grants: Awaited<ReturnType<typeof getApplicableGrants>> = [];
-  if (resolved.documentId) {
-    // Roles and teams are both subject-resolution inputs (D24) — resolve together.
-    const [roleSlugs, teamIds] = await Promise.all([
-      getPrincipalRoleSlugs(db, principal.id),
-      getPrincipalTeamIds(db, principal.id),
-    ]);
-    grants = await getApplicableGrants(db, resolved.documentId, principal.id, roleSlugs, now, principal.linkId, teamIds);
-  }
+  const grants = await grantsForDecision(db, principal, resolved, now);
 
   const allowed = decide({ principal, action, resource: resolved, permissions, grants, publicRead, tokenScope: principal.tokenScope });
 
@@ -165,10 +222,43 @@ export async function authorize(
 }
 
 /**
+ * Non-throwing, NON-AUDITING probe: would `authorize()` allow this? For
+ * UI-visibility decisions only (e.g. "show the Share links section") — never
+ * as a substitute for the real gate on an actual read/write, which must still
+ * call `authorize()` and hold its Grant witness. Deliberately skips
+ * `appendAudit` entirely (not "catch and swallow a deny row") so idly
+ * rendering a page doesn't spam the audit log with checks nobody attempted
+ * — evaluates the same `resolveResourceForDecision` +
+ * `decide()` pipeline authorize() does, just without the audit write or the
+ * throw.
+ */
+export async function canAuthorize(
+  db: Database,
+  principal: Principal,
+  action: Action,
+  resource: Resource,
+  now: string,
+  preResolved?: ResolvedAccess,
+): Promise<boolean> {
+  if (principal.kind === 'system') return true;
+
+  const permissions = preResolved?.permissions ?? (await getPrincipalPermissions(db, principal.id));
+  const publicRead = preResolved?.publicRead ?? (await collectionPublicRead(db, resource.collection));
+
+  const step = await resolveResourceForDecision(db, action, resource);
+  if (!step.ok) return false;
+  const resolved = step.resolved;
+
+  const grants = await grantsForDecision(db, principal, resolved, now);
+  return decide({ principal, action, resource: resolved, permissions, grants, publicRead, tokenScope: principal.tokenScope });
+}
+
+/**
  * Compile the principal's READ permissions for a collection into a SQL predicate
  * applied INSIDE the list query — never post-filter in memory (D17). Returns
  * undefined for an unrestricted reader (no predicate), or `1=0` when nothing is
- * readable. OR-combines: published, own, publicRead, and item-granted ids.
+ * readable. OR-combines: published (role condition, all visibilities), publicRead
+ * (published AND public only — D50), own, and item-granted ids.
  */
 export async function compileReadFilter(
   db: Database,
@@ -191,8 +281,21 @@ export async function compileReadFilter(
 
   const clauses: SQL[] = [];
   const publicRead = resolved?.publicRead ?? (await collectionPublicRead(db, collection));
-  if (publicRead || readPerms.some((p) => p.condition === 'published')) {
+  const hasPublishedCondition = readPerms.some((p) => p.condition === 'published');
+  if (hasPublishedCondition && principal.id === 'anonymous') {
+    // Anonymous never bypasses visibility via a role's `published` condition
+    // either (D50) — same restricted clause as the publicRead-only
+    // branch below.
+    clauses.push(sql`${documents.status} = 'published' AND ${documents.visibility} = 'public'`);
+  } else if (hasPublishedCondition) {
+    // A role's `published` condition sees every visibility — unlisted/private
+    // only hide documents from the PUBLIC, not from readers a role already grants.
     clauses.push(sql`${documents.status} = 'published'`);
+  } else if (publicRead) {
+    // publicRead sugar ALONE (no role condition backing it): published AND
+    // public only (D50) — unlisted/private documents drop out of every
+    // anonymous list (homepage, index, RSS, sitemap, REST list, search, backlinks).
+    clauses.push(sql`${documents.status} = 'published' AND ${documents.visibility} = 'public'`);
   }
   if (readPerms.some((p) => p.condition === 'own')) {
     clauses.push(sql`${documents.createdBy} = ${principal.id}`);

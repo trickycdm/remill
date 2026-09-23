@@ -92,6 +92,71 @@ describe('transfer (D37)', () => {
     expect(restoredDraft.status).toBe('draft');
   });
 
+  it('round-trip preserves visibility (D50); a non-public line requires publish', async () => {
+    const pub = await docs.createDocument(db, admin, 'posts', { title: 'Public one' }, EARLIER);
+    const { ndjson: exported } = await exportCollection(db, admin, 'posts', NOW);
+    const publicLine = parseNdjson(exported)[1].value as { visibility: string };
+    expect(publicLine.visibility).toBe('public');
+
+    const header = { kind: 'remill-export', version: 1, exportedAt: NOW, collection: POSTS };
+    const text = toNdjson([
+      header,
+      { kind: 'document', data: { title: 'Unlisted one' }, visibility: 'unlisted' },
+      { kind: 'document', data: { title: 'Bad visibility' }, visibility: 'bogus' },
+    ]);
+
+    // The author has no `publish` — a non-public visibility is a publish
+    // decision, so the line fails, and the public line above stays untouched.
+    const asAuthor = await importCollection(db, author, 'posts', text, NOW);
+    expect(asAuthor.failed).toBe(2);
+    expect(asAuthor.errors[0].error).toMatch(/publish/i);
+    expect(asAuthor.errors[1].error).toMatch(/visibility/i);
+
+    const asAdmin = await importCollection(db, admin, 'posts', text, NOW);
+    expect(asAdmin.created).toBe(1);
+    expect(asAdmin.failed).toBe(1);
+    const list = await docs.listDocuments(db, admin, 'posts', {}, NOW);
+    const unlisted = list.rows.find((r) => r.data.title === 'Unlisted one');
+    expect(unlisted?.visibility).toBe('unlisted');
+    const restoredPub = await docs.getDocument(db, admin, 'posts', pub.id, NOW);
+    expect(restoredPub.visibility).toBe('public');
+  });
+
+  it('upsert applies `visibility` on the UPDATE path too, not just create', async () => {
+    const doc = await docs.createDocument(db, admin, 'posts', { title: 'A post' }, NOW);
+    expect(doc.visibility).toBe('public');
+    const { ndjson } = await exportCollection(db, admin, 'posts', NOW);
+    const edited = ndjson.replace('"visibility":"public"', '"visibility":"unlisted"');
+
+    const result = await importCollection(db, admin, 'posts', edited, NOW);
+    expect(result).toMatchObject({ created: 0, updated: 1, failed: 0 });
+    const after = await docs.getDocument(db, admin, 'posts', doc.id, NOW);
+    expect(after.visibility).toBe('unlisted');
+  });
+
+  it('the publish gate on non-public visibility applies even on a lifecycle-none collection', async () => {
+    const NOTES: CollectionDefinition = {
+      slug: 'notes',
+      name: 'Notes',
+      shape: 'collection',
+      fields: [{ key: 'title', type: 'text', required: true, index: true }],
+      workflow: { lifecycle: 'none' },
+    };
+    await collectionsService.createCollection(db, admin, NOTES, NOW);
+    const header = { kind: 'remill-export', version: 1, exportedAt: NOW, collection: NOTES };
+    const text = toNdjson([
+      header,
+      { kind: 'document', data: { title: 'Private note' }, visibility: 'private' },
+    ]);
+
+    const asAuthor = await importCollection(db, author, 'notes', text, NOW);
+    expect(asAuthor.failed).toBe(1);
+    expect(asAuthor.errors[0].error).toMatch(/publish/i);
+
+    const asAdmin = await importCollection(db, admin, 'notes', text, NOW);
+    expect(asAdmin.created).toBe(1);
+  });
+
   it('upsert: existing ids update (data merged through the validated pipeline)', async () => {
     const doc = await docs.createDocument(db, admin, 'posts', { title: 'Original' }, NOW);
     const { ndjson } = await exportCollection(db, admin, 'posts', NOW);

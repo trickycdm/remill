@@ -12,6 +12,7 @@ import type { FC } from 'hono/jsx';
 import type { CollectionDefinition } from '@/fields/types';
 import type { ExpandedDocument, Backlink } from '@/services/documents';
 import type { SiteSettings } from '@/services/settings';
+import type { LayoutOptions } from '@/templates/lib/conventions';
 
 /** Per-render derived context handed to a template (computed once in the route). */
 export interface TemplateContext {
@@ -38,6 +39,12 @@ export interface RenderTemplate {
    *  the reader-share island load are per-template capabilities, not implied by
    *  "a template resolved" (a changelog wants neither). Absent flag ⇒ false. */
   readonly wants?: { readonly readingTime?: boolean; readonly shareBar?: boolean };
+  /** The `resolveConventionLayout` options this template's Component calls
+   *  with — exposed so `buildDocumentHead` (`lib/seo.ts`) resolves the SAME
+   *  hero/lead slots the page actually renders, instead of re-guessing with
+   *  the default (hero+lead) options. Undefined ⇒ the default (article shape:
+   *  wants both). */
+  readonly layoutOptions?: LayoutOptions;
   readonly Component: FC<{
     def: CollectionDefinition;
     doc: ExpandedDocument;

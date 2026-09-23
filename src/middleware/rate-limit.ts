@@ -42,6 +42,18 @@ export const IMPORT_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 }
 export const OAUTH_REGISTER_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
 export const OAUTH_TOKEN_RATE_LIMIT: RateLimitTier = { limit: 30, windowSeconds: 60 };
 export const OAUTH_DEVICE_ENTRY_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
+// D51: guessing a share-link password is a low-entropy brute-force surface,
+// same shape as login — tight per-IP tier on the unlock POST.
+export const SHARE_UNLOCK_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
+// D51: the per-IP tier above alone doesn't stop a
+// DISTRIBUTED guesser (many IPs, one link) — a second bucket keyed to the
+// link itself (its hashed token, never the plaintext) closes that gap. Wider
+// window/limit than the per-IP tier since it's shared across every guesser.
+export const SHARE_UNLOCK_LINK_RATE_LIMIT: RateLimitTier = { limit: 20, windowSeconds: 60 * 60 };
+// D51: emailing a share link is a spam/phishing relay once
+// a real transport is configured — its own tier, independent of the mint
+// tier, on the admin Share panel's op=email_link POST.
+export const SHARE_EMAIL_RATE_LIMIT: RateLimitTier = { limit: 10, windowSeconds: 60 };
 
 /** What the limiter records on the context for `apiJson` to surface as headers. */
 export interface RateLimitInfo {

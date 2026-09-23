@@ -155,10 +155,13 @@ test.describe.serial('Roadmap — relations, graph, lifecycle, publish & share',
     await anonPage.goto(url);
     await expect(anonPage.getByRole('heading', { name: 'Secret Share Target' })).toBeVisible();
 
-    // Revoke from the Share panel → the same URL is a uniform 404.
+    // Revoke from the Share links section (D51) → the same URL is a uniform
+    // 404. Unscoped: this doc has exactly one share link and no item grants,
+    // so "Revoke" is unique on the page (a `div`-ancestor filter chain here
+    // strict-mode-violates — both the row and its list-container div satisfy
+    // "has text 'link'", matching the button twice).
     await page.goto(`/admin/c/posts/${docId}`);
-    const linkRow = page.locator('div', { has: page.getByText('link', { exact: true }) }).filter({ hasText: 'link …' }).first();
-    await linkRow.getByRole('button', { name: 'Revoke' }).click();
+    await page.getByRole('button', { name: 'Revoke' }).click();
     await page.waitForURL(new RegExp(`/admin/c/posts/${docId}$`));
     const revokedRes = await anonPage.goto(url);
     expect(revokedRes?.status()).toBe(404);

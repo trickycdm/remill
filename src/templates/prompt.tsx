@@ -33,6 +33,7 @@ export const promptTemplate: RenderTemplate = {
     'Prompt card: the prompt text in a mono panel with {{variable}} placeholders highlighted, ' +
     'variable chips, a model badge, and labelled usage notes. No hero or standfirst.',
   wants: { shareBar: true },
+  layoutOptions: { wantHero: false, wantLead: false },
   Component: ({ def, doc, backlinks, ctx }) => {
     const layout = resolveConventionLayout(def, { wantHero: false, wantLead: false });
     const titleRaw = layout.titleField ? doc.data[layout.titleField.key] : undefined;

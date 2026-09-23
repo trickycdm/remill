@@ -63,6 +63,16 @@ rendered public pages + share links.)
 > author banner; edit-page header gains a prominent "Preview ↗"), plus the tear-off share colophon
 > (`rm-perf` + pop-ink "Copied"), the serif-italic prose byline (template-owned `full` date preset),
 > the `.rm-measure` reading column, and the wordmark's 1px optical correction.
+> **D50–D52 shipped 2026-09-23** (plan: [`plans/2026-09-23-visibility_link_passwords_seo_head/`](plans/2026-09-23-visibility_link_passwords_seo_head/)):
+> per-document **visibility** — public/unlisted/private, orthogonal to draft/published (D50,
+> `documents.visibility`; unlisted reads only by its `doc_…` id URL, dropped from every anonymous
+> list/feed/search/backlink; editor sidebar control, REST + MCP `visibility_<slug>` parity);
+> **password-protected share links** — one password per link, not per document (D51,
+> `item_grants.password_hash`/`label`, an HMAC unlock cookie scoped to `/s/<token>`, a blanket
+> locked page that leaks nothing, the panel's share-link section decoupled from email); and a
+> **rich, priority-chained public SEO head** (D52, `src/lib/seo.ts`'s `buildDocumentHead` — shared
+> by the article route and open share links — og/twitter/JSON-LD, `seo_title`/`meta_description`/
+> `social_image` convention fields on the blog/docs/portfolio packs).
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -104,7 +114,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
-  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41) + /:c index pages (D42) + /s/:token share links (anonymous; `?preview=1` + session = draft preview, D49)
+  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41), unlisted via /:c/doc_… (D50) + /:c index pages (D42) + /s/:token share links (anonymous, optionally password-locked, D51; `?preview=1` + session = draft preview, D49)
                      / · /rss.xml · /sitemap.xml · /robots.txt   Discovery pack (D35, anonymous gated reads)
   Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29: purges · D32: publish drain as the system actor)
 
@@ -180,7 +190,9 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   base64 decode for MCP uploads), `markdown/` (micromark, sanitized), `def-helpers.ts`
   (titleFieldOf/titleOf/publicUrlOf/excerptFrom — shared title/URL/excerpt heuristics, D35),
   `feeds.ts` (pure RSS/sitemap/robots builders, D35), `ndjson.ts` (import/export, D37), `diff.ts`
-  (LCS line diff for revision compare view, D39), `reading-time.ts` (word-count estimate, D41), `relative-time.ts` (compact "x ago" freshness, deterministic);
+  (LCS line diff for revision compare view, D39), `reading-time.ts` (word-count estimate, D41), `relative-time.ts` (compact "x ago" freshness, deterministic),
+  `seo.ts` (`buildDocumentHead` — pure, priority-chained og/twitter/JSON-LD builder shared by the
+  article and share-link routes, D52);
   **`src/components/`** Hono JSX with `field-view.tsx` (ViewComponent), `document-view.tsx`,
   `layouts/public-shell.tsx` (read-only render), `share-bar.tsx` (reader share UI — copy-link +
   Web Share, D41), `backlinks.tsx` (relation backlinks list), `admin/graph-panel.tsx` (shared GraphPanel wiring the D45 island for both /admin dashboard hero and /admin/graph, with accessible fallback summary); **`src/client/`** browser islands:

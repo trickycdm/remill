@@ -44,6 +44,7 @@ export const statusTemplate: RenderTemplate = {
     'open questions, and linked work grouped by collection. Built for share links — the ' +
     'report derives from the record.',
   wants: {},
+  layoutOptions: { wantHero: false, wantLead: false },
   Component: ({ def, doc, backlinks }) => {
     const layout = resolveConventionLayout(def, { wantHero: false, wantLead: false });
     const titleRaw = layout.titleField ? doc.data[layout.titleField.key] : undefined;

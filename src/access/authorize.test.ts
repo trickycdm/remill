@@ -180,6 +180,142 @@ describe('access control — the full model (Phase 3)', () => {
     expect(render(filterResolved)).toEqual(render(filterUnresolved));
   });
 
+  describe('visibility (D50) — public/unlisted/private', () => {
+    it('decide() item read: anonymous (publicRead sugar) sees public+published only', async () => {
+      const anon = await makePrincipal(db, NOW, { id: 'anonymous', role: 'anonymous' });
+      const base = { collection: 'posts', documentId: 'd' } as const;
+      // published + public → allowed
+      await expect(
+        authorize(db, anon, 'read', { ...base, status: 'published', visibility: 'public' }, NOW),
+      ).resolves.toBeInstanceOf(Grant);
+      // published + missing visibility → treated as public → allowed
+      await expect(authorize(db, anon, 'read', { ...base, status: 'published' }, NOW)).resolves.toBeInstanceOf(
+        Grant,
+      );
+      // published + unlisted → still allowed by item read (only lists hide it)
+      await expect(
+        authorize(db, anon, 'read', { ...base, status: 'published', visibility: 'unlisted' }, NOW),
+      ).resolves.toBeInstanceOf(Grant);
+      // published + private → denied
+      await expect(
+        authorize(db, anon, 'read', { ...base, status: 'published', visibility: 'private' }, NOW),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+      // draft (any visibility) → denied
+      await expect(
+        authorize(db, anon, 'read', { ...base, status: 'draft', visibility: 'public' }, NOW),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+    });
+
+    it('decide() item read: a role published-condition reader (e.g. `reader`) sees every visibility once published', async () => {
+      const reader = await makePrincipal(db, NOW, { id: 'prn_v_reader', role: 'reader' });
+      const base = { collection: 'posts', documentId: 'd', status: 'published' as const };
+      for (const visibility of ['public', 'unlisted', 'private'] as const) {
+        await expect(
+          authorize(db, reader, 'read', { ...base, visibility }, NOW),
+          `reader should see published+${visibility}`,
+        ).resolves.toBeInstanceOf(Grant);
+      }
+      await expect(
+        authorize(db, reader, 'read', { collection: 'posts', documentId: 'd', status: 'draft', visibility: 'public' }, NOW),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+    });
+
+    it('decide() item read: a share-link grant reads a private document too — item grants are additive', async () => {
+      const post = await docs.createDocument(db, admin, 'posts', { title: 'Link doc' }, NOW);
+      await docs.setVisibility(db, admin, 'posts', post.id, 'private', NOW);
+      const { token } = await access.createShareLink(
+        db,
+        admin,
+        { collection: 'posts', documentId: post.id, actions: ['read'] },
+        NOW,
+      );
+      const resolved = await access.resolveShareLink(db, token, NOW);
+      expect(resolved).not.toBeNull();
+      const { doc } = await docs.getSharedDocument(db, resolved!, NOW);
+      expect(doc.id).toBe(post.id);
+      expect(doc.visibility).toBe('private');
+    });
+
+    it('compileReadFilter list: publicRead-only reader (anonymous) excludes unlisted and private; a role published-condition reader keeps everything', async () => {
+      const pub = await docs.createDocument(db, admin, 'posts', { title: 'Pub' }, NOW);
+      const unlisted = await docs.createDocument(db, admin, 'posts', { title: 'Unlisted' }, NOW);
+      const priv = await docs.createDocument(db, admin, 'posts', { title: 'Priv' }, NOW);
+      await docs.setPublished(db, admin, 'posts', pub.id, true, NOW);
+      await docs.setPublished(db, admin, 'posts', unlisted.id, true, NOW);
+      await docs.setPublished(db, admin, 'posts', priv.id, true, NOW);
+      await docs.setVisibility(db, admin, 'posts', unlisted.id, 'unlisted', NOW);
+      await docs.setVisibility(db, admin, 'posts', priv.id, 'private', NOW);
+
+      const anon = await makePrincipal(db, NOW, { id: 'anonymous', role: 'anonymous' });
+      const anonList = await docs.listDocuments(db, anon, 'posts', { pageSize: 50 }, NOW);
+      const anonIds = anonList.rows.map((r) => r.id);
+      expect(anonIds).toContain(pub.id);
+      expect(anonIds).not.toContain(unlisted.id);
+      expect(anonIds).not.toContain(priv.id);
+
+      const reader = await makePrincipal(db, NOW, { id: 'prn_v_list_reader', role: 'reader' });
+      const readerList = await docs.listDocuments(db, reader, 'posts', { pageSize: 50 }, NOW);
+      const readerIds = readerList.rows.map((r) => r.id);
+      expect(readerIds).toContain(pub.id);
+      expect(readerIds).toContain(unlisted.id);
+      expect(readerIds).toContain(priv.id);
+    });
+
+    it("finding 14: the built-in `anonymous` principal never bypasses visibility via a role's `published` condition", async () => {
+      // Simulate an admin having attached a `published` read condition directly
+      // to the seeded `anonymous` role (editable, seeded — the review's
+      // scenario) by authorizing AS the anonymous id with that permission shape.
+      const anon = await makePrincipal(db, NOW, { id: 'anonymous', role: 'reader' }); // 'reader' carries a published condition
+      const priv = await docs.createDocument(db, admin, 'posts', { title: 'Anon-safe priv' }, NOW);
+      await docs.setPublished(db, admin, 'posts', priv.id, true, NOW);
+      await docs.setVisibility(db, admin, 'posts', priv.id, 'private', NOW);
+
+      // Item read: denied even though the role's `published` condition would
+      // otherwise see every visibility once published.
+      await expect(
+        authorize(db, anon, 'read', { collection: 'posts', documentId: priv.id }, NOW),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+
+      // List filter: excluded too, not just item read.
+      const list = await docs.listDocuments(db, anon, 'posts', { pageSize: 50 }, NOW);
+      expect(list.rows.map((r) => r.id)).not.toContain(priv.id);
+    });
+  });
+
+  describe('setVisibility (D50) — gating + validation', () => {
+    it('editor can set visibility; author and reader cannot', async () => {
+      const post = await docs.createDocument(db, admin, 'posts', { title: 'V doc' }, NOW);
+      const editor = await makePrincipal(db, NOW, { id: 'prn_v_editor', role: 'editor' });
+      await expect(docs.setVisibility(db, editor, 'posts', post.id, 'unlisted', NOW)).resolves.toMatchObject({
+        visibility: 'unlisted',
+      });
+
+      const author = await makePrincipal(db, NOW, { id: 'prn_v_author', role: 'author' });
+      await expect(docs.setVisibility(db, author, 'posts', post.id, 'private', NOW)).rejects.toBeInstanceOf(
+        ForbiddenError,
+      );
+
+      const reader = await makePrincipal(db, NOW, { id: 'prn_v_r2', role: 'reader' });
+      await expect(docs.setVisibility(db, reader, 'posts', post.id, 'private', NOW)).rejects.toBeInstanceOf(
+        ForbiddenError,
+      );
+    });
+
+    it('rejects an unknown visibility value', async () => {
+      const post = await docs.createDocument(db, admin, 'posts', { title: 'V bad' }, NOW);
+      await expect(
+        docs.setVisibility(db, admin, 'posts', post.id, 'unlisted!!' as never, NOW),
+      ).rejects.toMatchObject({ code: 'VALIDATION' });
+    });
+
+    it('allowed on drafts — remembered until publish; writes the outbox event', async () => {
+      const draft = await docs.createDocument(db, admin, 'posts', { title: 'Draft v' }, NOW);
+      const updated = await docs.setVisibility(db, admin, 'posts', draft.id, 'private', NOW);
+      expect(updated.status).toBe('draft');
+      expect(updated.visibility).toBe('private');
+    });
+  });
+
   it('audit — every allow and every deny is recorded with surface + principal', async () => {
     const before = (await recentAudit(db, 1000)).length;
     await authorize(db, admin, 'read', { collection: 'posts', documentId: 'd', status: 'published' }, NOW);

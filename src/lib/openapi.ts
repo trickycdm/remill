@@ -9,6 +9,7 @@
 import { jsonSchemaFor } from '@/fields/registry';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { rendersFor } from '@/templates/renders';
+import { VISIBILITIES } from '@/lib/visibility';
 import type { CollectionDefinition, JSONSchema } from '@/fields/types';
 
 function documentSchema(def: CollectionDefinition): JSONSchema {
@@ -33,6 +34,8 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
   const listItem = { type: 'object', properties: { data: ref } };
   // lifecycle:'none' collections advertise no status filter and no publish path (B4).
   const lifecycle = hasLifecycle(def);
+  // Visibility (D50) only matters for collections readable by the public.
+  const publicRead = def.access?.publicRead === true;
   // Collections whose template declares text renders advertise ?render=/&budget= (D47).
   const renders = rendersFor(def.template);
   return {
@@ -155,12 +158,85 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
           },
         }
       : {}),
+    ...(publicRead
+      ? {
+          [`/api/c/${def.slug}/{id}/visibility`]: {
+            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+            post: {
+              tags: [tag],
+              summary: `Set ${def.name} visibility (D50)`,
+              description:
+                'Body {visibility: "public"|"unlisted"|"private"}. Requires the publish action. Allowed on drafts (remembered until publish). Unlisted/private drop out of public lists (index/RSS/sitemap/search/backlinks) and unlisted is only reachable by its doc_ id URL; private has no public URL at all.',
+              requestBody: {
+                required: true,
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: { visibility: { type: 'string', enum: [...VISIBILITIES] } },
+                      required: ['visibility'],
+                    },
+                  },
+                },
+              },
+              responses: {
+                '200': { description: 'Updated (returns the document with visibility)' },
+              },
+            },
+          },
+        }
+      : {}),
     [`/api/c/${def.slug}/{id}/revisions`]: {
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       get: {
         tags: [tag],
         summary: `Revision history`,
         responses: { '200': { description: 'Revisions' } },
+      },
+    },
+    [`/api/c/${def.slug}/{id}/share-links`]: {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      get: {
+        tags: [tag],
+        summary: `List ${def.name} share links (D51)`,
+        description: 'Requires the share_link action. Returns active link grants (no password hashes).',
+        responses: { '200': { description: 'Share links' } },
+      },
+      post: {
+        tags: [tag],
+        summary: `Mint a read-only share link for a ${def.name} document (D51)`,
+        description:
+          'Body {expiresAt?, password?, label?}. password (min 8 chars) requires the link to be unlocked before it opens; label is a human note shown in the Share panel. Requires the share_link action.',
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  expiresAt: { type: 'string' },
+                  password: { type: 'string' },
+                  label: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Created {grantId, url, expiresAt, hasPassword, label}' },
+        },
+      },
+    },
+    [`/api/c/${def.slug}/{id}/share-links/{grantId}`]: {
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'grantId', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      delete: {
+        tags: [tag],
+        summary: `Revoke a ${def.name} share link (D51)`,
+        description: 'Requires the share_link action. Rejects grant ids that are not a link grant on this document.',
+        responses: { '200': { description: 'Revoked' } },
       },
     },
     [`/api/c/${def.slug}/export`]: {
