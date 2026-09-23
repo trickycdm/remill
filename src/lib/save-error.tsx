@@ -9,13 +9,40 @@
  */
 
 import type { Context } from 'hono';
-import { AppError, InputValidationError } from '@/lib/errors';
+import { AppError, InputValidationError, StaleRevisionError } from '@/lib/errors';
+
+export interface SaveErrorOptions {
+  /** Where to send the author when their copy is stale (D54): reload the
+   *  current version, or compare it against theirs in the revision viewer. */
+  readonly staleLinks?: { readonly reload: string; readonly compare: string };
+}
 
 export function renderSaveError(
   c: Context,
   err: unknown,
   targetId = 'form-result',
+  opts: SaveErrorOptions = {},
 ): Response | Promise<Response> {
+  if (err instanceof StaleRevisionError && opts.staleLinks) {
+    return c.html(
+      <div
+        id={targetId}
+        role="alert"
+        class="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger"
+      >
+        <p class="font-medium">Not saved — someone else saved first.</p>
+        <p class="mt-1">{err.friendlyMessage}</p>
+        <p class="mt-2 flex gap-4">
+          <a href={opts.staleLinks.compare} class="font-medium underline">
+            Compare revisions
+          </a>
+          <a href={opts.staleLinks.reload} class="font-medium underline">
+            Reload latest (discards your unsaved edits)
+          </a>
+        </p>
+      </div>,
+    );
+  }
   const issues =
     err instanceof InputValidationError && err.details
       ? err.details

@@ -22,6 +22,8 @@ import type { Visibility } from '@/lib/visibility';
 import type { CollectionDefinition } from '@/fields/types';
 import type { SiteSettings } from '@/services/settings';
 import { CopyField } from '@/components/admin/editor-sidebar';
+import { ReviewLinksSection } from '@/components/admin/review-section';
+import type { ReviewLinkListItem } from '@/services/comments';
 import {
   Card,
   CardHeader,
@@ -93,6 +95,8 @@ function LinksSection({
   action: string;
   settings?: SiteSettings;
 }) {
+  // Review links (D55) are listed in their own section below.
+  links = links.filter((l) => l.reviewMode === null);
   const alreadyPublic = isAnonymouslyReadable(def, doc);
   // A private (or still-draft) document with no links yet needs its next step
   // to be obvious — open the disclosure instead of hiding it behind a click.
@@ -310,6 +314,7 @@ export function SharePanel({
   def,
   doc,
   links,
+  reviewLinks,
   baseUrl,
   settings,
 }: {
@@ -326,6 +331,9 @@ export function SharePanel({
   def?: CollectionDefinition;
   doc?: ShareDoc;
   links?: ShareLinkListItem[];
+  /** Review links (D55) — present when the collection has annotatable fields
+   *  and the viewer holds `share_link`. */
+  reviewLinks?: ReviewLinkListItem[];
   baseUrl?: string;
   settings?: SiteSettings;
 }) {
@@ -343,6 +351,9 @@ export function SharePanel({
       <CardContent class="flex flex-col gap-4">
         {hasLinks ? (
           <LinksSection id={id} def={def!} doc={doc!} links={links!} action={action} settings={settings} />
+        ) : null}
+        {hasLinks && reviewLinks ? (
+          <ReviewLinksSection slug={slug} id={id} links={reviewLinks} action={action} settings={settings} />
         ) : null}
         {hasGrants ? (
           <GrantsSection

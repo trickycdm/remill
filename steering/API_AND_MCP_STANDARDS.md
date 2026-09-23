@@ -56,6 +56,10 @@ validation or authorization step that lives only in one surface.
 - Denials return the structured 403 from ACCESS_CONTROL.md:
   `403 { error, code: 'FORBIDDEN', missing: { action, collection } }`.
 - Other failures follow ERROR_HANDLING.md: `{ error, code }` with the machine-readable code.
+- Stale saves are `409 { code: 'STALE_REVISION' }` (D54). Every document read carries `revision`;
+  REST exposes it as `ETag` and accepts it back as `If-Match` on PATCH, MCP `update_<slug>` takes
+  it as `expectedRevision`. Any new surface that writes a document must accept the expected
+  revision and pass it to the service — don't add a write path that can only overwrite blind.
 - Success bodies are plain JSON — REST returns documents/collections directly, never Datastar HTML
   patches (that is the admin surface's job; keep them separate — decision from plan §2).
 
@@ -188,8 +192,20 @@ tokens** as REST.
     `manage_access`), `share_link_<slug>` (anonymous share link, D26 — see below), and
     `visibility_<slug>` (D50 — `{id, visibility}`, publish-gated; visible when the caller could
     both `publicRead` the collection and `publish`, since visibility is meaningless on a
-    non-publicRead collection)
+    non-publicRead collection), and — on collections with an `html`/`markdown` field, for callers
+    who could `comment` (D55) — `comments_<slug>` (threads as JSON), `comment_<slug>` (start a
+    thread: `quote` → text anchor the server locates, `blockId` → figure, neither → whole
+    document), `reply_comment_<slug>`, `resolve_comment_<slug>` (`reopen: true` reopens)
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
+  - **Document review for agents (D55):** `get_<slug>` gains `render: 'review'` on annotatable
+    collections — a markdown brief of every visible thread with its quote in context
+    (`…before {==quote==} after…`), author, intent, anchor state (outdated flagged), replies and
+    `threadId`; open must-fix threads first, resolved last under a `budget`. It deliberately does
+    not reproduce the document (the agent reads the source with `get_<slug>`). `update_<slug>`
+    takes `resolves: [threadId]`, validated BEFORE the save (a bad id fails the call with nothing
+    written) and resolved at the new revision after it. REST parity: `/api/c/:c/:id/comments`
+    (GET/POST), `…/comments/:cid` (DELETE), `…/replies`, `…/resolve` (`{resolved:false}`
+    reopens), `?render=review`. Resolving is principal-only on every surface.
   - Schema management: `list_collections`, `create_collection`, `update_collection`
     (require `manage_schema`).
   - Packs/templates (D42): `list_templates` + `list_packs` (ungated discovery — registry metadata

@@ -29,6 +29,7 @@ const ALL_ACTIONS: readonly Action[] = [
   'delete',
   'publish',
   'share_link',
+  'comment',
   'manage_schema',
   'manage_access',
 ];
@@ -44,7 +45,7 @@ export const SYSTEM_ROLES: readonly RoleSpec[] = [
     slug: 'editor',
     name: 'Editor',
     description: 'Create, edit, publish, and delete any content. No schema or access management.',
-    permissions: (['read', 'create', 'update', 'delete', 'publish', 'share_link'] as Action[]).map((action) => ({
+    permissions: (['read', 'create', 'update', 'delete', 'publish', 'share_link', 'comment'] as Action[]).map((action) => ({
       collection: '*',
       action,
     })),
@@ -58,6 +59,7 @@ export const SYSTEM_ROLES: readonly RoleSpec[] = [
       { collection: '*', action: 'read', condition: 'published' },
       { collection: '*', action: 'read', condition: 'own' },
       { collection: '*', action: 'update', condition: 'own' },
+      { collection: '*', action: 'comment', condition: 'own' },
     ],
   },
   {

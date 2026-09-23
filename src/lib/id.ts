@@ -29,6 +29,8 @@ export const ID_PREFIX = {
   oauthGrant: 'ogr', // oauth_grants — the durable human consent (D48)
   oauthCode: 'oco', // oauth_codes rows (the code itself is rmc_…, stored hashed)
   oauthDevice: 'odc', // oauth_device_codes rows (D48)
+  comment: 'cmt', // comments rows — roots and replies (D55)
+  reviewer: 'rvw', // review_reviewers rows (D55)
 } as const;
 
 type Entity = keyof typeof ID_PREFIX;

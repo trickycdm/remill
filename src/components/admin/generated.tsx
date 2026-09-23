@@ -74,6 +74,9 @@ export function GeneratedForm({
       data-signals="{busy: false}"
       data-on:submit={`@post('${action}', {contentType: 'form'})`}
     >
+      {/* The revision this edit is based on (D54) — the save fails with a clear
+          conflict instead of overwriting a newer save (e.g. an agent's). */}
+      {doc ? <input type="hidden" name="_revision" value={String(doc.revision)} /> : null}
       <div class="flex flex-col gap-5">
         {def.fields.map((field) => (
           <FieldEditor field={field} value={doc?.data[field.key]} />

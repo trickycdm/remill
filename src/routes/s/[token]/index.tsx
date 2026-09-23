@@ -1,4 +1,5 @@
 import { createFactory } from 'hono/factory';
+import { Script } from 'vite-ssr-components/hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import type { Context } from 'hono';
 import type { Env } from '@/types';
@@ -21,6 +22,8 @@ import { hashToken } from '@/lib/token';
 import { PublicShell, PublicNotFound } from '@/components/layouts/public-shell';
 import { DocumentView, rawPageHtml } from '@/components/document-view';
 import { Card, CardContent, Button, FormField, Input } from '@/components/ui';
+import { isReviewLink } from '@/services/comments';
+import { reviewerRequest, reviewerPanel } from '@/lib/review-http';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -186,6 +189,20 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     ) : (
       <DocumentView def={def} doc={doc} backlinks={backlinks} surface="public" settings={settings} />
     );
+    // A review link (D55) adds the review panel + island. Never cacheable:
+    // the panel is per-reviewer.
+    if (isReviewLink(grant)) {
+      c.header('Cache-Control', 'private, no-store');
+      const panel = await reviewerPanel(await reviewerRequest(c));
+      return c.render(
+        <PublicShell settings={settings}>
+          {content}
+          {panel}
+          <Script src="/src/client/review.ts" />
+        </PublicShell>,
+        head,
+      );
+    }
     return c.render(<PublicShell settings={settings}>{content}</PublicShell>, head);
   } catch (e) {
     if (e instanceof NotFoundError || e instanceof ForbiddenError) return notFound();

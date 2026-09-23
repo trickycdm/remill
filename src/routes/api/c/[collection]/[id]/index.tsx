@@ -8,7 +8,9 @@ import {
   renderDocumentText,
   updateDocument,
   deleteDocument,
+  parseExpectedRevision,
 } from '@/services/documents';
+import { renderReview } from '@/services/comments';
 import { nowIso } from '@/lib/now';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -22,6 +24,19 @@ export const onRequestGet = factory.createHandlers(async (c) => {
   if (render !== undefined) {
     const budgetRaw = c.req.query('budget');
     const budget = budgetRaw === undefined ? undefined : Number(budgetRaw);
+    // `review` (D55) is the comments brief — any collection with annotatable
+    // fields, for principals who may comment.
+    if (render === 'review') {
+      const md = await renderReview(
+        getDb(c.env.DB),
+        await apiPrincipal(c, now),
+        pathParam(c, 'collection'),
+        pathParam(c, 'id'),
+        { budget },
+        now,
+      );
+      return c.body(md, 200, { 'Content-Type': 'text/markdown; charset=utf-8' });
+    }
     const md = await renderDocumentText(
       getDb(c.env.DB),
       await apiPrincipal(c, now),
@@ -39,10 +54,13 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     pathParam(c, 'id'),
     now,
   );
+  // The current revision doubles as the entity tag (D54): echo it in If-Match.
+  c.header('ETag', `"${doc.revision}"`);
   return apiJson(c, { data: doc });
 });
 
-/** PATCH /api/c/:collection/:id — update a document. */
+/** PATCH /api/c/:collection/:id — update a document. `If-Match: "<revision>"`
+ *  makes the save conditional (D54): a stale revision is a 409 STALE_REVISION. */
 export const onRequestPatch = factory.createHandlers(async (c) => {
   const now = nowIso();
   const doc = await updateDocument(
@@ -52,7 +70,9 @@ export const onRequestPatch = factory.createHandlers(async (c) => {
     pathParam(c, 'id'),
     await jsonBody(c),
     now,
+    { expectedRevision: parseExpectedRevision(c.req.header('If-Match')) },
   );
+  c.header('ETag', `"${doc.revision}"`);
   return apiJson(c, { data: doc });
 });
 

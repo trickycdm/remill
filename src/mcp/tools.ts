@@ -30,6 +30,7 @@ import {
 import { listTemplates } from '@/templates/registry';
 import { rendersFor } from '@/templates/renders';
 import * as docs from '@/services/documents';
+import * as comments from '@/services/comments';
 import * as collectionsService from '@/services/collections';
 import { listMedia, getMediaById, uploadMedia } from '@/services/media';
 import { pollEvents } from '@/services/events';
@@ -104,6 +105,16 @@ export function couldDo(
   return perms.some(
     (p) => p.action === action && (p.collection === '*' || p.collection === collection),
   );
+}
+
+/** An optional array-of-strings argument (absent → []); anything else is a
+ *  validation error rather than a silently ignored value. */
+function stringList(value: unknown, path: string): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || !value.every((v) => typeof v === 'string')) {
+    throw new InputValidationError([{ path, message: `${path} must be an array of strings.` }]);
+  }
+  return value;
 }
 
 function docInputSchema(def: CollectionDefinition): JSONSchema {
@@ -380,7 +391,11 @@ export async function buildToolsForPrincipal(
       // Collections whose template declares text renders (D47) advertise the
       // `render`/`budget` args; everything else keeps the bare read — the enum
       // derives from code, so schema drift is impossible.
-      const renders = rendersFor(def.template);
+      // `review` (D55) is available on any collection with annotatable fields,
+      // to principals who may comment — the brief is the review threads.
+      const reviewable =
+        comments.hasAnnotatableFields(def) && couldDo(perms, principal, 'comment', slug, false);
+      const renders = [...rendersFor(def.template), ...(reviewable ? ['review'] : [])];
       tools.push({
         name: `get_${slug}`,
         description: renders.length
@@ -408,7 +423,18 @@ export async function buildToolsForPrincipal(
           required: ['id'],
         },
         handler: async (args) =>
-          typeof args.render === 'string'
+          args.render === 'review' && reviewable
+            ? mcpText(
+                await comments.renderReview(
+                  db,
+                  principal,
+                  slug,
+                  String(args.id),
+                  { budget: typeof args.budget === 'number' ? args.budget : undefined },
+                  now(),
+                ),
+              )
+            : typeof args.render === 'string'
             ? mcpText(
                 await docs.renderDocumentText(
                   db,
@@ -449,15 +475,46 @@ export async function buildToolsForPrincipal(
     if (couldDo(perms, principal, 'update', slug, false)) {
       tools.push({
         name: `update_${slug}`,
-        description: `Update a ${def.name} document. Provide id + changed fields.`,
+        description: `Update a ${def.name} document. Provide id + changed fields, and expectedRevision — the \`revision\` from get_${slug} your edit is based on — so a save made on a stale copy fails with STALE_REVISION instead of overwriting newer work (re-read, re-apply, retry).`,
         inputSchema: {
           type: 'object',
-          properties: { id: { type: 'string' }, ...(docInputSchema(def).properties as object) },
+          properties: {
+            id: { type: 'string' },
+            expectedRevision: {
+              type: 'integer',
+              description: `The revision your edit is based on (from get_${slug}).`,
+            },
+            ...(comments.hasAnnotatableFields(def)
+              ? {
+                  resolves: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description:
+                      'Review thread ids (threadId from get_' +
+                      slug +
+                      ' render=review) this save addresses — resolved at the new revision once it saves.',
+                  },
+                }
+              : {}),
+            ...(docInputSchema(def).properties as object),
+          },
           required: ['id'],
         },
         handler: async (args) => {
-          const { id, ...rest } = args;
-          return docs.updateDocument(db, principal, slug, String(id), rest, now());
+          const { id, expectedRevision, resolves, ...rest } = args;
+          const threadIds = stringList(resolves, 'resolves');
+          // Check the threads BEFORE saving, so a bad id can't leave a saved
+          // document with the threads it claimed to address still open.
+          if (threadIds.length) {
+            await comments.assertResolvable(db, principal, slug, String(id), threadIds, now());
+          }
+          const doc = await docs.updateDocument(db, principal, slug, String(id), rest, now(), {
+            expectedRevision: docs.parseExpectedRevision(expectedRevision),
+          });
+          if (threadIds.length) {
+            await comments.resolveThreads(db, principal, slug, String(id), threadIds, now());
+          }
+          return threadIds.length ? { ...doc, resolvedThreads: threadIds } : doc;
         },
       });
       tools.push({
@@ -470,6 +527,111 @@ export async function buildToolsForPrincipal(
         },
         handler: async (args) =>
           docs.restoreRevision(db, principal, slug, String(args.id), Number(args.revision), now()),
+      });
+    }
+    if (comments.hasAnnotatableFields(def) && couldDo(perms, principal, 'comment', slug, false)) {
+      tools.push({
+        name: `comments_${slug}`,
+        description: `Review threads on a ${def.name} document as JSON (roots with replies, anchors, status). For a readable brief use get_${slug} with render=review.`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            status: { type: 'string', enum: ['open', 'resolved'] },
+            intent: { type: 'string', enum: [...comments.COMMENT_INTENTS] },
+          },
+          required: ['id'],
+        },
+        handler: async (args) =>
+          comments.listThreads(
+            db,
+            { kind: 'principal', principal },
+            slug,
+            String(args.id),
+            {
+              status: args.status === 'open' || args.status === 'resolved' ? args.status : undefined,
+              intent: (comments.COMMENT_INTENTS as readonly unknown[]).includes(args.intent)
+                ? (args.intent as comments.CommentIntent)
+                : undefined,
+            },
+            now(),
+          ),
+      });
+      tools.push({
+        name: `comment_${slug}`,
+        description:
+          `Start a review thread on a ${def.name} document. Pass \`quote\` (exact text from the document) to comment on a passage, ` +
+          `\`blockId\` to comment on a figure/widget, or neither for a general note. \`visibility\`: internal (default — ` +
+          `principals only) or shared (review-link reviewers see it too).`,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            body: { type: 'string' },
+            quote: { type: 'string' },
+            field: { type: 'string', description: 'Field the quote is in (optional — found automatically).' },
+            blockId: { type: 'string' },
+            intent: { type: 'string', enum: [...comments.COMMENT_INTENTS] },
+            visibility: { type: 'string', enum: ['internal', 'shared'] },
+          },
+          required: ['id', 'body'],
+        },
+        handler: async (args) => {
+          const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+          const quote = str(args.quote);
+          const blockId = str(args.blockId);
+          const anchor: comments.AnchorInput = quote
+            ? { kind: 'text', quote, field: str(args.field), blockId }
+            : blockId
+              ? { kind: 'block', blockId, field: str(args.field) }
+              : { kind: 'document' };
+          return comments.createThread(
+            db,
+            { kind: 'principal', principal },
+            slug,
+            String(args.id),
+            { anchor, body: String(args.body ?? ''), intent: str(args.intent), visibility: str(args.visibility) },
+            now(),
+          );
+        },
+      });
+      tools.push({
+        name: `reply_comment_${slug}`,
+        description: `Reply to a review thread on a ${def.name} document.`,
+        inputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' }, threadId: { type: 'string' }, body: { type: 'string' } },
+          required: ['id', 'threadId', 'body'],
+        },
+        handler: async (args) =>
+          comments.replyToThread(
+            db,
+            { kind: 'principal', principal },
+            slug,
+            String(args.id),
+            String(args.threadId),
+            { body: String(args.body ?? '') },
+            now(),
+          ),
+      });
+      tools.push({
+        name: `resolve_comment_${slug}`,
+        description: `Resolve a review thread on a ${def.name} document (stamped with the current revision), or reopen it with reopen=true. Prefer update_${slug}'s \`resolves\` when a save addresses the thread.`,
+        inputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' }, threadId: { type: 'string' }, reopen: { type: 'boolean' } },
+          required: ['id', 'threadId'],
+        },
+        handler: async (args) =>
+          comments.setThreadResolved(
+            db,
+            principal,
+            slug,
+            String(args.id),
+            String(args.threadId),
+            args.reopen !== true,
+            now(),
+          ),
       });
     }
     if (couldDo(perms, principal, 'delete', slug, false)) {

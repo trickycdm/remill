@@ -79,6 +79,16 @@ rendered public pages + share links.)
 > can decrypt and re-display the URL from the Share panel (which gains a Copy control per link and
 > opens "New share link" by default on a private/draft document with none yet) at any time, like a
 > Google Docs link rather than a one-time API key.
+> **D54–D55 built 2026-09-23** (plan: [`plans/2026-09-23-document_review_anchored_comments/`](plans/2026-09-23-document_review_anchored_comments/)):
+> **optimistic concurrency** (D54 — every document read carries `revision`; MCP `expectedRevision`,
+> REST `ETag`/`If-Match`, a hidden `_revision` on the admin form; a stale save is 409
+> `STALE_REVISION`, never a silent overwrite) and **document review** (D55 — anchored comment
+> threads on html/markdown fields: `comments`/`review_reviewers` tables, the `comment` action,
+> **review links** (share links that may comment — personal or open, group or individual; the
+> first anonymous write), text/figure/document anchors re-located on every save
+> (`src/lib/anchor/`), the reading-page overlay (`src/components/review/`, `src/client/review.ts`,
+> CSS Custom Highlight API), and the agent loop — `get_<slug>` `render: 'review'`,
+> `comment_/comments_/reply_comment_/resolve_comment_<slug>`, `update_<slug>` `resolves`).
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.

@@ -146,7 +146,13 @@ onto the record — any field an attacker named got written. remill's fix, from 
   revoke invalidates every outstanding unlock with no separate revocation list. The unlock POST
   is rate-limited twice — per IP (`share-unlock`, 10/60s) and per link (`share-unlock-link`,
   20/hour, keyed by the token hash) — and a wrong password gets the same generic error as an
-  unknown token. The wrong-password re-render is a 200 (the `/admin/login` convention); only the
+  unknown token. Review links (D55) layer on the same unlock: every `/s/:token/review/*` endpoint
+  resolves through `openShareLink` first, so a locked link can't be commented on either. An
+  open-link reviewer's name is carried by `rm_reviewer` — `<reviewerId>.<HMAC-SHA256(SESSION_SECRET,
+  'v1:reviewer:' + grantId + ':' + reviewerId)>`, `Path=/s/<token>`, HttpOnly/Secure/Lax — bound to
+  the grant so an id from one link is no identity on another. It asserts only "this browser typed
+  this name on this link" (a trusted-team tool, not identity). Review writes are rate-limited per
+  IP (`review-post`, 20/60s) and per link (`review-post-link`, 300/hour, token hash). The wrong-password re-render is a 200 (the `/admin/login` convention); only the
   JSON arm of a locked GET answers 401 `LOCKED`. Passwords are never trimmed. Emailing a link
   (`emailShareLink`) is `share_link`-gated, rate-limited (`share-email`, 10/60s), and accepts only
   an exact `${baseUrl}/s/<token>` URL — it must never become a mail relay. **A locked link's
@@ -188,6 +194,9 @@ onto the record — any field an attacker named got written. remill's fix, from 
   permission only** (field-level access remains reserved, v1) — the field is writable over
   REST/MCP **by design**, so scope html-bearing collections to trusted roles. Do not add a third
   exception without a decision-log entry.
+- **Review comments (D55) are plain text on every surface** — stored raw, rendered through JSX
+  escaping (`whitespace-pre-wrap` for line breaks), never markdown or HTML: review links make them
+  the one anonymous write surface, so they get no markup path at all.
 - Outside those two field types, **the only sanctioned `dangerouslySetInnerHTML`** is `jsonForScript` (`src/lib/json-for-script.ts`)
   for `data-signals` / bootstrap payloads — it escapes for safe inline embedding. Never
   hand-concatenate user-controlled values into a `<script>` or a `data-on:*` expression.

@@ -14,7 +14,15 @@
  * migration SQL adds them (see DATABASE_STANDARDS.md → Migrations).
  */
 
-import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+  uniqueIndex,
+  type AnySQLiteColumn,
+} from 'drizzle-orm/sqlite-core';
 
 // ---------------------------------------------------------------------------
 // Audit log — append-only. Born in Phase 2 ("born authorized"): every allow and
@@ -315,8 +323,84 @@ export const itemGrants = sqliteTable(
     // only for re-display. Null for links minted before D53 or when
     // encryption somehow failed.
     tokenEnc: text('token_enc'),
+    // Review links only (D55): a share link whose actions include `comment`.
+    // 'group' — its reviewers see each other's comments (and other group
+    // links'); 'individual' — each reviewer sees only their own. Read LIVE, so
+    // flipping the mode re-scopes every past comment made through the link.
+    // Null = a plain read link. CHECK added in the migration.
+    reviewMode: text('review_mode'),
   },
   (t) => [index('item_grants_document_idx').on(t.documentId)],
+);
+
+// ---------------------------------------------------------------------------
+// Document review (D55) — anchored comment threads + the lightweight reviewer
+// identities that review links carry. Reviewers are NOT principals: a reviewer
+// is a name attached to one link grant (invited up front, or self-named on an
+// open link), so revoking the link cascades them away. Their comments survive
+// (reviewer_id → null, author_name keeps the attribution) and drop to
+// owner-only visibility, since there is no longer a link mode to scope them by.
+// ---------------------------------------------------------------------------
+
+export const reviewReviewers = sqliteTable(
+  'review_reviewers',
+  {
+    id: text('id').primaryKey(), // rvw_…
+    grantId: text('grant_id')
+      .notNull()
+      .references(() => itemGrants.id, { onDelete: 'cascade' }),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    email: text('email'),
+    kind: text('kind').notNull(), // 'invited' | 'self_named' (CHECK in migration)
+    doneAt: text('done_at'), // set when the reviewer marks their review complete
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    index('review_reviewers_grant_idx').on(t.grantId),
+    index('review_reviewers_document_idx').on(t.documentId),
+  ],
+);
+
+export const comments = sqliteTable(
+  'comments',
+  {
+    id: text('id').primaryKey(), // cmt_…
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    // Null on a thread root; the root's id on a reply (flat threads, no nesting).
+    threadId: text('thread_id').references((): AnySQLiteColumn => comments.id, {
+      onDelete: 'cascade',
+    }),
+    authorKind: text('author_kind').notNull(), // 'principal' | 'reviewer' (CHECK)
+    authorPrincipalId: text('author_principal_id'), // set when authorKind = 'principal'
+    reviewerId: text('reviewer_id').references(() => reviewReviewers.id, {
+      onDelete: 'set null',
+    }),
+    authorName: text('author_name').notNull(), // display snapshot
+    // Principal roots only: 'internal' (principals only) | 'shared' (reviewers
+    // too). Reviewer comments take visibility from their link's review_mode.
+    visibility: text('visibility'),
+    // Roots only — the anchor (src/lib/anchor), the revision it was last
+    // located against, and whether it still matches ('anchored' | 'outdated').
+    anchorJson: text('anchor_json'),
+    anchorRevision: integer('anchor_revision'),
+    anchorStatus: text('anchor_status'),
+    body: text('body').notNull(), // plain text, never rendered as HTML
+    intent: text('intent'), // 'must_fix' | 'question' | 'suggestion' | 'nit' | 'praise'
+    status: text('status'), // roots only: 'open' | 'resolved'
+    resolvedBy: text('resolved_by'),
+    resolvedRevision: integer('resolved_revision'),
+    resolvedAt: text('resolved_at'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [
+    index('comments_document_idx').on(t.documentId, t.createdAt),
+    index('comments_thread_idx').on(t.threadId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -447,7 +531,8 @@ export const events = sqliteTable(
   {
     seq: integer('seq').primaryKey({ autoIncrement: true }),
     // 'document.created|updated|deleted|restored|published|unpublished',
-    // 'media.created|deleted', 'collection.created|updated|deleted'
+    // 'media.created|deleted', 'collection.created|updated|deleted',
+    // 'comment.created|resolved|reopened' (D55; resource = the document id)
     type: text('type').notNull(),
     // Affected collection slug ('media' for media events) — the read filter's axis.
     collection: text('collection').notNull(),

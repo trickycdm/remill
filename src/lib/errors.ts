@@ -94,6 +94,32 @@ export class ConflictError extends AppError {
   }
 }
 
+/**
+ * A save based on a stale copy (D54): the caller's `expectedRevision` is not the
+ * document's current revision, or a concurrent save claimed the next revision
+ * first. `current` is null when the collision was only detected at write time.
+ */
+export class StaleRevisionError extends AppError {
+  readonly expected: number | null;
+  readonly current: number | null;
+
+  constructor(expected: number | null, current: number | null) {
+    const message =
+      current === null
+        ? 'This document was changed by another save. Reload it and try again.'
+        : `This document changed since you opened it (revision ${expected} → ${current}). Reload it and try again.`;
+    super(message, 409, 'STALE_REVISION', message, [
+      {
+        path: 'expectedRevision',
+        message: `expected ${expected ?? 'unknown'}, current ${current ?? 'unknown'}`,
+      },
+    ]);
+    this.name = 'StaleRevisionError';
+    this.expected = expected;
+    this.current = current;
+  }
+}
+
 export class InternalServerError extends AppError {
   constructor(message = 'Internal server error') {
     super(message, 500, 'INTERNAL_ERROR', 'Something went wrong — please try again');

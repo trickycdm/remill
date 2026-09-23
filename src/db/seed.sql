@@ -34,16 +34,19 @@ INSERT OR IGNORE INTO role_permissions (id, role, collection, action, condition)
   ('rlp_admin_schema',  'admin', '*', 'manage_schema',  NULL),
   ('rlp_admin_access',  'admin', '*', 'manage_access',  NULL),
   ('rlp_admin_sharelink','admin', '*', 'share_link',     NULL),
+  ('rlp_admin_comment', 'admin', '*', 'comment',        NULL),
   ('rlp_editor_read',   'editor', '*', 'read',    NULL),
   ('rlp_editor_create', 'editor', '*', 'create',  NULL),
   ('rlp_editor_update', 'editor', '*', 'update',  NULL),
   ('rlp_editor_delete', 'editor', '*', 'delete',  NULL),
   ('rlp_editor_publish','editor', '*', 'publish', NULL),
   ('rlp_editor_sharelink','editor', '*', 'share_link', NULL),
+  ('rlp_editor_comment', 'editor', '*', 'comment',    NULL),
   ('rlp_author_create', 'author', '*', 'create', NULL),
   ('rlp_author_readpub','author', '*', 'read',   'published'),
   ('rlp_author_readown','author', '*', 'read',   'own'),
   ('rlp_author_updown', 'author', '*', 'update', 'own'),
+  ('rlp_author_commentown', 'author', '*', 'comment', 'own'),
   ('rlp_reader_readpub','reader', '*', 'read',   'published');
 
 -- ---------------------------------------------------------------------------

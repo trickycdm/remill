@@ -35,17 +35,21 @@ export const ACCESS_ACTION_LABELS: Record<string, string> = {
   delete: 'Delete',
   publish: 'Publish',
   share_link: 'Share links',
+  comment: 'Comment',
   manage_schema: 'Manage schema',
   manage_access: 'Manage access',
 };
 
-/** The 8-action vocabulary grouped into tiers (tokens + roles reuse this). */
+/** The 9-action vocabulary grouped into tiers (tokens + roles reuse this). */
 export const ACCESS_ACTION_GROUPS: readonly ScopeGroup[] = [
   {
     label: 'Content',
     actions: ['read', 'create', 'update', 'delete', 'publish'].map((v) => ({ value: v, label: ACCESS_ACTION_LABELS[v] })),
   },
-  { label: 'Sharing', actions: [{ value: 'share_link', label: ACCESS_ACTION_LABELS.share_link }] },
+  {
+    label: 'Sharing',
+    actions: ['share_link', 'comment'].map((v) => ({ value: v, label: ACCESS_ACTION_LABELS[v] })),
+  },
   {
     label: 'Administration',
     actions: ['manage_schema', 'manage_access'].map((v) => ({ value: v, label: ACCESS_ACTION_LABELS[v] })),

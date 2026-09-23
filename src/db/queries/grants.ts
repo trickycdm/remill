@@ -13,6 +13,10 @@ import type { Action } from '@/access/types';
 
 export type GrantSubjectKind = 'principal' | 'role' | 'link' | 'team';
 
+/** How a review link's reviewers see each other's comments (D55). */
+export const REVIEW_MODES = ['group', 'individual'] as const;
+export type ReviewMode = (typeof REVIEW_MODES)[number];
+
 export interface ItemGrantRecord {
   readonly id: string;
   readonly subjectKind: GrantSubjectKind;
@@ -26,6 +30,8 @@ export interface ItemGrantRecord {
   /** Whether a link grant is password-protected (D51). The hash itself NEVER
    *  leaves the query layer — see getLinkGrantPasswordHash. */
   readonly hasPassword: boolean;
+  /** Review links only (D55); null for every other grant. */
+  readonly reviewMode: ReviewMode | null;
 }
 
 /** Internal shape used only by the link-listing path that needs to re-decrypt
@@ -48,6 +54,7 @@ function toDomain(r: typeof itemGrants.$inferSelect): ItemGrantRecord {
     expiresAt: r.expiresAt,
     label: r.label,
     hasPassword: r.passwordHash != null,
+    reviewMode: (r.reviewMode as ReviewMode | null) ?? null,
   };
 }
 
@@ -234,6 +241,8 @@ export interface CreateItemGrantInput {
   /** Share links only (D53); AES-GCM ciphertext of the plaintext token, for
    *  re-display — see ItemGrantRecordWithTokenEnc. */
   readonly tokenEnc?: string | null;
+  /** Review links only (D55). */
+  readonly reviewMode?: ReviewMode | null;
 }
 
 export async function createItemGrant(
@@ -253,6 +262,7 @@ export async function createItemGrant(
     passwordHash: grant.passwordHash ?? null,
     label: grant.label ?? null,
     tokenEnc: grant.tokenEnc ?? null,
+    reviewMode: grant.reviewMode ?? null,
     createdAt: now,
   });
   return id;
@@ -268,6 +278,12 @@ export async function getLinkGrantPasswordHash(db: Database, grantId: string): P
     .where(eq(itemGrants.id, grantId))
     .limit(1);
   return rows[0]?.passwordHash ?? null;
+}
+
+/** Flip a review link between group and individual (D55). Comments made
+ *  through it follow immediately — visibility is read from this column live. */
+export async function setGrantReviewMode(db: Database, grantId: string, mode: ReviewMode): Promise<void> {
+  await db.update(itemGrants).set({ reviewMode: mode }).where(eq(itemGrants.id, grantId));
 }
 
 export async function revokeItemGrant(db: Database, id: string): Promise<void> {

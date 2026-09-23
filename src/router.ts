@@ -1,7 +1,16 @@
 
 import { Hono, Env } from 'hono';
 
+import * as admin_c_collection_id_review_comments_commentId_delete from './routes/admin/c/[collection]/[id]/review/comments/[commentId]/delete';
+import * as admin_c_collection_id_review_comments_commentId_replies from './routes/admin/c/[collection]/[id]/review/comments/[commentId]/replies';
+import * as admin_c_collection_id_review_comments_commentId_resolve from './routes/admin/c/[collection]/[id]/review/comments/[commentId]/resolve';
+import * as api_c_collection_id_comments_commentId_replies from './routes/api/c/[collection]/[id]/comments/[commentId]/replies';
+import * as api_c_collection_id_comments_commentId_resolve from './routes/api/c/[collection]/[id]/comments/[commentId]/resolve';
+import * as admin_c_collection_id_review_comments from './routes/admin/c/[collection]/[id]/review/comments';
+import * as api_c_collection_id_comments_commentId from './routes/api/c/[collection]/[id]/comments/[commentId]';
 import * as api_c_collection_id_share_links_grantId from './routes/api/c/[collection]/[id]/share-links/[grantId]';
+import * as s_token_review_comments_commentId_delete from './routes/s/[token]/review/comments/[commentId]/delete';
+import * as s_token_review_comments_commentId_replies from './routes/s/[token]/review/comments/[commentId]/replies';
 import * as admin_c_collection_id_delete from './routes/admin/c/[collection]/[id]/delete';
 import * as admin_c_collection_id_publish from './routes/admin/c/[collection]/[id]/publish';
 import * as admin_c_collection_id_restore from './routes/admin/c/[collection]/[id]/restore';
@@ -11,6 +20,7 @@ import * as admin_c_collection_id_share from './routes/admin/c/[collection]/[id]
 import * as admin_c_collection_id_view from './routes/admin/c/[collection]/[id]/view';
 import * as admin_c_collection_id_visibility from './routes/admin/c/[collection]/[id]/visibility';
 import * as api_c_collection_id_backlinks from './routes/api/c/[collection]/[id]/backlinks';
+import * as api_c_collection_id_comments from './routes/api/c/[collection]/[id]/comments';
 import * as api_c_collection_id_grants from './routes/api/c/[collection]/[id]/grants';
 import * as api_c_collection_id_publish from './routes/api/c/[collection]/[id]/publish';
 import * as api_c_collection_id_revisions from './routes/api/c/[collection]/[id]/revisions';
@@ -30,6 +40,9 @@ import * as api_c_collection_export from './routes/api/c/[collection]/export';
 import * as api_c_collection_import from './routes/api/c/[collection]/import';
 import * as api_packs_key_install from './routes/api/packs/[key]/install';
 import * as api_trash_id_restore from './routes/api/trash/[id]/restore';
+import * as s_token_review_comments from './routes/s/[token]/review/comments';
+import * as s_token_review_done from './routes/s/[token]/review/done';
+import * as s_token_review_identify from './routes/s/[token]/review/identify';
 import * as admin_access_assign from './routes/admin/access/assign';
 import * as admin_access_connect_index from './routes/admin/access/connect';
 import * as admin_access_matrix_index from './routes/admin/access/matrix';
@@ -88,7 +101,16 @@ import * as mcp from './routes/mcp';
 import * as index from './routes';
 
 export const loadRoutes = <T extends Env>(app: Hono<T>) => {
+	app.post('/admin/c/:collection/:id/review/comments/:commentId/delete', ...admin_c_collection_id_review_comments_commentId_delete.onRequestPost);
+	app.post('/admin/c/:collection/:id/review/comments/:commentId/replies', ...admin_c_collection_id_review_comments_commentId_replies.onRequestPost);
+	app.post('/admin/c/:collection/:id/review/comments/:commentId/resolve', ...admin_c_collection_id_review_comments_commentId_resolve.onRequestPost);
+	app.post('/api/c/:collection/:id/comments/:commentId/replies', ...api_c_collection_id_comments_commentId_replies.onRequestPost);
+	app.post('/api/c/:collection/:id/comments/:commentId/resolve', ...api_c_collection_id_comments_commentId_resolve.onRequestPost);
+	app.post('/admin/c/:collection/:id/review/comments', ...admin_c_collection_id_review_comments.onRequestPost);
+	app.delete('/api/c/:collection/:id/comments/:commentId', ...api_c_collection_id_comments_commentId.onRequestDelete);
 	app.delete('/api/c/:collection/:id/share-links/:grantId', ...api_c_collection_id_share_links_grantId.onRequestDelete);
+	app.post('/s/:token/review/comments/:commentId/delete', ...s_token_review_comments_commentId_delete.onRequestPost);
+	app.post('/s/:token/review/comments/:commentId/replies', ...s_token_review_comments_commentId_replies.onRequestPost);
 	app.post('/admin/c/:collection/:id/delete', ...admin_c_collection_id_delete.onRequestPost);
 	app.post('/admin/c/:collection/:id/publish', ...admin_c_collection_id_publish.onRequestPost);
 	app.post('/admin/c/:collection/:id/restore', ...admin_c_collection_id_restore.onRequestPost);
@@ -98,6 +120,8 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.get('/admin/c/:collection/:id/view', ...admin_c_collection_id_view.onRequestGet);
 	app.post('/admin/c/:collection/:id/visibility', ...admin_c_collection_id_visibility.onRequestPost);
 	app.get('/api/c/:collection/:id/backlinks', ...api_c_collection_id_backlinks.onRequestGet);
+	app.get('/api/c/:collection/:id/comments', ...api_c_collection_id_comments.onRequestGet);
+	app.post('/api/c/:collection/:id/comments', ...api_c_collection_id_comments.onRequestPost);
 	app.get('/api/c/:collection/:id/grants', ...api_c_collection_id_grants.onRequestGet);
 	app.post('/api/c/:collection/:id/grants', ...api_c_collection_id_grants.onRequestPost);
 	app.delete('/api/c/:collection/:id/grants', ...api_c_collection_id_grants.onRequestDelete);
@@ -125,6 +149,9 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.patch('/api/c/:collection/:id', ...api_c_collection_id_index.onRequestPatch);
 	app.post('/api/packs/:key/install', ...api_packs_key_install.onRequestPost);
 	app.post('/api/trash/:id/restore', ...api_trash_id_restore.onRequestPost);
+	app.post('/s/:token/review/comments', ...s_token_review_comments.onRequestPost);
+	app.post('/s/:token/review/done', ...s_token_review_done.onRequestPost);
+	app.post('/s/:token/review/identify', ...s_token_review_identify.onRequestPost);
 	app.post('/admin/access/assign', ...admin_access_assign.onRequestPost);
 	app.get('/admin/access/connect', ...admin_access_connect_index.onRequestGet);
 	app.post('/admin/access/connect', ...admin_access_connect_index.onRequestPost);

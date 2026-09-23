@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import Database from 'better-sqlite3';
 import { join } from 'node:path';
 import { SYSTEM_ROLES } from '@/access/policy';
 
@@ -46,5 +47,51 @@ describe('seed.sql — no committed admin credentials (C1)', () => {
         expect(seedSql, `seed.sql is missing: ${role.slug} ${p.collection} ${p.action} ${condition}`).toMatch(row);
       }
     }
+  });
+});
+
+/**
+ * D55: production applies migrations but never re-runs seed.sql, so the
+ * `comment` permission reaches EXISTING installs only through migration 0017.
+ * Simulate an install that predates it: every earlier migration, then the
+ * seed as it stood (roles present, no comment rows), then 0017.
+ */
+describe('migration 0017 — comment permission for existing installs (D55)', () => {
+  const MIGRATIONS = join(import.meta.dirname, 'migrations');
+  const run = (db: InstanceType<typeof Database>, file: string) => {
+    for (const stmt of readFileSync(join(MIGRATIONS, file), 'utf-8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) db.exec(stmt);
+    }
+  };
+  const files = readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+  const d55 = files.find((f) => f.startsWith('0017_'))!;
+
+  it('adds the comment rows when the system roles already exist', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    for (const f of files.filter((f) => f < d55)) run(db, f);
+    const seedWithoutComment = readFileSync(join(import.meta.dirname, 'seed.sql'), 'utf-8')
+      .split('\n')
+      .filter((l) => !l.includes("'comment'"))
+      .join('\n');
+    db.exec(seedWithoutComment);
+    run(db, d55);
+    const rows = db
+      .prepare("SELECT role, condition FROM role_permissions WHERE action = 'comment' ORDER BY role")
+      .all();
+    expect(rows).toEqual([
+      { role: 'admin', condition: null },
+      { role: 'author', condition: 'own' },
+      { role: 'editor', condition: null },
+    ]);
+  });
+
+  it('is a no-op on a fresh database (seed.sql adds the rows after the roles)', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    for (const f of files) run(db, f);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM role_permissions WHERE action = 'comment'").get()).toEqual({ n: 0 });
   });
 });

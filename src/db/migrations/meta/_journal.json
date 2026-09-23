@@ -120,6 +120,13 @@
       "when": 1790163488307,
       "tag": "0016_omniscient_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790174968069,
+      "tag": "0017_shocking_blindfold",
+      "breakpoints": true
     }
   ]
 }

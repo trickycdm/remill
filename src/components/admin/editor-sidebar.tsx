@@ -56,6 +56,9 @@ type EditorSidebarProps =
       /** The Share card (SharePanel), composed in — undefined when neither
        *  share_link nor manage_access is held. */
       shareSlot?: unknown;
+      /** The Comments card (D55) — undefined when the viewer can't comment or
+       *  the collection has nothing to annotate. */
+      reviewSlot?: unknown;
     };
 
 const VISIBILITY_OPTIONS: { value: Visibility; label: string; help: string }[] = [
@@ -272,6 +275,8 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
           ) : null}
 
           {props.shareSlot}
+
+          {props.reviewSlot}
 
           {/* ── Details ───────────────────────────────────────────────────────── */}
           <Card>

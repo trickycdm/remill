@@ -129,6 +129,92 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(payload.data.body).toBe('first note');
   });
 
+  it('D54: update_<slug> with a stale expectedRevision is an isError STALE_REVISION result', async () => {
+    const call = async (name: string, args: object) => {
+      const r = await mcp(editorToken, 'tools/call', { name, arguments: args });
+      return { isError: r.body.result.isError, payload: JSON.parse(r.body.result.content[0].text) };
+    };
+    const created = await call('create_posts', { title: 'Agent draft' });
+    const id = created.payload.id;
+    expect(created.payload.revision).toBe(1);
+
+    const ok = await call('update_posts', { id, title: 'Agent v2', expectedRevision: 1 });
+    expect(ok.isError).toBeFalsy();
+    expect(ok.payload.revision).toBe(2);
+
+    const stale = await call('update_posts', { id, title: 'Agent stale', expectedRevision: 1 });
+    expect(stale.isError).toBe(true);
+    expect(stale.payload.code).toBe('STALE_REVISION');
+
+    const got = await call('get_posts', { id });
+    expect(got.payload.data.title).toBe('Agent v2');
+  });
+
+  it('D55: the agent review loop — comment, read the review brief, save with resolves', async () => {
+    await collectionsService.createCollection(
+      db,
+      admin,
+      {
+        slug: 'reports',
+        name: 'Reports',
+        shape: 'collection',
+        fields: [
+          { key: 'title', type: 'text', required: true },
+          { key: 'page', type: 'html' },
+        ],
+      },
+      NOW,
+    );
+    const rpc = async (token: string, name: string, args: object) => {
+      const r = await mcp(token, 'tools/call', { name, arguments: args });
+      const text = r.body.result.content[0].text as string;
+      return { isError: r.body.result.isError === true, text };
+    };
+    const json = async (name: string, args: object) => JSON.parse((await rpc(editorToken, name, args)).text);
+
+    // Tools exist for a commenter on an annotatable collection, not for a reader.
+    expect(toolNames(await mcp(editorToken, 'tools/list'))).toEqual(
+      expect.arrayContaining(['comments_reports', 'comment_reports', 'reply_comment_reports', 'resolve_comment_reports']),
+    );
+    expect(toolNames(await mcp(readerToken, 'tools/list'))).not.toContain('comment_reports');
+    expect(toolNames(await mcp(editorToken, 'tools/list'))).not.toContain('comment_posts'); // no annotatable field
+
+    const doc = await json('create_reports', { title: 'Q3', page: '<p>Revenue grew 12% in Q3.</p>' });
+    const thread = await json('comment_reports', {
+      id: doc.id,
+      quote: 'grew 12%',
+      body: 'Cite the source',
+      intent: 'must_fix',
+    });
+    expect(thread.root.anchor).toMatchObject({ kind: 'text', field: 'page', quote: 'grew 12%' });
+
+    const brief = await rpc(editorToken, 'get_reports', { id: doc.id, render: 'review' });
+    expect(brief.isError).toBe(false);
+    expect(brief.text).toContain('# Review: Q3');
+    expect(brief.text).toContain('{==grew 12%==}');
+    expect(brief.text).toContain(`threadId: ${thread.root.id}`);
+
+    // A bad thread id fails the whole call BEFORE the save.
+    const bad = await rpc(editorToken, 'update_reports', {
+      id: doc.id,
+      expectedRevision: 1,
+      page: '<p>Revenue grew 12% in Q3 (source: finance).</p>',
+      resolves: ['cmt_nope'],
+    });
+    expect(bad.isError).toBe(true);
+    expect((await json('get_reports', { id: doc.id })).revision).toBe(1);
+
+    const saved = await json('update_reports', {
+      id: doc.id,
+      expectedRevision: 1,
+      page: '<p>Revenue grew 12% in Q3 (source: finance).</p>',
+      resolves: [thread.root.id],
+    });
+    expect(saved).toMatchObject({ revision: 2, resolvedThreads: [thread.root.id] });
+    const [after] = await json('comments_reports', { id: doc.id });
+    expect(after.root).toMatchObject({ status: 'resolved', resolvedRevision: 2 });
+  });
+
   it('D42 marketplace: packs/templates discoverable by all; install_pack gated + full agent flow', async () => {
     // Discovery is ungated: even a reader sees both registries — but not install.
     const reader = toolNames(await mcp(readerToken, 'tools/list'));
@@ -191,14 +277,16 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     });
     expect(installed.body.result.isError).toBeFalsy();
 
-    // Only render-declaring collections (template 'warp') advertise the args.
+    // Render-declaring templates ('warp') advertise their renders; any collection
+    // with annotatable fields adds `review` (D55) for principals who may comment.
+    // `posts` here has only a text field — nothing to render.
     type ToolRow = {
       name: string;
       inputSchema: { properties: Record<string, { enum?: string[] } | undefined> };
     };
     const tools = (await mcp(adminToken, 'tools/list')).body.result.tools as ToolRow[];
     expect(tools.find((t) => t.name === 'get_warps')?.inputSchema.properties.render?.enum).toEqual(
-      ['reviewer', 'implementer'],
+      ['reviewer', 'implementer', 'review'],
     );
     expect(tools.find((t) => t.name === 'get_posts')?.inputSchema.properties.render).toBeUndefined();
     // lifecycle:'none' working data — no publish ceremony offered.
