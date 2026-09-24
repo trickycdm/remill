@@ -17,6 +17,9 @@
  * mode is read LIVE, so flipping a link re-scopes its past comments at once.
  * Replies always follow their root.
  *
+ * Reading and resolving threads also admits principals who may `update` the
+ * document (`authorizeThreadAccess`); posting and replying need `comment`.
+ *
  * Comments bodies are plain text: every surface renders them escaped.
  */
 
@@ -204,6 +207,37 @@ async function authorizeComment(
   return authorize(db, viewer.principal, 'comment', { collection, documentId }, now);
 }
 
+/** Reading and resolving threads: `comment`, OR `update` on the document —
+ *  whoever may edit the text may see (and close) the feedback on it. Posting
+ *  and replying stay `comment`-only. Reviewers keep their link's `comment` path.
+ *  The probes don't audit; exactly one `authorize()` below does. */
+async function authorizeThreadAccess(
+  db: Database,
+  viewer: CommentViewer,
+  collection: string,
+  documentId: string,
+  now: string,
+): Promise<Grant> {
+  if (viewer.kind === 'reviewer') return authorizeComment(db, viewer, collection, documentId, now);
+  const resource = { collection, documentId };
+  if (
+    !(await canAuthorize(db, viewer.principal, 'comment', resource, now)) &&
+    (await canAuthorize(db, viewer.principal, 'update', resource, now))
+  ) {
+    return authorize(db, viewer.principal, 'update', resource, now);
+  }
+  try {
+    return await authorize(db, viewer.principal, 'comment', resource, now);
+  } catch (err) {
+    if (!(err instanceof ForbiddenError)) throw err;
+    throw new ForbiddenError(
+      "Reading or resolving review threads on this document requires 'comment' or 'update' on it. " +
+        'Call whoami to see your permissions.',
+      err.missing,
+    );
+  }
+}
+
 function assembleThreads(rows: readonly cq.CommentRecord[]): CommentThread[] {
   const replies = new Map<string, cq.CommentRecord[]>();
   for (const r of rows) {
@@ -221,7 +255,7 @@ export async function listThreads(
   filters: ThreadFilters,
   now: string,
 ): Promise<CommentThread[]> {
-  const grant = await authorizeComment(db, viewer, collection, documentId, now);
+  const grant = await authorizeThreadAccess(db, viewer, collection, documentId, now);
   const rows = await cq.listCommentsForDocument(db, documentId, grant);
   return assembleThreads(rows).filter(
     ({ root }) =>
@@ -248,7 +282,7 @@ export async function reviewPanelData(
   documentId: string,
   now: string,
 ): Promise<ReviewPanelData> {
-  const grant = await authorizeComment(db, viewer, collection, documentId, now);
+  const grant = await authorizeThreadAccess(db, viewer, collection, documentId, now);
   const def = await loadDef(db, collection);
   const doc = await dq.getDocument(db, collection, documentId, grant);
   if (!doc) throw new NotFoundError('Document');
@@ -454,7 +488,7 @@ export async function setThreadResolved(
 ): Promise<cq.CommentRecord> {
   assertAccountHolder(principal);
   const viewer: CommentViewer = { kind: 'principal', principal };
-  const grant = await authorizeComment(db, viewer, collection, documentId, now);
+  const grant = await authorizeThreadAccess(db, viewer, collection, documentId, now);
   const root = await visibleRoot(db, viewer, documentId, threadId, grant);
   const doc = await dq.getDocument(db, collection, documentId, grant);
   if (!doc) throw new NotFoundError('Document');
@@ -489,7 +523,7 @@ export async function assertResolvable(
 ): Promise<void> {
   assertAccountHolder(principal);
   const viewer: CommentViewer = { kind: 'principal', principal };
-  const grant = await authorizeComment(db, viewer, collection, documentId, now);
+  const grant = await authorizeThreadAccess(db, viewer, collection, documentId, now);
   for (const id of threadIds) await visibleRoot(db, viewer, documentId, id, grant);
 }
 
@@ -525,7 +559,7 @@ export async function renderReview(
     throw new InputValidationError([{ path: 'budget', message: 'budget must be a positive integer.' }]);
   }
   const viewer: CommentViewer = { kind: 'principal', principal };
-  const grant = await authorizeComment(db, viewer, collection, documentId, now);
+  const grant = await authorizeThreadAccess(db, viewer, collection, documentId, now);
   const def = await loadDef(db, collection);
   const doc = await dq.getDocument(db, collection, documentId, grant);
   if (!doc) throw new NotFoundError('Document');

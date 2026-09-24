@@ -4,7 +4,8 @@ import { getDb, type Database } from '@/db/client';
 import * as collectionsService from '@/services/collections';
 import * as docs from '@/services/documents';
 import * as comments from '@/services/comments';
-import { createShareLink, openShareLink, revokeShareLink } from '@/services/access';
+import { createShareLink, openShareLink, revokeShareLink, grantItem } from '@/services/access';
+import { recentAudit } from '@/db/queries/audit';
 import type { Principal } from '@/access';
 import { seedRoles, makePrincipal } from '@/test/access';
 import type { CollectionDefinition } from '@/fields/types';
@@ -210,6 +211,44 @@ describe('comments service (D55)', () => {
 
       const [thread] = await comments.listThreads(db, asPrincipal(admin), 'reports', docId, {}, NOW);
       expect(thread.replies.map((r) => r.body)).toEqual(['Agreed']);
+    });
+
+    it('whoever may update the document may read and resolve its threads, but not post', async () => {
+      const { root } = await comments.createThread(db, asPrincipal(admin), 'reports', docId, { body: 'Fix the chart' }, NOW);
+      // `other` is an author on someone else's document: no comment, no update — refused.
+      await expect(comments.listThreads(db, asPrincipal(other), 'reports', docId, {}, NOW)).rejects.toBeInstanceOf(
+        ForbiddenError,
+      );
+      await grantItem(
+        db,
+        admin,
+        { subjectKind: 'principal', subjectId: other.id, documentId: docId, collection: 'reports', actions: ['read', 'update'] },
+        NOW,
+      );
+
+      const threads = await comments.listThreads(db, asPrincipal(other), 'reports', docId, {}, NOW);
+      expect(threads.map((t) => t.root.body)).toEqual(['Fix the chart']);
+      expect(threads[0].root.author).toMatchObject({ kind: 'principal', principalId: 'prn_admin' });
+      await expect(comments.renderReview(db, other, 'reports', docId, {}, NOW)).resolves.toContain('Fix the chart');
+      await comments.resolveThreads(db, other, 'reports', docId, [root.id], NOW);
+      const [resolved] = await comments.listThreads(db, asPrincipal(other), 'reports', docId, {}, NOW);
+      expect(resolved.root).toMatchObject({ status: 'resolved', resolvedBy: other.id });
+
+      await expect(
+        comments.createThread(db, asPrincipal(other), 'reports', docId, { body: 'drive-by' }, NOW),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(
+        comments.replyToThread(db, asPrincipal(other), 'reports', docId, root.id, { body: 'drive-by' }, NOW),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+    });
+
+    it('a refused thread read names both routes in and is audited once', async () => {
+      const err = await comments.listThreads(db, asPrincipal(other), 'reports', docId, {}, NOW).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ForbiddenError);
+      expect((err as ForbiddenError).message).toMatch(/requires 'comment' or 'update'.*whoami/);
+      expect((err as ForbiddenError).missing).toEqual({ action: 'comment', collection: 'reports' });
+      const denials = (await recentAudit(db, 50)).filter((r) => r.principalId === other.id && !r.allowed);
+      expect(denials.map((r) => r.action)).toEqual(['comment']);
     });
 
     it('resolveThreads validates every id before resolving any', async () => {

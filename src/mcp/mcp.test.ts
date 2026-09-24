@@ -215,6 +215,104 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(after.root).toMatchObject({ status: 'resolved', resolvedRevision: 2 });
   });
 
+  it('D55: an agent that may update (but not comment) reads and resolves review threads', async () => {
+    await collectionsService.createCollection(
+      db,
+      admin,
+      {
+        slug: 'reports',
+        name: 'Reports',
+        shape: 'collection',
+        fields: [
+          { key: 'title', type: 'text', required: true },
+          { key: 'page', type: 'html' },
+        ],
+      },
+      NOW,
+    );
+    // An editor whose token mask leaves out `comment` — e.g. scoped before D55 existed.
+    const pid = await access.createAgent(db, admin, 'fixer-bot', NOW);
+    await access.assignRole(db, admin, pid, 'editor', '*', NOW);
+    const fixerToken = (
+      await access.issueToken(
+        db,
+        admin,
+        {
+          principalId: pid,
+          name: 't',
+          scope: [
+            { collection: '*', action: 'read' },
+            { collection: '*', action: 'create' },
+            { collection: '*', action: 'update' },
+          ],
+        },
+        NOW,
+      )
+    ).token;
+    const call = async (token: string, name: string, args: object) => {
+      const r = await mcp(token, 'tools/call', { name, arguments: args });
+      return { isError: r.body.result.isError === true, text: r.body.result.content[0].text as string };
+    };
+
+    const tools = toolNames(await mcp(fixerToken, 'tools/list'));
+    expect(tools).toEqual(expect.arrayContaining(['comments_reports', 'resolve_comment_reports', 'whoami']));
+    expect(tools).not.toContain('comment_reports');
+    expect(tools).not.toContain('reply_comment_reports');
+    const getTool = (await mcp(fixerToken, 'tools/list')).body.result.tools.find(
+      (t: { name: string }) => t.name === 'get_reports',
+    );
+    expect(getTool.inputSchema.properties.render.enum).toContain('review');
+
+    const doc = JSON.parse((await call(fixerToken, 'create_reports', { title: 'Q3', page: '<p>Revenue grew 12% in Q3.</p>' })).text);
+    const thread = JSON.parse(
+      (await call(editorToken, 'comment_reports', { id: doc.id, quote: 'grew 12%', body: 'Cite the source', intent: 'must_fix' })).text,
+    );
+
+    const [seen] = JSON.parse((await call(fixerToken, 'comments_reports', { id: doc.id })).text);
+    expect(seen.root).toMatchObject({ body: 'Cite the source', intent: 'must_fix', author: { kind: 'principal' } });
+    expect(seen.root.createdAt).toBeTruthy();
+    expect((await call(fixerToken, 'get_reports', { id: doc.id, render: 'review' })).text).toContain('Cite the source');
+
+    const saved = JSON.parse(
+      (
+        await call(fixerToken, 'update_reports', {
+          id: doc.id,
+          expectedRevision: 1,
+          page: '<p>Revenue grew 12% in Q3 (source: finance).</p>',
+          resolves: [thread.root.id],
+        })
+      ).text,
+    );
+    expect(saved).toMatchObject({ revision: 2, resolvedThreads: [thread.root.id] });
+
+    // Readers still can't see review threads at all.
+    expect(toolNames(await mcp(readerToken, 'tools/list'))).not.toContain('comments_reports');
+  });
+
+  it('whoami: an agent can see its own identity, roles, permissions and token scope', async () => {
+    const pid = await access.createAgent(db, admin, 'scoped-bot', NOW);
+    await access.assignRole(db, admin, pid, 'author', 'posts', NOW);
+    const token = (
+      await access.issueToken(db, admin, { principalId: pid, name: 't', scope: [{ collection: 'posts', action: 'read' }] }, NOW)
+    ).token;
+    const r = await mcp(token, 'tools/call', { name: 'whoami', arguments: {} });
+    const me = JSON.parse(r.body.result.content[0].text);
+    expect(me).toMatchObject({
+      principal: { id: pid, name: 'scoped-bot', kind: 'agent', persona: 'agent' },
+      roles: [{ role: 'author', collection: 'posts' }],
+      tokenScope: [{ collection: 'posts', action: 'read' }],
+      oauthClient: null,
+    });
+    expect(me.permissions).toEqual(
+      expect.arrayContaining([{ collection: 'posts', action: 'comment', condition: 'own' }]),
+    );
+
+    // REST parity.
+    const res = await app.request('/api/me', { headers: { Authorization: `Bearer ${token}` } }, env);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { data: unknown }).data).toEqual(me);
+  });
+
   it('D42 marketplace: packs/templates discoverable by all; install_pack gated + full agent flow', async () => {
     // Discovery is ungated: even a reader sees both registries — but not install.
     const reader = toolNames(await mcp(readerToken, 'tools/list'));

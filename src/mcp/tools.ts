@@ -20,6 +20,7 @@ import {
   listTeams,
   createShareLink,
   listAuditPage,
+  describeSelf,
 } from '@/services/access';
 import { InputValidationError } from '@/lib/errors';
 import {
@@ -171,6 +172,17 @@ export async function buildToolsForPrincipal(
     // callers never see the internal access/workflow config.
     handler: async () => listCollectionsForDiscovery(db, principal),
   });
+  // Ungated: the caller's own identity and permissions — how an agent learns
+  // why a call was refused (and which grant or role would fix it).
+  tools.push({
+    name: 'whoami',
+    description:
+      'Your identity on this server: principal, role assignments, the permissions they resolve to ' +
+      '(collection, action, condition — `own` means documents you created), the token scope mask, and ' +
+      'the OAuth client you connected through. Check this when a call is refused FORBIDDEN.',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async () => describeSelf(db, principal),
+  });
   // Template + pack discovery — ungated like list_collections: registry
   // metadata is code, and `installed` reveals nothing list_collections doesn't.
   tools.push({
@@ -309,6 +321,12 @@ export async function buildToolsForPrincipal(
     if (def.slug === 'media') continue; // media has its own tools below
     const publicRead = def.access?.publicRead === true;
     const slug = def.slug;
+    // Review threads (D55): reading and resolving admit `comment` OR `update`
+    // (whoever may edit the text may see the feedback on it); posting and
+    // replying need `comment` — mirrors the comments service's gates.
+    const annotatable = comments.hasAnnotatableFields(def);
+    const canComment = annotatable && couldDo(perms, principal, 'comment', slug, false);
+    const canSeeReview = canComment || (annotatable && couldDo(perms, principal, 'update', slug, false));
 
     if (couldDo(perms, principal, 'read', slug, publicRead)) {
       tools.push({
@@ -392,10 +410,8 @@ export async function buildToolsForPrincipal(
       // `render`/`budget` args; everything else keeps the bare read — the enum
       // derives from code, so schema drift is impossible.
       // `review` (D55) is available on any collection with annotatable fields,
-      // to principals who may comment — the brief is the review threads.
-      const reviewable =
-        comments.hasAnnotatableFields(def) && couldDo(perms, principal, 'comment', slug, false);
-      const renders = [...rendersFor(def.template), ...(reviewable ? ['review'] : [])];
+      // to principals who may see its review threads — the brief is the threads.
+      const renders = [...rendersFor(def.template), ...(canSeeReview ? ['review'] : [])];
       tools.push({
         name: `get_${slug}`,
         description: renders.length
@@ -423,7 +439,7 @@ export async function buildToolsForPrincipal(
           required: ['id'],
         },
         handler: async (args) =>
-          args.render === 'review' && reviewable
+          args.render === 'review' && canSeeReview
             ? mcpText(
                 await comments.renderReview(
                   db,
@@ -529,10 +545,10 @@ export async function buildToolsForPrincipal(
           docs.restoreRevision(db, principal, slug, String(args.id), Number(args.revision), now()),
       });
     }
-    if (comments.hasAnnotatableFields(def) && couldDo(perms, principal, 'comment', slug, false)) {
+    if (canSeeReview) {
       tools.push({
         name: `comments_${slug}`,
-        description: `Review threads on a ${def.name} document as JSON (roots with replies, anchors, status). For a readable brief use get_${slug} with render=review.`,
+        description: `Review threads on a ${def.name} document as JSON — roots with replies, each with its author, time, body, intent, anchor and status. For a readable brief use get_${slug} with render=review.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -557,6 +573,27 @@ export async function buildToolsForPrincipal(
             now(),
           ),
       });
+      tools.push({
+        name: `resolve_comment_${slug}`,
+        description: `Resolve a review thread on a ${def.name} document (stamped with the current revision), or reopen it with reopen=true. Prefer update_${slug}'s \`resolves\` when a save addresses the thread.`,
+        inputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' }, threadId: { type: 'string' }, reopen: { type: 'boolean' } },
+          required: ['id', 'threadId'],
+        },
+        handler: async (args) =>
+          comments.setThreadResolved(
+            db,
+            principal,
+            slug,
+            String(args.id),
+            String(args.threadId),
+            args.reopen !== true,
+            now(),
+          ),
+      });
+    }
+    if (canComment) {
       tools.push({
         name: `comment_${slug}`,
         description:
@@ -611,25 +648,6 @@ export async function buildToolsForPrincipal(
             String(args.id),
             String(args.threadId),
             { body: String(args.body ?? '') },
-            now(),
-          ),
-      });
-      tools.push({
-        name: `resolve_comment_${slug}`,
-        description: `Resolve a review thread on a ${def.name} document (stamped with the current revision), or reopen it with reopen=true. Prefer update_${slug}'s \`resolves\` when a save addresses the thread.`,
-        inputSchema: {
-          type: 'object',
-          properties: { id: { type: 'string' }, threadId: { type: 'string' }, reopen: { type: 'boolean' } },
-          required: ['id', 'threadId'],
-        },
-        handler: async (args) =>
-          comments.setThreadResolved(
-            db,
-            principal,
-            slug,
-            String(args.id),
-            String(args.threadId),
-            args.reopen !== true,
             now(),
           ),
       });

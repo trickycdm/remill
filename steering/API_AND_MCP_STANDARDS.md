@@ -192,10 +192,12 @@ tokens** as REST.
     `manage_access`), `share_link_<slug>` (anonymous share link, D26 — see below), and
     `visibility_<slug>` (D50 — `{id, visibility}`, publish-gated; visible when the caller could
     both `publicRead` the collection and `publish`, since visibility is meaningless on a
-    non-publicRead collection), and — on collections with an `html`/`markdown` field, for callers
-    who could `comment` (D55) — `comments_<slug>` (threads as JSON), `comment_<slug>` (start a
+    non-publicRead collection), and — on collections with an `html`/`markdown` field (D55) — for
+    callers who could `comment` OR `update` (D56): `comments_<slug>` (threads as JSON, each
+    comment with author, time, body, intent, anchor, status) and `resolve_comment_<slug>`
+    (`reopen: true` reopens); for callers who could `comment` only: `comment_<slug>` (start a
     thread: `quote` → text anchor the server locates, `blockId` → figure, neither → whole
-    document), `reply_comment_<slug>`, `resolve_comment_<slug>` (`reopen: true` reopens)
+    document) and `reply_comment_<slug>`
     — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
   - **Document review for agents (D55):** `get_<slug>` gains `render: 'review'` on annotatable
     collections — a markdown brief of every visible thread with its quote in context
@@ -205,7 +207,12 @@ tokens** as REST.
     takes `resolves: [threadId]`, validated BEFORE the save (a bad id fails the call with nothing
     written) and resolved at the new revision after it. REST parity: `/api/c/:c/:id/comments`
     (GET/POST), `…/comments/:cid` (DELETE), `…/replies`, `…/resolve` (`{resolved:false}`
-    reopens), `?render=review`. Resolving is principal-only on every surface.
+    reopens), `?render=review`. Resolving is principal-only on every surface. The `review` render
+    and `resolves` follow the read/resolve gate (`comment` or `update`, D56).
+  - Identity: `whoami` (ungated; REST `GET /api/me`) returns the caller's principal, role
+    assignments, resolved permissions, token scope mask and OAuth client — the first call for an
+    agent refused `FORBIDDEN`. Denials name what would admit the call (e.g. thread reads say
+    "requires 'comment' or 'update'").
   - Schema management: `list_collections`, `create_collection`, `update_collection`
     (require `manage_schema`).
   - Packs/templates (D42): `list_templates` + `list_packs` (ungated discovery — registry metadata
