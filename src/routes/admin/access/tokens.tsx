@@ -3,7 +3,7 @@ import type { Env } from '@/types';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
-import { issueToken, revokeToken } from '@/services/access';
+import { issueToken, revokeToken, updateTokenScope } from '@/services/access';
 import type { Action } from '@/access';
 import { rateLimit, TOKEN_RATE_LIMIT } from '@/middleware/rate-limit';
 import { nowIso } from '@/lib/now';
@@ -29,7 +29,7 @@ function asArray(v: string | string[] | undefined): string[] {
   return Array.isArray(v) ? v.map(String) : [String(v)];
 }
 
-/** POST /admin/access/tokens — issue (renders the plaintext once) or revoke. */
+/** POST /admin/access/tokens — issue (renders the plaintext once), revoke, or re-scope. */
 export const onRequestPost = factory.createHandlers(
   rateLimit('token', TOKEN_RATE_LIMIT),
   requireAuth(),
@@ -42,6 +42,21 @@ export const onRequestPost = factory.createHandlers(
     // Revoke stays a native form → Post/Redirect/Get back to the list.
     if (String(body.op) === 'revoke') {
       await revokeToken(db, principal, String(body.tokenId ?? ''), now);
+      return c.redirect('/admin/access', 303);
+    }
+
+    // Re-scope an issued token in place — also a native form, same PRG.
+    if (String(body.op) === 'scope') {
+      await updateTokenScope(
+        db,
+        principal,
+        String(body.tokenId ?? ''),
+        parseScope(
+          String(body.scopeCollection ?? '*'),
+          asArray(body.scopeAction as string | string[] | undefined),
+        ),
+        now,
+      );
       return c.redirect('/admin/access', 303);
     }
 

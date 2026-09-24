@@ -74,6 +74,21 @@ export interface ScopePreset {
   readonly actions: readonly string[] | null;
 }
 
+/** Token scope presets. "Full access" is `[]`: an empty mask = no narrowing. */
+export const TOKEN_SCOPE_PRESETS: readonly ScopePreset[] = [
+  { key: 'full', label: 'Full access', actions: [] },
+  { key: 'readonly', label: 'Read-only', actions: ['read'] },
+  { key: 'editor', label: 'Editor', actions: ['read', 'create', 'update', 'delete', 'publish'] },
+  { key: 'custom', label: 'Custom', actions: null },
+];
+
+/** The preset key whose action set exactly matches `actions`, else 'custom'. */
+export function tokenPresetFor(actions: readonly string[]): string {
+  const want = [...actions].sort().join(',');
+  const hit = TOKEN_SCOPE_PRESETS.find((p) => p.actions !== null && [...p.actions].sort().join(',') === want);
+  return hit?.key ?? 'custom';
+}
+
 interface ScopePickerProps {
   /** Unique per instance (e.g. `tok-${principalId}`) — namespaces the radio group. */
   idPrefix: string;
@@ -87,7 +102,7 @@ interface ScopePickerProps {
   /** Key of the initially-selected preset. */
   defaultPreset?: string;
   /** Optional collection selector (tokens only). */
-  collection?: { name: string; options: readonly string[] };
+  collection?: { name: string; options: readonly string[]; selected?: string };
   /** Helper text under the picker. */
   help?: string;
   /** Open the <details> disclosure on first render. */
@@ -144,7 +159,9 @@ export function ScopePicker({
           <Select id={`${idPrefix}-col`} name={collection.name}>
             <option value="*">All collections</option>
             {collection.options.map((s) => (
-              <option value={s}>{s}</option>
+              <option value={s} selected={s === collection.selected}>
+                {s}
+              </option>
             ))}
           </Select>
         </FormField>

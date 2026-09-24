@@ -689,6 +689,76 @@ export async function revokeToken(db: Database, principal: Principal, tokenId: s
 }
 
 /**
+ * Replace an issued token's narrowing scope mask in place (`undefined` = no
+ * narrowing). Same gate as issueToken. OAuth-minted tokens are refused: their
+ * scope is the recorded consent's, and a refresh would re-derive it anyway.
+ */
+export async function updateTokenScope(
+  db: Database,
+  principal: Principal,
+  tokenId: string,
+  scope: { collection: string; action: Action }[] | undefined,
+  now: string,
+): Promise<void> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  const token = await principalQ.getToken(db, tokenId);
+  if (!token) throw new NotFoundError('Token');
+  if (token.oauth) {
+    throw new ConflictError('An OAuth token’s scope comes from its consent — revoke it and reconnect to change it.');
+  }
+  const bad = (scope ?? []).filter((s) => !ACTIONS.includes(s.action));
+  if (bad.length) throw new InputValidationError(bad.map((s) => ({ path: 'scope', message: `Unknown action '${s.action}'.` })));
+  await principalQ.updateTokenScope(db, tokenId, scope ?? null);
+}
+
+/** Load a machine principal for a management operation, or throw. */
+async function requireMachinePrincipal(db: Database, principalId: string) {
+  const target = await principalQ.getPrincipal(db, principalId);
+  if (!target) throw new NotFoundError('Principal');
+  if (target.kind !== 'agent') {
+    throw new InputValidationError([{ path: 'principalId', message: 'Only agents and services can be disabled or deleted here.' }]);
+  }
+  return target;
+}
+
+/**
+ * Disable (or re-enable) a machine principal. Reversible kill switch: a disabled
+ * principal's tokens 401 on REST/MCP and its OAuth grant cannot refresh
+ * (isPrincipalActive), while tokens, roles, and history stay intact.
+ */
+export async function setAgentDisabled(
+  db: Database,
+  principal: Principal,
+  principalId: string,
+  disabled: boolean,
+  now: string,
+): Promise<void> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  await requireMachinePrincipal(db, principalId);
+  await principalQ.setPrincipalDisabled(db, principalId, disabled);
+}
+
+/**
+ * Permanently delete a machine principal with its tokens, roles, team
+ * memberships, OAuth grants, and item grants. Refused while it is the recorded
+ * author of any content — authorship is history, so disable it instead.
+ */
+export async function deleteAgent(db: Database, principal: Principal, principalId: string, now: string): Promise<void> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  const target = await requireMachinePrincipal(db, principalId);
+  const authored = await principalQ.principalAuthorshipCount(db, principalId);
+  if (authored > 0) {
+    throw new ConflictError(
+      `'${target.name}' is the recorded author of ${authored} item${authored === 1 ? '' : 's'} — disable it instead to keep that history.`,
+    );
+  }
+  await principalQ.deletePrincipal(db, principalId);
+}
+
+/**
  * The connect-wizard path (D48): principal + role + token in one atomic step,
  * collapsing the old create-agent → assign-role → issue-token trek. Same gate
  * as issueToken (human-only, manage_access, audited once). Unlike the OAuth

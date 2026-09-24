@@ -43,6 +43,7 @@ import * as api_trash_id_restore from './routes/api/trash/[id]/restore';
 import * as s_token_review_comments from './routes/s/[token]/review/comments';
 import * as s_token_review_done from './routes/s/[token]/review/done';
 import * as s_token_review_identify from './routes/s/[token]/review/identify';
+import * as admin_access_agents from './routes/admin/access/agents';
 import * as admin_access_assign from './routes/admin/access/assign';
 import * as admin_access_connect_index from './routes/admin/access/connect';
 import * as admin_access_matrix_index from './routes/admin/access/matrix';
@@ -153,6 +154,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/s/:token/review/comments', ...s_token_review_comments.onRequestPost);
 	app.post('/s/:token/review/done', ...s_token_review_done.onRequestPost);
 	app.post('/s/:token/review/identify', ...s_token_review_identify.onRequestPost);
+	app.post('/admin/access/agents', ...admin_access_agents.onRequestPost);
 	app.post('/admin/access/assign', ...admin_access_assign.onRequestPost);
 	app.get('/admin/access/connect', ...admin_access_connect_index.onRequestGet);
 	app.post('/admin/access/connect', ...admin_access_connect_index.onRequestPost);

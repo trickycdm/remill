@@ -42,8 +42,8 @@ closes one of those, or a class like it. New code must comply; fix violations as
   enumeration oracle), and consumption still runs through `authorize()` — the token is a credential,
   not a bypass. Minting is gated per document by the `share_link` action (D26) — separately grantable,
   NOT agent-refused — so an agent may mint expiring read-only links when a human grants it that
-  capability; identity/role/token mutations (`assignRole`, `issueToken`, `createUser`, `createAgent`,
-  team CRUD) still refuse agents. Rotating `SESSION_SECRET` makes existing links un-copyable (decrypt
+  capability; identity/role/token mutations (`assignRole`, `issueToken`, `updateTokenScope`, `createUser`,
+  `createAgent`, `setAgentDisabled`, `deleteAgent`, team CRUD) still refuse agents. Rotating `SESSION_SECRET` makes existing links un-copyable (decrypt
   fails, `url` comes back null) without breaking them — the hash-based lookup is untouched — and, as
   before (D51), invalidates every outstanding `/s/:token` unlock cookie.
 - **OAuth credentials follow the same discipline (D48).** Prefix map: `rmk_` manual bearer key ·

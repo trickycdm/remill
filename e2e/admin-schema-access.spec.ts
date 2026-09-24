@@ -106,6 +106,30 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await expect(page).toHaveURL(/\/admin\/access\/connect\?for=prn_/);
     await page.getByRole('button', { name: 'Mint token', exact: true }).click();
     await expect(page.getByText('Access token — copy it now')).toBeVisible();
+
+    // Manage an existing agent: re-scope its token, disable it, delete it.
+    page.on('dialog', (d) => d.accept());
+    await page.goto('/admin/access');
+    const puller = page
+      .locator('div')
+      .filter({ has: page.getByText('e2e-puller', { exact: true }) })
+      .filter({ has: page.getByRole('button', { name: 'Delete' }) })
+      .filter({ has: page.getByRole('heading', { name: 'Tokens' }) })
+      .last();
+    // The reconnect above minted a second token for this principal — take the first.
+    const tokenRow = puller.getByRole('listitem').first();
+    await expect(tokenRow.getByText('Full access', { exact: true }).first()).toBeVisible(); // the badge
+    await tokenRow.getByText('Edit scope').click();
+    await tokenRow.getByLabel('Read-only').check();
+    await tokenRow.getByRole('button', { name: 'Save scope' }).click();
+    await expect(puller.getByRole('listitem').first().getByText('Read', { exact: true }).first()).toBeVisible();
+
+    await puller.getByRole('button', { name: 'Disable' }).click();
+    await expect(puller.getByText('disabled', { exact: true })).toBeVisible();
+    await expect(puller.getByRole('button', { name: 'Enable' })).toBeVisible();
+
+    await puller.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText('e2e-puller', { exact: true })).toHaveCount(0);
     });
   });
 
