@@ -83,6 +83,7 @@ import * as admin_trash_index from './routes/admin/trash';
 import * as api_audit_index from './routes/api/audit';
 import * as api_collections_index from './routes/api/collections';
 import * as api_events_index from './routes/api/events';
+import * as api_me_index from './routes/api/me';
 import * as api_media from './routes/api/media';
 import * as api_packs_index from './routes/api/packs';
 import * as api_templates_index from './routes/api/templates';
@@ -206,6 +207,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.get('/api/collections', ...api_collections_index.onRequestGet);
 	app.post('/api/collections', ...api_collections_index.onRequestPost);
 	app.get('/api/events', ...api_events_index.onRequestGet);
+	app.get('/api/me', ...api_me_index.onRequestGet);
 	app.post('/api/media', ...api_media.onRequestPost);
 	app.get('/api/packs', ...api_packs_index.onRequestGet);
 	app.get('/api/templates', ...api_templates_index.onRequestGet);

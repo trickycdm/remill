@@ -44,6 +44,7 @@ function commentPaths(slug: string, tag: string): Record<string, unknown> {
       get: {
         tags: [tag],
         summary: 'List review threads (roots with replies)',
+        description: "Requires 'comment' or 'update' on the document (whoever may edit it may read its feedback).",
         parameters: [
           { name: 'status', in: 'query', schema: { type: 'string', enum: ['open', 'resolved'] } },
           { name: 'intent', in: 'query', schema: { type: 'string', enum: [...COMMENT_INTENTS] } },
@@ -457,6 +458,15 @@ function staticPaths(): Record<string, unknown> {
           '200': { description: 'Restored' },
           '409': { description: 'Collection gone, or id/unique value re-taken since deletion' },
         },
+      },
+    },
+    '/api/me': {
+      get: {
+        tags: ['Access'],
+        summary: 'Who am I',
+        description:
+          "The caller's principal, role assignments, the permissions they resolve to (collection, action, condition), token scope mask, and OAuth client. Identity-scoped: reveals only what the caller holds. MCP parity: whoami.",
+        responses: { '200': { description: '{data: {principal, roles, permissions, tokenScope, oauthClient}}' } },
       },
     },
     '/api/events': {

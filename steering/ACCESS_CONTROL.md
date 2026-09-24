@@ -38,7 +38,10 @@
      manage_schema, manage_access`. `share_link` (D26) is the narrow right to mint an anonymous,
      expiring, read-only share link for a document — held by `admin`/`editor` system roles by
      default. `comment` (D55) is the right to read and write a document's review threads — held by
-     `admin`/`editor`, and by `author` on their own documents (`own`). Extending the vocabulary
+     `admin`/`editor`, and by `author` on their own documents (`own`). Reading and resolving
+     threads ALSO admits `update` on the document (D56 — whoever may edit the text may see and
+     close the feedback on it); posting and replying need `comment`. The comments service's
+     `authorizeThreadAccess` is that one gate. Extending the vocabulary
      requires a decision-log entry, and a new system-role permission ships in a MIGRATION as well
      as `seed.sql`: production deploys apply migrations but never re-run the seed (migration 0017
      is the precedent).

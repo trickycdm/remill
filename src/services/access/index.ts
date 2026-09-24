@@ -14,6 +14,7 @@ import * as grantQ from '@/db/queries/grants';
 import * as principalQ from '@/db/queries/principals';
 import * as inviteQ from '@/db/queries/invites';
 import * as teamQ from '@/db/queries/teams';
+import { clientNameForPrincipal } from '@/db/queries/oauth';
 import { getUserByEmail } from '@/db/queries/users';
 import { recentAudit } from '@/db/queries/audit';
 import * as auditQ from '@/db/queries/audit';
@@ -26,7 +27,7 @@ import { shareNotificationEmail } from '@/lib/email/templates';
 import type { PermissionSpec, RoleSpec } from '@/access/policy';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
 import type { Action, Condition } from '@/access/types';
-import type { MachinePersona } from '@/lib/persona';
+import { personaOf, type MachinePersona, type Persona } from '@/lib/persona';
 import { InputValidationError, NotFoundError, ForbiddenError, ConflictError } from '@/lib/errors';
 import type { ErrorDetails } from '@/lib/errors';
 
@@ -544,6 +545,36 @@ function decodeAuditCursor(s: string): auditQ.AuditCursor | undefined {
 // ---------------------------------------------------------------------------
 // Principals + tokens
 // ---------------------------------------------------------------------------
+
+/** What the caller is: identity, role assignments, the permissions they
+ *  resolve to, and the token's narrowing mask. */
+export interface SelfDescription {
+  readonly principal: { readonly id: string; readonly name: string; readonly kind: string; readonly persona: Persona | null };
+  readonly roles: readonly { readonly role: string; readonly collection: string }[];
+  readonly permissions: readonly { readonly collection: string; readonly action: Action; readonly condition: Condition | null }[];
+  readonly tokenScope: readonly { readonly collection: string; readonly action: Action }[] | null;
+  readonly oauthClient: string | null;
+}
+
+/** The caller's own identity and permissions (`whoami` / `GET /api/me`).
+ *  Identity-scoped like /admin/account — no `authorize()`: it reveals only what
+ *  the caller already holds, so an agent can tell why a call was refused.
+ *  Permissions are role-derived; per-document item grants aren't listed. */
+export async function describeSelf(db: Database, principal: Principal): Promise<SelfDescription> {
+  const record = principal.kind === 'system' ? null : await principalQ.getPrincipal(db, principal.id);
+  return {
+    principal: {
+      id: principal.id,
+      name: record?.name ?? principal.id,
+      kind: principal.kind,
+      persona: record ? personaOf(record.kind, record.subtype) : null,
+    },
+    roles: record?.roles ?? [],
+    permissions: record ? await roleQ.getPrincipalPermissions(db, principal.id) : [],
+    tokenScope: principal.tokenScope ?? null,
+    oauthClient: record ? await clientNameForPrincipal(db, principal.id) : null,
+  };
+}
 
 export async function listPrincipals(db: Database, principal: Principal, now: string) {
   await authorize(db, principal, 'manage_access', ROOT, now);

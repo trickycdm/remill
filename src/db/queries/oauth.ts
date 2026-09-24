@@ -120,6 +120,17 @@ export async function grantClientNamesByPrincipal(db: Database): Promise<Map<str
   return new Map(rows.map((r) => [r.principalId, r.name]));
 }
 
+/** The OAuth client name a principal connected through, or null (not an OAuth agent). */
+export async function clientNameForPrincipal(db: Database, principalId: string): Promise<string | null> {
+  const rows = await db
+    .select({ name: oauthClients.name })
+    .from(oauthGrants)
+    .innerJoin(oauthClients, eq(oauthGrants.clientId, oauthClients.id))
+    .where(eq(oauthGrants.principalId, principalId))
+    .limit(1);
+  return rows[0]?.name ?? null;
+}
+
 /**
  * Materialize a first-time consent atomically: the agent principal, its single
  * role assignment, the grant row, and the first authorization code. The chosen
