@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { app } from '@/main';
 import { createTestD1 } from '@/test/d1';
+import { MarketingShell } from '@/components/layouts/marketing-shell';
 
 describe('homepage (marketing)', () => {
   const env = {
@@ -95,5 +96,29 @@ describe('homepage (marketing)', () => {
     expect(html).toContain('property="og:type" content="website"');
     expect(html).toContain('type="application/rss+xml"');
     expect(html).toContain('href="/favicon.svg"');
+  });
+
+  it('shows an anonymous visitor a Sign in button and leaves the page cacheable', async () => {
+    const res = await app.request('/', {}, env);
+    const html = await res.text();
+    expect(res.headers.get('Cache-Control')).toBeNull();
+    expect(html).toContain('href="/admin/login"');
+    expect(html).toContain('>Sign in<');
+    expect(html).not.toContain('Open admin');
+    expect(html).toContain('A GUI for people, an API for apps, and MCP for agents.');
+  });
+});
+
+describe('MarketingShell account affordance', () => {
+  it('swaps Sign in for Open admin when a session exists', async () => {
+    const html = (await (<MarketingShell signedIn>x</MarketingShell>)).toString();
+    expect(html).toContain('Open admin');
+    expect(html).not.toContain('Sign in');
+    expect(html).not.toContain('href="/admin/login"');
+  });
+
+  it('renders GitHub as a labelled button', async () => {
+    const html = (await (<MarketingShell>x</MarketingShell>)).toString();
+    expect(html).toContain('aria-label="remill on GitHub"');
   });
 });

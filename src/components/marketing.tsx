@@ -40,6 +40,7 @@ import {
   CircleCheck,
   DatabaseIcon,
   FileText,
+  GitHub,
   Globe,
   Image,
   PenNib,
@@ -129,7 +130,7 @@ export function MarketingHero() {
             Content that works for humans, apps, and agents.
           </h1>
           <p class="max-w-xl text-lg leading-relaxed text-ink-muted">
-            A calm GUI for people, a clean API for apps, and permissioned MCP for agents.
+            A GUI for people, an API for apps, and MCP for agents.
           </p>
           <div class="mt-2 flex flex-wrap items-center gap-3">
             <a href="#run" class={HERO_CTA_PRIMARY}>
@@ -201,8 +202,9 @@ export function WhoItsFor() {
             identity, a scoped token, a least-privilege role, and an audit trail.
           </p>
           <p>
-            People get a calm GUI. Apps get a clean REST API. Agents get MCP tools. Every write
-            goes through the same validated, authorized pipeline.
+            Whoever writes, a person in the admin, an app over REST, or an agent over MCP, goes
+            through the same validated, authorized pipeline and lands in the log under their own
+            name.
           </p>
         </div>
       </div>
@@ -657,17 +659,18 @@ export function RunYourOwnMill() {
             repository by GitHub Actions.
           </p>
           <p class="max-w-2xl leading-relaxed text-ink-muted">
-            remill.me runs this exact code as the author's own mill. The source is open on GitHub;
-            the live API is open to read today.
+            remill.me runs this exact code as the author's own mill, and its API reference is
+            served live by this instance.
           </p>
-          <p class="mt-2 flex flex-wrap gap-x-6 gap-y-2">
-            <a href="https://github.com/trickycdm/remill" class={LINK}>
+          <div class="mt-2 flex flex-wrap items-center gap-x-6 gap-y-3">
+            <Button href="https://github.com/trickycdm/remill" size="lg">
+              <GitHub class="size-4" />
               Get the source on GitHub
-            </a>
+            </Button>
             <a href="/api/openapi.json" class={LINK}>
               Browse the live API reference
             </a>
-          </p>
+          </div>
         </div>
         <ul class="grid grid-cols-2 gap-4 self-start">
           {MILL_PIECES.map((p) => (
@@ -735,15 +738,14 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
           <Coupon n="1" title="Connect by URL">
             <p class="text-sm leading-relaxed text-ink-muted">
               Paste <code class="font-mono text-xs">{baseUrl || 'https://your.remill'}/mcp</code>{' '}
-              into any MCP client and approve it in your browser — remill speaks OAuth, so
-              claude.ai, ChatGPT, and Claude Code connect by URL alone. Or sign in and use the
-              one-step connect wizard for a token with a paste-ready config.
+              into any MCP client and approve it in your browser. remill speaks OAuth, so
+              claude.ai, ChatGPT, and Claude Code connect with the URL alone.
             </p>
           </Coupon>
           <Coupon n="2" title="Or configure it by hand">
             <p class="text-sm leading-relaxed text-ink-muted">
-              remill speaks streamable HTTP JSON-RPC. Point any MCP client at the endpoint, or
-              call it raw; no SDK required.
+              Prefer a fixed token? Mint one in the admin's connect wizard and drop it into this
+              config. It's plain streamable HTTP, so no SDK is required.
             </p>
             <div class="relative" data-signals="{copied: false}">
               <pre
@@ -781,8 +783,8 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
           </Coupon>
         </ol>
         <p class="text-sm leading-relaxed text-ink-muted">
-          remill is single-tenant and self-hosted on Cloudflare Workers. Deploy your own mill and
-          the same steps apply.
+          These steps work on any mill you have an account on. remill.me is the author's own, so
+          to connect yours, deploy your own mill first.
         </p>
       </div>
     </section>
@@ -796,9 +798,11 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
 export function PublishedIndex({
   sections,
   settings,
+  signedIn = false,
 }: {
   sections: { def: CollectionDefinition; docs: DiscoveryDoc[] }[];
   settings: SiteSettings;
+  signedIn?: boolean;
 }) {
   const populated = sections.filter(({ docs }) => docs.length > 0);
   return (
@@ -844,10 +848,14 @@ export function PublishedIndex({
         <EmptyState
           class="mt-8"
           title="Nothing published yet"
-          description="Sign in to create a collection and publish the first piece."
+          description={
+            signedIn
+              ? 'Open the admin to create a collection and publish the first piece.'
+              : 'Sign in to create a collection and publish the first piece.'
+          }
           action={
-            <Button href="/admin" variant="secondary">
-              Sign in
+            <Button href={signedIn ? '/admin' : '/admin/login'} variant="secondary">
+              {signedIn ? 'Open admin' : 'Sign in'}
             </Button>
           }
         />
