@@ -27,7 +27,13 @@
   (`createUser` → `person`, `createAgent(…, subtype)` → `service | agent`), not a DB CHECK. Derive it
   with `personaOf(kind, subtype)` in `src/lib/persona.ts` (legacy null machines read as `agent`).
 - Tokens carry an optional **narrowing scope mask**: effective permission = principal's permissions
-  ∩ token mask. A token can shrink an agent's blast radius, **never widen it**.
+  ∩ token mask. A token can shrink an agent's blast radius, **never widen it**. A human may re-scope
+  an issued token in place (`updateTokenScope`) — except OAuth-minted `rmo_` tokens, whose scope is
+  the recorded consent's.
+- Machine principals are **disabled** (reversible: tokens 401, OAuth refresh refused) or **deleted**
+  (cascades tokens/roles/team memberships/OAuth grants; principal-subject item grants deleted in the
+  same batch; audit rows kept). Delete is refused while the principal is the recorded author of any
+  document, revision, media, or comment — authorship is history, so disable instead.
 
 ## The model: two additive layers, default deny, no negative rules
 
@@ -202,8 +208,9 @@ code. The audit log is itself readable only with `manage_access`.
 ## Non-negotiables
 
 - `manage_access` is held by humans by default. Agents never perform access-management
-  **mutations** — `assignRole`, `issueToken`, `connectAgent`, `createUser`, `createAgent`, and all
-  team CRUD/membership/invite operations are `refuseAgentEscalation`-guarded; granting an agent
+  **mutations** — `assignRole`, `issueToken`, `updateTokenScope`, `connectAgent`, `createUser`,
+  `createAgent`, `renameAgent`, `setAgentDisabled`, `deleteAgent`, and all team CRUD/membership/invite operations
+  are `refuseAgentEscalation`-guarded; granting an agent
   `manage_access` requires a human decision recorded in the audit log. The one deliberate
   carve-out is `share_link` (D26): minting an expiring read-only link on a single document is a
   separately grantable action a human MAY hand to an agent — it is not escalation, because the

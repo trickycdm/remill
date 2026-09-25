@@ -24,7 +24,7 @@ import {
   Stamp,
   ScopePicker,
   ACCESS_ACTION_GROUPS,
-  type ScopePreset,
+  TOKEN_SCOPE_PRESETS,
 } from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -41,13 +41,6 @@ const factory = createFactory<{ Bindings: Env }>();
 /** Token scope is a NARROWING mask; in the wizard the ROLE carries the
  *  permission choice, so the token defaults to full (= inherit the role) and
  *  narrowing is the advanced move. */
-const TOKEN_SCOPE_PRESETS: readonly ScopePreset[] = [
-  { key: 'full', label: 'Full access', actions: [] },
-  { key: 'readonly', label: 'Read-only', actions: ['read'] },
-  { key: 'editor', label: 'Editor', actions: ['read', 'create', 'update', 'delete', 'publish'] },
-  { key: 'custom', label: 'Custom', actions: null },
-];
-
 const CLIENT_OPTIONS: readonly { value: string; label: string }[] = [
   { value: 'claude-code', label: 'Claude Code' },
   { value: 'cursor', label: 'Cursor' },

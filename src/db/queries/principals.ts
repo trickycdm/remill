@@ -4,9 +4,19 @@
  * SECURITY_STANDARDS.md).
  */
 
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, count } from 'drizzle-orm';
 import type { Database } from '@/db/client';
-import { principals, users, apiTokens, principalRoles } from '@/db/schema';
+import {
+  principals,
+  users,
+  apiTokens,
+  principalRoles,
+  documents,
+  documentRevisions,
+  media,
+  comments,
+  itemGrants,
+} from '@/db/schema';
 import { newId } from '@/lib/id';
 import type { MachinePersona } from '@/lib/persona';
 
@@ -120,6 +130,35 @@ export async function setPrincipalDisabled(db: Database, id: string, disabled: b
   await db.update(principals).set({ disabled: disabled ? 1 : 0 }).where(eq(principals.id, id));
 }
 
+/**
+ * How much content a principal is recorded as the author of — documents,
+ * revisions, media, and comments. Documents/revisions/media reference the
+ * principal by a non-cascading FK, so a hard delete must be refused while this
+ * is non-zero (disabling is the path for a principal with history).
+ */
+export async function principalAuthorshipCount(db: Database, id: string): Promise<number> {
+  const counts = await Promise.all([
+    db.select({ n: count() }).from(documents).where(eq(documents.createdBy, id)),
+    db.select({ n: count() }).from(documentRevisions).where(eq(documentRevisions.savedBy, id)),
+    db.select({ n: count() }).from(media).where(eq(media.createdBy, id)),
+    db.select({ n: count() }).from(comments).where(eq(comments.authorPrincipalId, id)),
+  ]);
+  return counts.reduce((sum, rows) => sum + (rows[0]?.n ?? 0), 0);
+}
+
+/**
+ * Hard-delete a principal. FK cascades remove its credentials, tokens, role
+ * assignments, team memberships, invites, and OAuth grants; item grants naming
+ * it as subject carry no FK, so they are deleted in the same batch. The audit
+ * log (no FK, append-only) keeps its rows.
+ */
+export async function deletePrincipal(db: Database, id: string): Promise<void> {
+  await db.batch([
+    db.delete(itemGrants).where(and(eq(itemGrants.subjectKind, 'principal'), eq(itemGrants.subjectId, id))),
+    db.delete(principals).where(eq(principals.id, id)),
+  ]);
+}
+
 /** Update a principal's display name (the human's shown name / an agent's label). */
 export async function updatePrincipalName(db: Database, id: string, name: string): Promise<void> {
   await db.update(principals).set({ name }).where(eq(principals.id, id));
@@ -137,6 +176,7 @@ export interface TokenRecord {
   readonly expiresAt: string | null;
   readonly lastUsedAt: string | null;
   readonly createdAt: string;
+  readonly oauth: boolean; // D48: minted by an OAuth grant — its scope is the consent's
 }
 
 export async function listTokens(db: Database, principalId?: string): Promise<TokenRecord[]> {
@@ -153,7 +193,36 @@ export async function listTokens(db: Database, principalId?: string): Promise<To
     expiresAt: t.expiresAt,
     lastUsedAt: t.lastUsedAt,
     createdAt: t.createdAt,
+    oauth: t.grantId !== null,
   }));
+}
+
+export async function getToken(db: Database, id: string): Promise<TokenRecord | null> {
+  const rows = await db.select().from(apiTokens).where(eq(apiTokens.id, id)).limit(1);
+  const t = rows[0];
+  if (!t) return null;
+  return {
+    id: t.id,
+    principalId: t.principalId,
+    name: t.name,
+    scope: t.scopeJson ? JSON.parse(t.scopeJson) : null,
+    expiresAt: t.expiresAt,
+    lastUsedAt: t.lastUsedAt,
+    createdAt: t.createdAt,
+    oauth: t.grantId !== null,
+  };
+}
+
+/** Replace a token's narrowing scope mask (null = no narrowing). */
+export async function updateTokenScope(
+  db: Database,
+  id: string,
+  scope: { collection: string; action: string }[] | null,
+): Promise<void> {
+  await db
+    .update(apiTokens)
+    .set({ scopeJson: scope ? JSON.stringify(scope) : null })
+    .where(eq(apiTokens.id, id));
 }
 
 export async function insertToken(
