@@ -7,16 +7,12 @@ import { nowIso } from '@/lib/now';
 import * as access from '@/services/access';
 import { oauthProvenance } from '@/services/oauth';
 import { SYSTEM_ROLE_SLUGS } from '@/access/policy';
-import { personaOf, PERSONA_LABEL, PERSONA_TONE, type Persona } from '@/lib/persona';
-import { relativeTime } from '@/lib/relative-time';
-import { jsLiteral } from '@/lib/datastar-response';
-import { listCollections } from '@/services/collections';
+import { personaOf, type Persona } from '@/lib/persona';
+import { healthOf, HealthLabel, principalHref } from '@/components/admin/principal-display';
 import type { PrincipalRecord, TokenRecord } from '@/db/queries/principals';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import {
   PageHeader,
-  Card,
-  CardContent,
   Table,
   TableHead,
   TableBody,
@@ -29,302 +25,76 @@ import {
   Select,
   Button,
   FormField,
-  ScopePicker,
-  ACCESS_ACTION_GROUPS,
-  ACCESS_ACTION_LABELS,
-  TOKEN_SCOPE_PRESETS,
-  tokenPresetFor,
 } from '@/components/ui';
 
 /**
  * /admin/access — the DIRECTORY of who has access (D48 restructure): one
- * primary action (Connect an agent), the persona groups with connection
- * health, and the audit trail. All creation/minting moved to the connect
- * wizard; roles/teams/matrix live on their own sub-pages.
+ * primary action (Connect an agent), the persona groups as scannable tables
+ * with connection health, and the audit trail. Managing one principal (rename,
+ * roles, tokens, disable/delete) happens on its detail page,
+ * /admin/access/principals/:id. Creation/minting lives in the connect wizard;
+ * roles/teams/matrix live on their own sub-pages.
  */
 
-/** Connection health from the freshest token use (resolvePrincipal stamps
- *  last_used_at on every authenticated REST/MCP call). Colour + words, never
- *  colour alone (A11Y). */
-function HealthLine({ p, tokens, now }: { p: PrincipalRecord; tokens: TokenRecord[]; now: string }) {
-  if (tokens.length === 0) {
-    return (
-      <p class="mt-1 text-sm text-ink-subtle">
-        No token yet —{' '}
-        <a href={`/admin/access/connect?for=${p.id}`} class="text-accent-text hover:underline">
-          connect it →
-        </a>
-      </p>
-    );
-  }
-  const used = tokens.map((t) => t.lastUsedAt).filter((t): t is string => t !== null);
-  if (used.length === 0) {
-    return (
-      <p class="mt-1 flex items-center gap-2 text-sm text-ink-muted">
-        <span aria-hidden="true" class="size-1.5 rounded-full bg-warning" />
-        Never connected — check your client config
-        <a href={`/admin/access/connect?for=${p.id}`} class="text-accent-text hover:underline">
-          view setup →
-        </a>
-      </p>
-    );
-  }
-  const latest = used.sort().at(-1)!;
-  return (
-    <p class="mt-1 flex items-center gap-2 text-sm text-ink-muted">
-      <span aria-hidden="true" class="size-1.5 rounded-full bg-success" />
-      Connected · last used {relativeTime(latest, now)}
-    </p>
-  );
-}
-
-/** Plain-words summary of a token's scope mask ("Full access" when unnarrowed). */
-function scopeSummary(scope: TokenRecord['scope']): string {
-  if (!scope || scope.length === 0) return 'Full access';
-  const byCollection = new Map<string, string[]>();
-  for (const s of scope) byCollection.set(s.collection, [...(byCollection.get(s.collection) ?? []), s.action]);
-  return [...byCollection]
-    .map(([col, acts]) => {
-      const labels = acts.map((a) => ACCESS_ACTION_LABELS[a] ?? a).join(', ');
-      return col === '*' ? labels : `${labels} @${col}`;
-    })
-    .join(' · ');
-}
-
-/** One token: name, scope, last use, an in-place scope editor, and revoke. */
-function TokenRow({ t, collectionSlugs, now }: { t: TokenRecord; collectionSlugs: string[]; now: string }) {
-  const actions = (t.scope ?? []).map((s) => s.action);
-  const sig = t.id.replace(/[^a-zA-Z0-9]/g, '');
-  return (
-    <li class="flex flex-col gap-1 py-2">
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        <span class="font-medium text-ink">{t.name}</span>
-        <Badge tone="neutral">{scopeSummary(t.scope)}</Badge>
-        {t.oauth && <span class="text-xs text-ink-subtle">via OAuth</span>}
-        <span class="font-mono text-xs text-ink-subtle">
-          {t.lastUsedAt ? `used ${relativeTime(t.lastUsedAt, now)}` : 'never used'}
-        </span>
-        <form
-          method="post"
-          action="/admin/access/tokens"
-          class="ml-auto"
-          onsubmit={`return confirm('Revoke the token ${jsLiteral(t.name)}? Clients using it stop working immediately.')`}
-        >
-          <input type="hidden" name="op" value="revoke" />
-          <input type="hidden" name="tokenId" value={t.id} />
-          <Button type="submit" variant="ghost" size="sm" aria-label={`Revoke token ${t.name}`}>
-            Revoke
-          </Button>
-        </form>
-      </div>
-      {t.oauth ? (
-        <p class="text-xs text-ink-subtle">
-          Scope comes from the OAuth consent — revoke and reconnect the client to change it.
-        </p>
-      ) : (
-        <details>
-          <summary class="cursor-pointer text-sm font-medium text-ink-muted hover:text-ink">Edit scope</summary>
-          <form method="post" action="/admin/access/tokens" class="mt-2 flex flex-col gap-3">
-            <input type="hidden" name="op" value="scope" />
-            <input type="hidden" name="tokenId" value={t.id} />
-            <ScopePicker
-              idPrefix={`tok-${sig}`}
-              name="scopeAction"
-              groups={ACCESS_ACTION_GROUPS}
-              checked={new Set(actions)}
-              presets={TOKEN_SCOPE_PRESETS}
-              defaultPreset={tokenPresetFor(actions)}
-              collection={{ name: 'scopeCollection', options: collectionSlugs, selected: t.scope?.[0]?.collection }}
-              help="Full access = the token inherits the agent's roles. A scope only ever narrows them."
-            />
-            <div>
-              <Button type="submit" variant="secondary" size="sm">
-                Save scope
-              </Button>
-            </div>
-          </form>
-        </details>
-      )}
-    </li>
-  );
-}
-
-/** Disable/enable (reversible) and delete (permanent, confirmed) for a machine principal. */
-function AgentActions({ p }: { p: PrincipalRecord }) {
-  const name = jsLiteral(p.name);
-  const toggle = p.disabled ? 'enable' : 'disable';
-  return (
-    <>
-      <form
-        data-on:submit={
-          p.disabled
-            ? `@post('/admin/access/agents', {contentType: 'form'})`
-            : `confirm('Disable ${name}? Its tokens stop working until you enable it again.') && @post('/admin/access/agents', {contentType: 'form'})`
-        }
-      >
-        <input type="hidden" name="op" value={toggle} />
-        <input type="hidden" name="principalId" value={p.id} />
-        <Button type="submit" variant="secondary" size="sm">
-          {p.disabled ? 'Enable' : 'Disable'}
-        </Button>
-      </form>
-      <form
-        data-on:submit={`confirm('Permanently delete ${name}? Its tokens, roles, and grants are removed. This cannot be undone.') && @post('/admin/access/agents', {contentType: 'form'})`}
-      >
-        <input type="hidden" name="op" value="delete" />
-        <input type="hidden" name="principalId" value={p.id} />
-        <Button type="submit" variant="danger" size="sm">
-          Delete
-        </Button>
-      </form>
-    </>
-  );
-}
-
-/** One principal card: identity, roles (+assign disclosure), tokens, health. */
-function PrincipalCard({
+/** One directory row: name (the link to the detail page), status, roles,
+ *  tokens. Everything that changes a principal lives on its detail page, so
+ *  the list stays scannable however many agents there are. */
+function PrincipalRow({
   p,
   tokens,
   oauthClient,
-  collectionSlugs,
   now,
 }: {
   p: PrincipalRecord;
   tokens: TokenRecord[];
   oauthClient: string | undefined;
-  collectionSlugs: string[];
   now: string;
 }) {
-  const persona = personaOf(p.kind, p.subtype);
   const machine = p.kind === 'agent';
+  const href = principalHref(p.id);
+  const roles = p.roles.map((r) => (r.collection === '*' ? r.role : `${r.role} (${r.collection})`)).join(', ');
   return (
-    <Card>
-      <CardContent class="pt-5">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <span class="font-medium text-ink">{p.name}</span>{' '}
-            <Badge tone={PERSONA_TONE[persona]}>{PERSONA_LABEL[persona]}</Badge>
-            {oauthClient && (
-              <span class="ml-2">
-                <Badge tone="neutral">via OAuth</Badge>
-              </span>
-            )}
-            {p.disabled && (
-              <span class="ml-2">
-                <Badge tone="danger">disabled</Badge>
-              </span>
-            )}
-            {p.email && <span class="ml-2 font-mono text-xs text-ink-subtle">{p.email}</span>}
-            <span class="ml-2 font-mono text-xs text-ink-subtle">{p.id}</span>
-          </div>
-          {machine && (
-            <div class="flex flex-wrap items-center gap-2">
-              <Button href={`/admin/access/connect?for=${p.id}`} variant="secondary" size="sm">
-                New token →
-              </Button>
-              <AgentActions p={p} />
-            </div>
-          )}
-        </div>
-
-        {machine && <HealthLine p={p} tokens={tokens} now={now} />}
-
-        {/* Role assignments */}
-        <div class="mt-3 flex flex-wrap items-center gap-2">
-          {p.roles.length === 0 ? (
-            <span class="text-sm text-ink-subtle">No roles — can do nothing (default deny).</span>
-          ) : (
-            p.roles.map((r) => (
-              <form method="post" action="/admin/access/assign" class="contents">
-                <input type="hidden" name="op" value="unassign" />
-                <input type="hidden" name="principalId" value={p.id} />
-                <input type="hidden" name="role" value={r.role} />
-                <input type="hidden" name="collection" value={r.collection} />
-                <button type="submit" class="group inline-flex items-center gap-1 rounded-sm">
-                  <Badge tone="success">
-                    {r.role}
-                    {r.collection !== '*' ? ` @${r.collection}` : ''} ✕
-                  </Badge>
-                </button>
-              </form>
-            ))
-          )}
-        </div>
-
-        {/* Assign a role — collapsed: routine cards stay a directory row. */}
-        <details class="mt-2">
-          <summary class="cursor-pointer text-sm font-medium text-ink-muted hover:text-ink">
-            Assign role
-          </summary>
-          <form
-            method="post"
-            action="/admin/access/assign"
-            class="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end"
-          >
-            <input type="hidden" name="op" value="assign" />
-            <input type="hidden" name="principalId" value={p.id} />
-            <FormField fieldId={`role-${p.id}`} label="Role">
-              <Select id={`role-${p.id}`} name="role">
-                {SYSTEM_ROLE_SLUGS.filter((s) => s !== 'anonymous').map((s) => (
-                  <option value={s}>{s}</option>
-                ))}
-              </Select>
-            </FormField>
-            <FormField fieldId={`scope-${p.id}`} label="Scope">
-              <Input id={`scope-${p.id}`} name="collection" type="text" value="*" placeholder="* or a slug" />
-            </FormField>
-            <Button type="submit" variant="secondary">
-              Assign
-            </Button>
-          </form>
-        </details>
-
-        {/* Rename (machine principals) — a display label only; tokens and
-            history key off the id. Datastar post so a bad name shows inline. */}
-        {machine && (
-          <details class="mt-2">
-            <summary class="cursor-pointer text-sm font-medium text-ink-muted hover:text-ink">Rename</summary>
-            <form
-              data-on:submit={`@post('/admin/access/agents', {contentType: 'form'})`}
-              class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end"
-            >
-              <input type="hidden" name="op" value="rename" />
-              <input type="hidden" name="principalId" value={p.id} />
-              <FormField fieldId={`name-${p.id}`} label="New name">
-                <Input id={`name-${p.id}`} name="name" type="text" value={p.name} maxlength={100} required />
-              </FormField>
-              <Button type="submit" variant="secondary">
-                Save name
-              </Button>
-            </form>
-          </details>
+    <TableRow>
+      <TableCell>
+        <a href={href} class="font-medium text-ink hover:text-accent-text hover:underline">
+          {p.name}
+        </a>
+        {oauthClient && (
+          <span class="ml-2">
+            <Badge tone="neutral">via OAuth</Badge>
+          </span>
         )}
-
-        {/* Tokens (machine principals): scope, re-scope, revoke; minting lives on /connect. */}
-        {machine && tokens.length > 0 && (
-          <div class="mt-4 border-t border-border pt-2">
-            <h4 class="text-sm font-medium text-ink">Tokens</h4>
-            <ul class="divide-y divide-border">
-              {tokens.map((t) => (
-                <TokenRow t={t} collectionSlugs={collectionSlugs} now={now} />
-              ))}
-            </ul>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        {p.email && <span class="block text-xs text-ink-subtle">{p.email}</span>}
+      </TableCell>
+      {machine && (
+        <TableCell class="text-sm text-ink-muted">
+          <HealthLabel health={healthOf(p, tokens, now)} />
+        </TableCell>
+      )}
+      <TableCell class="text-sm text-ink-muted">{roles || 'No roles'}</TableCell>
+      {machine && (
+        <TableCell class="text-sm whitespace-nowrap text-ink-muted">
+          {tokens.length} token{tokens.length === 1 ? '' : 's'}
+        </TableCell>
+      )}
+      <TableCell class="text-right">
+        <Button href={href} variant="ghost" size="sm" aria-label={`Manage ${p.name}`}>
+          Manage →
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 }
 
-/** A titled group of principal cards (People / Services / Agents), or a hint if empty. */
+/** A titled group of principals (People / Services / Agents) as one table, or a hint if empty. */
 function PersonaGroup({
   title,
   hint,
   principals,
   tokensByPrincipal,
   oauthByPrincipal,
-  collectionSlugs,
   now,
+  machine,
   headerExtra,
 }: {
   title: string;
@@ -332,32 +102,42 @@ function PersonaGroup({
   principals: PrincipalRecord[];
   tokensByPrincipal: Map<string, TokenRecord[]>;
   oauthByPrincipal: Map<string, string>;
-  collectionSlugs: string[];
   now: string;
+  machine: boolean;
   headerExtra?: unknown;
 }) {
   return (
-    <div class="mb-6">
-      <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 class="text-sm font-semibold tracking-wide text-ink-muted uppercase">
-          {title} <span class="ml-1 font-normal text-ink-subtle">({principals.length})</span>
-        </h3>
-      </div>
+    <div class="mb-8">
+      <h3 class="mb-2 text-sm font-semibold tracking-wide text-ink-muted uppercase">
+        {title} <span class="ml-1 font-normal text-ink-subtle">({principals.length})</span>
+      </h3>
       {headerExtra}
       {principals.length === 0 ? (
         <p class="text-sm text-ink-subtle">{hint}</p>
       ) : (
-        <div class="flex flex-col gap-4">
-          {principals.map((p) => (
-            <PrincipalCard
-              p={p}
-              tokens={tokensByPrincipal.get(p.id) ?? []}
-              oauthClient={oauthByPrincipal.get(p.id)}
-              collectionSlugs={collectionSlugs}
-              now={now}
-            />
-          ))}
-        </div>
+        <Table caption={title}>
+          <TableHead>
+            <TableRow>
+              <TableHeaderCell>Name</TableHeaderCell>
+              {machine && <TableHeaderCell>Status</TableHeaderCell>}
+              <TableHeaderCell>Roles</TableHeaderCell>
+              {machine && <TableHeaderCell>Tokens</TableHeaderCell>}
+              <TableHeaderCell>
+                <span class="sr-only">Actions</span>
+              </TableHeaderCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {principals.map((p) => (
+              <PrincipalRow
+                p={p}
+                tokens={tokensByPrincipal.get(p.id) ?? []}
+                oauthClient={oauthByPrincipal.get(p.id)}
+                now={now}
+              />
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );
@@ -417,14 +197,12 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const principal = requirePrincipal(c);
   const now = nowIso();
 
-  const [principals, tokens, audit, oauthByPrincipal, collections] = await Promise.all([
+  const [principals, tokens, audit, oauthByPrincipal] = await Promise.all([
     access.listPrincipals(db, principal, now),
     access.listTokens(db, principal, now),
     access.listAudit(db, principal, now, 30),
     oauthProvenance(db, principal, now),
-    listCollections(db),
   ]);
-  const collectionSlugs = collections.map((col) => col.slug);
   const tokensByPrincipal = new Map<string, typeof tokens>();
   for (const t of tokens) {
     const list = tokensByPrincipal.get(t.principalId) ?? [];
@@ -478,8 +256,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           principals={people}
           tokensByPrincipal={tokensByPrincipal}
           oauthByPrincipal={oauthByPrincipal}
-          collectionSlugs={collectionSlugs}
           now={now}
+          machine={false}
           headerExtra={<AddPersonDisclosure />}
         />
         <PersonaGroup
@@ -488,8 +266,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           principals={services}
           tokensByPrincipal={tokensByPrincipal}
           oauthByPrincipal={oauthByPrincipal}
-          collectionSlugs={collectionSlugs}
           now={now}
+          machine
         />
         <PersonaGroup
           title="Agents"
@@ -497,8 +275,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           principals={agents}
           tokensByPrincipal={tokensByPrincipal}
           oauthByPrincipal={oauthByPrincipal}
-          collectionSlugs={collectionSlugs}
           now={now}
+          machine
         />
       </section>
 

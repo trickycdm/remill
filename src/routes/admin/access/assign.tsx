@@ -5,6 +5,7 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { assignRole, unassignRole } from '@/services/access';
 import { nowIso } from '@/lib/now';
+import { principalHref } from '@/components/admin/principal-display';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -23,5 +24,5 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   } else {
     await assignRole(db, principal, targetPrincipalId, role, collection, now);
   }
-  return c.redirect('/admin/access', 303);
+  return c.redirect(principalHref(targetPrincipalId), 303);
 });

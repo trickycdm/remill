@@ -8,6 +8,7 @@ import type { Action } from '@/access';
 import { rateLimit, TOKEN_RATE_LIMIT } from '@/middleware/rate-limit';
 import { nowIso } from '@/lib/now';
 import { SecretReveal } from '@/components/connect-cards';
+import { principalHref } from '@/components/admin/principal-display';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -39,13 +40,15 @@ export const onRequestPost = factory.createHandlers(
     const principal = requirePrincipal(c);
     const now = nowIso();
 
-    // Revoke stays a native form → Post/Redirect/Get back to the list.
+    // Revoke and re-scope are native forms → Post/Redirect/Get back to the
+    // owning principal's detail page (the form carries its id).
+    const backTo = principalHref(String(body.principalId ?? ''));
     if (String(body.op) === 'revoke') {
       await revokeToken(db, principal, String(body.tokenId ?? ''), now);
-      return c.redirect('/admin/access', 303);
+      return c.redirect(backTo, 303);
     }
 
-    // Re-scope an issued token in place — also a native form, same PRG.
+    // Re-scope an issued token in place.
     if (String(body.op) === 'scope') {
       await updateTokenScope(
         db,
@@ -57,7 +60,7 @@ export const onRequestPost = factory.createHandlers(
         ),
         now,
       );
-      return c.redirect('/admin/access', 303);
+      return c.redirect(backTo, 303);
     }
 
     const principalId = String(body.principalId ?? '');

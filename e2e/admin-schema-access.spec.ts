@@ -91,55 +91,57 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await expect(page.getByText('Access token — copy it now')).toBeVisible();
 
-    // Back on the directory: both principals, persona badges, health lines,
-    // and the reconnect path.
+    // Back on the directory: one table row per principal, grouped by persona,
+    // with a status line.
     await page.goto('/admin/access');
-    // exact: the auto-named "<name> token" revoke badges also contain the names.
-    await expect(page.getByText('e2e-bot', { exact: true })).toBeVisible();
-    await expect(page.getByText('e2e-puller', { exact: true })).toBeVisible();
-    await expect(page.getByText('Service', { exact: true }).and(page.locator('span')).first()).toBeVisible();
-    await expect(page.getByText('Agent', { exact: true }).and(page.locator('span')).first()).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Agents' }).getByRole('link', { name: 'e2e-bot', exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('table', { name: 'Services' }).getByRole('link', { name: 'e2e-puller', exact: true }),
+    ).toBeVisible();
     await expect(page.getByText(/Never connected/).first()).toBeVisible();
 
-    // Reconnect mode: "New token →" mints for the EXISTING principal.
-    await page.getByRole('link', { name: 'New token →' }).first().click();
+    // Everything about one principal lives on its detail page.
+    await page.getByRole('link', { name: 'Manage e2e-puller' }).click();
+    await expect(page).toHaveURL(/\/admin\/access\/principals\/prn_/);
+    await expect(page.getByRole('heading', { name: 'e2e-puller', level: 1 })).toBeVisible();
+    const detailUrl = page.url();
+
+    // Reconnect mode: "New token" mints for the EXISTING principal.
+    await page.getByRole('link', { name: 'New token', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/access\/connect\?for=prn_/);
     await page.getByRole('button', { name: 'Mint token', exact: true }).click();
     await expect(page.getByText('Access token — copy it now')).toBeVisible();
 
-    // Manage an existing agent: re-scope its token, rename it, disable it, delete it.
-    page.on('dialog', (d) => d.accept());
-    await page.goto('/admin/access');
-    const puller = page
-      .locator('div')
-      .filter({ has: page.getByText('e2e-puller', { exact: true }) })
-      .filter({ has: page.getByRole('button', { name: 'Delete' }) })
-      .filter({ has: page.getByRole('heading', { name: 'Tokens' }) })
-      .last();
-    // The reconnect above minted a second token for this principal — take the first.
-    const tokenRow = puller.getByRole('listitem').first();
-    await expect(tokenRow.getByText('Full access', { exact: true }).first()).toBeVisible(); // the badge
-    await tokenRow.getByText('Edit scope').click();
-    await tokenRow.getByLabel('Read-only').check();
-    await tokenRow.getByRole('button', { name: 'Save scope' }).click();
-    await expect(puller.getByRole('listitem').first().getByText('Read', { exact: true }).first()).toBeVisible();
+    // Narrow the first token's access in the Edit access dialog.
+    await page.goto(detailUrl);
+    const tokens = page.getByRole('table', { name: /^Tokens for/ });
+    await expect(tokens.getByRole('row')).toHaveCount(3); // header + the two tokens
+    await expect(tokens.getByRole('row').nth(1).getByText('Full access', { exact: true })).toBeVisible();
+    await tokens.getByRole('row').nth(1).getByRole('button', { name: /^Edit access for/ }).click();
+    const accessDialog = page.getByRole('dialog', { name: /^Edit access for/ });
+    await accessDialog.getByLabel('Read-only').check();
+    await accessDialog.getByRole('button', { name: 'Save access' }).click();
+    await expect(tokens.getByRole('row').nth(1).getByText('Read-only', { exact: true })).toBeVisible();
 
-    await puller.getByText('Rename', { exact: true }).click();
-    await puller.getByLabel('New name').fill('e2e-puller-renamed');
-    await puller.getByRole('button', { name: 'Save name' }).click();
-    await expect(page.getByText('e2e-puller-renamed', { exact: true })).toBeVisible();
-    const renamed = page
-      .locator('div')
-      .filter({ has: page.getByText('e2e-puller-renamed', { exact: true }) })
-      .filter({ has: page.getByRole('button', { name: 'Delete' }) })
-      .filter({ has: page.getByRole('heading', { name: 'Tokens' }) })
-      .last();
+    // Revoke the second token through its confirm dialog.
+    await tokens.getByRole('row').nth(2).getByRole('button', { name: /^Revoke/ }).click();
+    await page.getByRole('dialog', { name: /^Revoke/ }).getByRole('button', { name: 'Revoke token' }).click();
+    await expect(tokens.getByRole('row')).toHaveCount(2);
 
-    await renamed.getByRole('button', { name: 'Disable' }).click();
-    await expect(renamed.getByText('disabled', { exact: true })).toBeVisible();
-    await expect(renamed.getByRole('button', { name: 'Enable' })).toBeVisible();
+    // Rename in place.
+    await page.getByLabel('Name', { exact: true }).fill('e2e-puller-renamed');
+    await page.getByRole('button', { name: 'Save name' }).click();
+    await expect(page.getByRole('heading', { name: 'e2e-puller-renamed', level: 1 })).toBeVisible();
 
-    await renamed.getByRole('button', { name: 'Delete' }).click();
+    // Disable is reversible, so it acts without a confirm.
+    await page.getByRole('button', { name: 'Disable', exact: true }).click();
+    await expect(page.getByText('Disabled', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Enable', exact: true })).toBeVisible();
+
+    // Delete is confirmed in a dialog, then returns to the directory.
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await page.getByRole('dialog', { name: /^Delete e2e-puller-renamed/ }).getByRole('button', { name: 'Delete agent' }).click();
+    await expect(page).toHaveURL(/\/admin\/access$/);
     await expect(page.getByText('e2e-puller-renamed', { exact: true })).toHaveCount(0);
     });
   });
@@ -316,6 +318,13 @@ test.describe('Phase 4 — schema builder + access UI', () => {
         const r = await new AxeBuilder({ page }).withTags(WCAG).analyze();
         expect(r.violations, `axe on ${path}: ${r.violations.map((v) => v.id).join(',')}`).toEqual([]);
       }
+
+      // A principal detail page (the first Manage link — the bootstrap admin at minimum).
+      await page.goto('/admin/access');
+      await page.getByRole('link', { name: /^Manage / }).first().click();
+      await page.locator('#main-content').first().waitFor();
+      const detail = await new AxeBuilder({ page }).withTags(WCAG).analyze();
+      expect(detail.violations, `axe on ${page.url()}: ${detail.violations.map((v) => v.id).join(',')}`).toEqual([]);
     });
   });
 });
