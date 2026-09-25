@@ -7,6 +7,7 @@ import { deleteAgent, renameAgent, setAgentDisabled } from '@/services/access';
 import { dsRedirect } from '@/lib/datastar-response';
 import { nowIso } from '@/lib/now';
 import { InputValidationError } from '@/lib/errors';
+import { principalHref } from '@/components/admin/principal-display';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -24,10 +25,13 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   const op = String(body.op ?? '');
   const now = nowIso();
 
-  if (op === 'delete') await deleteAgent(db, principal, principalId, now);
-  else if (op === 'rename') await renameAgent(db, principal, principalId, String(body.name ?? ''), now);
+  if (op === 'delete') {
+    await deleteAgent(db, principal, principalId, now);
+    return dsRedirect(c, '/admin/access');
+  }
+  if (op === 'rename') await renameAgent(db, principal, principalId, String(body.name ?? ''), now);
   else if (op === 'disable' || op === 'enable') await setAgentDisabled(db, principal, principalId, op === 'disable', now);
   else throw new InputValidationError([{ path: 'op', message: `Unknown operation '${op}'.` }]);
 
-  return dsRedirect(c, '/admin/access');
+  return dsRedirect(c, principalHref(principalId));
 });

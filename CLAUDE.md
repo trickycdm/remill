@@ -176,8 +176,10 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   first multi-collection pack; D47). Templates, renders, and packs are code; registries are closed
   (`keys.ts`, `packs.ts`).
 - **Access** `src/access/` — the single `authorize()` decision point + `Grant` witness types
-  (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (principals grouped by persona,
-  invite a person via `users.tsx`, custom roles, token scoping, teams — a grant subject kind, D24 —
+  (ACCESS_CONTROL.md). Management UI: `src/routes/admin/access/**` (a directory of principals as
+  per-persona tables, each linking to its detail page `principals/[id].tsx` — rename, roles,
+  tokens with edit-access/revoke dialogs, and a disable/delete danger zone; invite a person via
+  `users.tsx`, custom roles, teams — a grant subject kind, D24 —
   at `/admin/access/teams`, the `matrix/` overview); item-grant sharing via
   `src/components/admin/share-panel.tsx`, the `/api/c/:collection/:id/grants` route, and the MCP
   `share_<slug>` tools; the `share_link` action (D26) lets granted agents mint expiring anonymous

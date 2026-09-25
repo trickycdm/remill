@@ -27,6 +27,7 @@ import * as api_c_collection_id_revisions from './routes/api/c/[collection]/[id]
 import * as api_c_collection_id_schedule from './routes/api/c/[collection]/[id]/schedule';
 import * as api_c_collection_id_share_links from './routes/api/c/[collection]/[id]/share-links';
 import * as api_c_collection_id_visibility from './routes/api/c/[collection]/[id]/visibility';
+import * as admin_access_principals_id from './routes/admin/access/principals/[id]';
 import * as admin_c_collection_id_index from './routes/admin/c/[collection]/[id]';
 import * as admin_c_collection_bulk from './routes/admin/c/[collection]/bulk';
 import * as admin_c_collection_export from './routes/admin/c/[collection]/export';
@@ -133,6 +134,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.get('/api/c/:collection/:id/share-links', ...api_c_collection_id_share_links.onRequestGet);
 	app.post('/api/c/:collection/:id/share-links', ...api_c_collection_id_share_links.onRequestPost);
 	app.post('/api/c/:collection/:id/visibility', ...api_c_collection_id_visibility.onRequestPost);
+	app.get('/admin/access/principals/:id', ...admin_access_principals_id.onRequestGet);
 	app.post('/admin/c/:collection/bulk', ...admin_c_collection_bulk.onRequestPost);
 	app.get('/admin/c/:collection/export', ...admin_c_collection_export.onRequestGet);
 	app.get('/admin/c/:collection/import', ...admin_c_collection_import.onRequestGet);

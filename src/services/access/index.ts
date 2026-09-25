@@ -582,6 +582,22 @@ export async function listPrincipals(db: Database, principal: Principal, now: st
 }
 
 /**
+ * One principal with its tokens, for the access detail page. `authored` counts
+ * the content it is the recorded author of (machines only) so the page can say
+ * up front why Delete is unavailable instead of failing on submit.
+ */
+export async function getPrincipalDetail(db: Database, principal: Principal, principalId: string, now: string) {
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  const target = await principalQ.getPrincipal(db, principalId);
+  if (!target) throw new NotFoundError('Principal');
+  const [tokens, authored] = await Promise.all([
+    principalQ.listTokens(db, principalId),
+    target.kind === 'agent' ? principalQ.principalAuthorshipCount(db, principalId) : Promise.resolve(0),
+  ]);
+  return { principal: target, tokens, authored };
+}
+
+/**
  * Create a machine principal — a Service (a system pulling data) or an Agent (an
  * autonomous AI client). Both are `kind: 'agent'` for security; `subtype` is the
  * persona label only. Requires `manage_access` (human-held; agents are refused).

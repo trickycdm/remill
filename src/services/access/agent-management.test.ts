@@ -154,3 +154,34 @@ describe('agent management — token re-scope, rename, disable, delete', () => {
     });
   });
 });
+
+describe('getPrincipalDetail', () => {
+  let db: Database;
+  let admin: Principal;
+  let agentId: string;
+
+  beforeEach(async () => {
+    db = getDb(createTestD1());
+    await seedRoles(db, NOW);
+    admin = await makePrincipal(db, NOW, { id: 'prn_admin', role: 'admin' });
+    agentId = await access.createAgent(db, admin, 'bot', NOW);
+  });
+
+  it('returns the principal, its tokens, and how much content it authored', async () => {
+    await access.assignRole(db, admin, agentId, 'editor', '*', NOW);
+    await access.issueToken(db, admin, { principalId: agentId, name: 'prod' }, NOW);
+    await collectionsService.createCollection(db, admin, NOTES, NOW);
+    await docs.createDocument(db, { id: agentId, kind: 'agent', surface: 'mcp' }, 'notes', { title: 'Mine' }, NOW);
+
+    const detail = await access.getPrincipalDetail(db, admin, agentId, NOW);
+    expect(detail.principal.name).toBe('bot');
+    expect(detail.tokens.map((t) => t.name)).toEqual(['prod']);
+    expect(detail.authored).toBeGreaterThan(0);
+  });
+
+  it('refuses unknown principals and callers without manage_access', async () => {
+    await expect(access.getPrincipalDetail(db, admin, 'prn_missing', NOW)).rejects.toBeInstanceOf(NotFoundError);
+    const reader = await makePrincipal(db, NOW, { id: 'prn_reader', role: 'reader' });
+    await expect(access.getPrincipalDetail(db, reader, agentId, NOW)).rejects.toBeInstanceOf(ForbiddenError);
+  });
+});
