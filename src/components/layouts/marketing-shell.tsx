@@ -8,9 +8,17 @@
  * link first → #main-content, exactly one <main>, header/footer landmarks.
  * The iris accent statement is the hero band itself (MarketingHero), so the
  * shell chrome stays quiet — no top hairline competing with it.
+ *
+ * `signedIn` swaps the account affordance: a visitor gets "Sign in", someone
+ * already holding a session gets "Open admin" (the route reads the session;
+ * the shell only renders the answer).
  */
 
 import { Wordmark } from '@/components/auth-shell';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, GitHub } from '@/components/ui/icon';
+
+const REPO_URL = 'https://github.com/trickycdm/remill';
 
 const NAV_LINK =
   'text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -20,7 +28,17 @@ const NAV_LINK =
 const BAND_LINK =
   'text-sm font-medium text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-export function MarketingShell({ children }: { children?: unknown }) {
+export function MarketingShell({
+  children,
+  signedIn = false,
+}: {
+  children?: unknown;
+  signedIn?: boolean;
+}) {
+  const account = signedIn
+    ? { href: '/admin', label: 'Open admin' }
+    : { href: '/admin/login', label: 'Sign in' };
+
   return (
     <div class="flex min-h-dvh flex-col bg-canvas">
       <a
@@ -45,16 +63,18 @@ export function MarketingShell({ children }: { children?: unknown }) {
           >
             <Wordmark />
           </a>
-          <div class="flex items-center gap-6">
-            <a href="#writing" class={NAV_LINK}>
+          <div class="flex items-center gap-2 sm:gap-3">
+            <a href="#writing" class={`${NAV_LINK} mr-2 hidden sm:inline sm:mr-3`}>
               Writing
             </a>
-            <a href="https://github.com/trickycdm/remill" class={NAV_LINK}>
-              GitHub
-            </a>
-            <a href="/admin" class={NAV_LINK}>
-              Sign in
-            </a>
+            <Button href={REPO_URL} variant="secondary" size="sm" aria-label="remill on GitHub">
+              <GitHub class="size-4" />
+              <span class="hidden sm:inline">GitHub</span>
+            </Button>
+            <Button href={account.href} size="sm">
+              {account.label}
+              {signedIn ? <ArrowRight class="size-3.5" /> : null}
+            </Button>
           </div>
         </nav>
       </header>
@@ -78,7 +98,7 @@ export function MarketingShell({ children }: { children?: unknown }) {
             </p>
           </div>
           <nav aria-label="Footer" class="grid grid-cols-2 gap-x-10 gap-y-3 sm:text-right">
-            <a href="https://github.com/trickycdm/remill" class={BAND_LINK}>
+            <a href={REPO_URL} class={BAND_LINK}>
               GitHub
             </a>
             <a href="/api/openapi.json" class={BAND_LINK}>
@@ -96,8 +116,8 @@ export function MarketingShell({ children }: { children?: unknown }) {
             <a href="#writing" class={BAND_LINK}>
               Writing
             </a>
-            <a href="/admin" class={BAND_LINK}>
-              Sign in
+            <a href={account.href} class={BAND_LINK}>
+              {account.label}
             </a>
           </nav>
         </div>
