@@ -3,16 +3,18 @@ import type { Env } from '@/types';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
-import { deleteAgent, setAgentDisabled } from '@/services/access';
+import { deleteAgent, renameAgent, setAgentDisabled } from '@/services/access';
 import { dsRedirect } from '@/lib/datastar-response';
 import { nowIso } from '@/lib/now';
+import { InputValidationError } from '@/lib/errors';
 
 const factory = createFactory<{ Bindings: Env }>();
 
 /**
- * POST /admin/access/agents — disable, enable, or delete a machine principal
- * (op field). A Datastar form action, so a refused delete (the agent authored
- * content) surfaces through onError's dsError instead of a raw JSON 409.
+ * POST /admin/access/agents — rename, disable, enable, or delete a machine
+ * principal (op field). A Datastar form action, so a refused delete (the agent
+ * authored content) or an invalid name surfaces through onError's dsError
+ * instead of a raw JSON error.
  */
 export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
   const body = await c.req.parseBody();
@@ -23,7 +25,9 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   const now = nowIso();
 
   if (op === 'delete') await deleteAgent(db, principal, principalId, now);
-  else await setAgentDisabled(db, principal, principalId, op === 'disable', now);
+  else if (op === 'rename') await renameAgent(db, principal, principalId, String(body.name ?? ''), now);
+  else if (op === 'disable' || op === 'enable') await setAgentDisabled(db, principal, principalId, op === 'disable', now);
+  else throw new InputValidationError([{ path: 'op', message: `Unknown operation '${op}'.` }]);
 
   return dsRedirect(c, '/admin/access');
 });

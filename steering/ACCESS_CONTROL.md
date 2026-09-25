@@ -209,7 +209,7 @@ code. The audit log is itself readable only with `manage_access`.
 
 - `manage_access` is held by humans by default. Agents never perform access-management
   **mutations** — `assignRole`, `issueToken`, `updateTokenScope`, `connectAgent`, `createUser`,
-  `createAgent`, `setAgentDisabled`, `deleteAgent`, and all team CRUD/membership/invite operations
+  `createAgent`, `renameAgent`, `setAgentDisabled`, `deleteAgent`, and all team CRUD/membership/invite operations
   are `refuseAgentEscalation`-guarded; granting an agent
   `manage_access` requires a human decision recorded in the audit log. The one deliberate
   carve-out is `share_link` (D26): minting an expiring read-only link on a single document is a

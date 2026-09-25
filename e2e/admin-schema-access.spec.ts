@@ -107,7 +107,7 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await page.getByRole('button', { name: 'Mint token', exact: true }).click();
     await expect(page.getByText('Access token — copy it now')).toBeVisible();
 
-    // Manage an existing agent: re-scope its token, disable it, delete it.
+    // Manage an existing agent: re-scope its token, rename it, disable it, delete it.
     page.on('dialog', (d) => d.accept());
     await page.goto('/admin/access');
     const puller = page
@@ -124,12 +124,23 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await tokenRow.getByRole('button', { name: 'Save scope' }).click();
     await expect(puller.getByRole('listitem').first().getByText('Read', { exact: true }).first()).toBeVisible();
 
-    await puller.getByRole('button', { name: 'Disable' }).click();
-    await expect(puller.getByText('disabled', { exact: true })).toBeVisible();
-    await expect(puller.getByRole('button', { name: 'Enable' })).toBeVisible();
+    await puller.getByText('Rename', { exact: true }).click();
+    await puller.getByLabel('New name').fill('e2e-puller-renamed');
+    await puller.getByRole('button', { name: 'Save name' }).click();
+    await expect(page.getByText('e2e-puller-renamed', { exact: true })).toBeVisible();
+    const renamed = page
+      .locator('div')
+      .filter({ has: page.getByText('e2e-puller-renamed', { exact: true }) })
+      .filter({ has: page.getByRole('button', { name: 'Delete' }) })
+      .filter({ has: page.getByRole('heading', { name: 'Tokens' }) })
+      .last();
 
-    await puller.getByRole('button', { name: 'Delete' }).click();
-    await expect(page.getByText('e2e-puller', { exact: true })).toHaveCount(0);
+    await renamed.getByRole('button', { name: 'Disable' }).click();
+    await expect(renamed.getByText('disabled', { exact: true })).toBeVisible();
+    await expect(renamed.getByRole('button', { name: 'Enable' })).toBeVisible();
+
+    await renamed.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText('e2e-puller-renamed', { exact: true })).toHaveCount(0);
     });
   });
 

@@ -279,6 +279,27 @@ function PrincipalCard({
           </form>
         </details>
 
+        {/* Rename (machine principals) — a display label only; tokens and
+            history key off the id. Datastar post so a bad name shows inline. */}
+        {machine && (
+          <details class="mt-2">
+            <summary class="cursor-pointer text-sm font-medium text-ink-muted hover:text-ink">Rename</summary>
+            <form
+              data-on:submit={`@post('/admin/access/agents', {contentType: 'form'})`}
+              class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end"
+            >
+              <input type="hidden" name="op" value="rename" />
+              <input type="hidden" name="principalId" value={p.id} />
+              <FormField fieldId={`name-${p.id}`} label="New name">
+                <Input id={`name-${p.id}`} name="name" type="text" value={p.name} maxlength={100} required />
+              </FormField>
+              <Button type="submit" variant="secondary">
+                Save name
+              </Button>
+            </form>
+          </details>
+        )}
+
         {/* Tokens (machine principals): scope, re-scope, revoke; minting lives on /connect. */}
         {machine && tokens.length > 0 && (
           <div class="mt-4 border-t border-border pt-2">

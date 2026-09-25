@@ -717,9 +717,34 @@ async function requireMachinePrincipal(db: Database, principalId: string) {
   const target = await principalQ.getPrincipal(db, principalId);
   if (!target) throw new NotFoundError('Principal');
   if (target.kind !== 'agent') {
-    throw new InputValidationError([{ path: 'principalId', message: 'Only agents and services can be disabled or deleted here.' }]);
+    throw new InputValidationError([{ path: 'principalId', message: 'Only agents and services can be managed here.' }]);
   }
   return target;
+}
+
+const MAX_AGENT_NAME = 100;
+
+/**
+ * Rename a machine principal. The name is a display label only — tokens,
+ * roles, grants, and audit rows key off the principal id, so nothing a client
+ * holds changes. People rename themselves from /admin/account instead.
+ */
+export async function renameAgent(
+  db: Database,
+  principal: Principal,
+  principalId: string,
+  name: string,
+  now: string,
+): Promise<void> {
+  refuseAgentEscalation(principal);
+  await authorize(db, principal, 'manage_access', ROOT, now);
+  const trimmed = name.trim();
+  if (!trimmed) throw new InputValidationError([{ path: 'name', message: 'Name is required.' }]);
+  if (trimmed.length > MAX_AGENT_NAME) {
+    throw new InputValidationError([{ path: 'name', message: `Name must be ${MAX_AGENT_NAME} characters or fewer.` }]);
+  }
+  await requireMachinePrincipal(db, principalId);
+  await principalQ.updatePrincipalName(db, principalId, trimmed);
 }
 
 /**

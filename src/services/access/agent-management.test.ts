@@ -22,7 +22,7 @@ const NOTES: CollectionDefinition = {
   workflow: { draftPublish: true },
 };
 
-describe('agent management — token re-scope, disable, delete', () => {
+describe('agent management — token re-scope, rename, disable, delete', () => {
   let db: Database;
   let admin: Principal;
   let agentId: string;
@@ -78,6 +78,28 @@ describe('agent management — token re-scope, disable, delete', () => {
       const { id } = await access.issueToken(db, admin, { principalId: agentId, name: 'prod' }, NOW);
       const agentAdmin = await makePrincipal(db, NOW, { id: 'prn_agent_admin', kind: 'agent', role: 'admin', surface: 'mcp' });
       await expect(access.updateTokenScope(db, agentAdmin, id, undefined, NOW)).rejects.toBeInstanceOf(ForbiddenError);
+    });
+  });
+
+  describe('renameAgent', () => {
+    it('renames the agent, trimmed, and its token keeps working', async () => {
+      const { token } = await access.issueToken(db, admin, { principalId: agentId, name: 'prod' }, NOW);
+      await access.renameAgent(db, admin, agentId, '  release-notes-bot  ', NOW);
+      expect((await getPrincipal(db, agentId))?.name).toBe('release-notes-bot');
+      expect(await findTokenByHash(db, await hashToken(token))).not.toBeNull();
+    });
+
+    it('refuses a blank or overlong name without changing it', async () => {
+      await expect(access.renameAgent(db, admin, agentId, '   ', NOW)).rejects.toBeInstanceOf(InputValidationError);
+      await expect(access.renameAgent(db, admin, agentId, 'x'.repeat(101), NOW)).rejects.toBeInstanceOf(InputValidationError);
+      expect((await getPrincipal(db, agentId))?.name).toBe('bot');
+    });
+
+    it('refuses people, unknown principals, and agent callers', async () => {
+      await expect(access.renameAgent(db, admin, admin.id, 'x', NOW)).rejects.toBeInstanceOf(InputValidationError);
+      await expect(access.renameAgent(db, admin, 'prn_missing', 'x', NOW)).rejects.toBeInstanceOf(NotFoundError);
+      const agentAdmin = await makePrincipal(db, NOW, { id: 'prn_agent_admin', kind: 'agent', role: 'admin', surface: 'mcp' });
+      await expect(access.renameAgent(db, agentAdmin, agentId, 'x', NOW)).rejects.toBeInstanceOf(ForbiddenError);
     });
   });
 
