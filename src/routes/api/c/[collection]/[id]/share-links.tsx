@@ -3,7 +3,8 @@ import type { Env } from '@/types';
 import { pathParam } from '@/lib/http';
 import { apiPrincipal, jsonBody, apiJson } from '@/lib/api';
 import { getDb } from '@/db/client';
-import { createShareLink, listShareLinks } from '@/services/access';
+import { listShareLinks } from '@/services/access';
+import { mintApiShareLink } from '@/services/sharing';
 import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { nowIso } from '@/lib/now';
@@ -29,36 +30,46 @@ export const onRequestGet = factory.createHandlers(async (c) => {
   return apiJson(c, { data: links });
 });
 
-/** Same rule the MCP `share_link_<slug>` tool enforces (steering
- *  API_AND_MCP_STANDARDS.md): `expiresAt` is REQUIRED and clamped to 30 days. */
-const SHARE_LINK_MAX_TTL_DAYS = 30;
-
 /**
- * POST /api/c/:collection/:id/share-links — mint a read-only share link.
- * Body: `{ expiresAt, password?, label? }`. `expiresAt` is required, clamped to
- * 30 days out — the same rules as the MCP `share_link_<slug>` tool.
+ * POST /api/c/:collection/:id/share-links — mint a share link. Body:
+ * `{ expiresAt, password?, label?, review?: { mode?, reviewer? } }`. Read-only
+ * by default; `review` makes it a review link whose holders can also comment
+ * (D61). `expiresAt` is required and clamped to 30 days. The rules live in
+ * `mintApiShareLink` — the same function the MCP `share_link_<slug>` tool calls.
  */
 export const onRequestPost = factory.createHandlers(async (c) => {
   const now = nowIso();
   const db = getDb(c.env.DB);
   const body = (await jsonBody(c)) as Record<string, unknown>;
   const principal = await apiPrincipal(c, now);
-  const { grantId, token, hasPassword, label, expiresAt } = await createShareLink(
+  const { token, ...link } = await mintApiShareLink(
     db,
     principal,
     {
       collection: pathParam(c, 'collection'),
       documentId: pathParam(c, 'id'),
-      actions: ['read'],
-      expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : undefined,
-      maxTtlDays: SHARE_LINK_MAX_TTL_DAYS,
-      password: typeof body.password === 'string' && body.password ? body.password : undefined,
-      label: typeof body.label === 'string' && body.label ? body.label : undefined,
+      expiresAt: body.expiresAt,
+      password: body.password,
+      label: body.label,
+      review: body.review,
     },
     c.env.SESSION_SECRET,
     now,
   );
   const settings = await getSettings(db);
   const url = `${resolveBaseUrl(c.env, settings, c.req.url)}/s/${token}`;
-  return apiJson(c, { data: { grantId, url, expiresAt, hasPassword, label } }, 201);
+  return apiJson(
+    c,
+    {
+      data: {
+        grantId: link.grantId,
+        url,
+        expiresAt: link.expiresAt,
+        hasPassword: link.hasPassword,
+        label: link.label,
+        review: link.review,
+      },
+    },
+    201,
+  );
 });

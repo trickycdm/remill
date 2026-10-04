@@ -21,3 +21,6 @@
 | 2026-10-04 15:14 | phase 4 built | seeded + migrated `pages` collection (0020), access.defaultVisibility, `page` slug reserved on create, MAX_DOCUMENT_BYTES 413 guard, Pages nav item, frame list rows open the viewer |
 | 2026-10-04 15:14 | RE-PLAN | no bespoke /admin/pages screen: the generic list (rows now open the viewer for frame collections) plus the generic "New" form already cover it; a second screen would duplicate both |
 | 2026-10-04 15:14 | verified | 843 unit tests, lint, type-check; e2e 109 passed, 1 flaky (revision-diff, flaky on main); new Pages e2e (nav, private by default, public opt-in, anonymous viewer) |
+| 2026-10-04 15:17 | phase 4 shipped to PR | PR #56 (feat/pages-collection), stacked on #55 |
+| 2026-10-04 15:17 | phase 5 built | mintApiShareLink (one implementation for MCP share_link_<slug> and REST share-links) with optional review; createReviewLink now also authorizes `comment`; OpenAPI + steering + D61 |
+| 2026-10-04 15:17 | verified | 850 unit tests (7 new: service, MCP/REST parity), lint, type-check. No UI change, so no e2e added |

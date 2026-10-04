@@ -243,8 +243,12 @@ tokens** as REST.
     declared (no push channel; clients poll).
 - **`share_link_<slug>` (D26/D51)** mints an anonymous share link for one document. Visibility and
   gating key on the `share_link` action — not `manage_access`, and not agent-refused. The grant is
-  read-only (`actions: ['read']` hardcoded); `expiresAt` is REQUIRED and clamped to 30 days; the
-  tool returns `{ grantId, url, expiresAt, hasPassword, label }`. Optional `password` (min 8 chars,
+  read-only by default; an optional `review: { mode?, reviewer? }` makes it a REVIEW link (read +
+  comment, D61), which also requires the caller's `comment` on the document and a collection whose
+  pages render the comment panel (not raw mode). `expiresAt` is REQUIRED and clamped to 30 days;
+  the tool returns `{ grantId, url, expiresAt, hasPassword, label, review }`. The tool and REST
+  `POST …/share-links` both call `mintApiShareLink` (services/sharing) — add a rule there, never
+  in one surface. Optional `password` (min 8 chars,
   hashed, never echoed back) and `label` (trimmed, max 80 chars) args, D51. The plaintext URL
   **intentionally enters agent context** — the grant is revocable at any time from the Share panel
   or the access matrix; a password (delivered out of band) still gates the human recipient.

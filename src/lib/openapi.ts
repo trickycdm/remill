@@ -301,26 +301,34 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
       },
       post: {
         tags: [tag],
-        summary: `Mint a read-only share link for a ${def.name} document (D51)`,
+        summary: `Mint a share link for a ${def.name} document (D51, D61)`,
         description:
-          'Body {expiresAt?, password?, label?}. password (min 8 chars) requires the link to be unlocked before it opens; label is a human note shown in the Share panel. Requires the share_link action.',
+          'Body {expiresAt, password?, label?, review?}. expiresAt is REQUIRED and clamped to 30 days. Read-only by default; review: {mode?: "group"|"individual", reviewer?} makes it a review link whose holders can also comment (also requires the comment action, and a collection whose pages render the comment panel). password (min 8 chars) requires the link to be unlocked before it opens; label is a human note shown in the Share panel. Requires the share_link action.',
         requestBody: {
-          required: false,
+          required: true,
           content: {
             'application/json': {
               schema: {
                 type: 'object',
+                required: ['expiresAt'],
                 properties: {
                   expiresAt: { type: 'string' },
                   password: { type: 'string' },
                   label: { type: 'string' },
+                  review: {
+                    type: 'object',
+                    properties: {
+                      mode: { type: 'string', enum: ['group', 'individual'] },
+                      reviewer: { type: 'string' },
+                    },
+                  },
                 },
               },
             },
           },
         },
         responses: {
-          '201': { description: 'Created {grantId, url, expiresAt, hasPassword, label}' },
+          '201': { description: 'Created {grantId, url, expiresAt, hasPassword, label, review}' },
         },
       },
     },

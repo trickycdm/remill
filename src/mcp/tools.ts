@@ -18,11 +18,11 @@ import {
   getPrincipalPermissions,
   grantItem,
   listTeams,
-  createShareLink,
   listAuditPage,
   describeSelf,
 } from '@/services/access';
 import { InputValidationError } from '@/lib/errors';
+import { mintApiShareLink } from '@/services/sharing';
 import {
   listCollections,
   getCollection,
@@ -144,10 +144,6 @@ function filtersFromArgs(raw: unknown): Record<string, Partial<Record<docs.Filte
   }
   return filters;
 }
-
-/** Agent-minted share links MUST expire; requested expiries are clamped to 30
- *  days (D26). Humans in the admin Share panel may still mint open-ended links. */
-const SHARE_LINK_MAX_TTL_DAYS = 30;
 
 /** Build the permission-filtered tool set for a principal. `baseUrl` is the
  *  absolute origin for tools that mint URLs (threaded from the route — this
@@ -790,7 +786,7 @@ export async function buildToolsForPrincipal(
     if (couldDo(perms, principal, 'share_link', slug, false)) {
       tools.push({
         name: `share_link_${slug}`,
-        description: `Mint an anonymous, expiring, READ-ONLY share link for one ${def.name} document. Anyone with the URL can open it — no account needed. Expiry is required and clamped to 30 days.`,
+        description: `Mint an anonymous, expiring share link for one ${def.name} document. Anyone with the URL can open it — no account needed. READ-ONLY by default; pass \`review\` for a review link whose holders can also comment. Expiry is required and clamped to 30 days.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -804,32 +800,45 @@ export async function buildToolsForPrincipal(
               description: 'optional password to require before the link opens (min 8 characters)',
             },
             label: { type: 'string', description: 'optional human label shown in the Share panel' },
+            review: {
+              type: 'object',
+              description:
+                'optional — make this a REVIEW link: whoever opens it can also comment on the document (needs your `comment` permission as well as `share_link`). Omit for a read-only link.',
+              properties: {
+                mode: {
+                  type: 'string',
+                  enum: ['group', 'individual'],
+                  description: "'group' (default): reviewers on group links see each other's comments. 'individual': each reviewer sees only their own.",
+                },
+                reviewer: {
+                  type: 'string',
+                  description: 'name the one person this link is for; omit for an open link where each reviewer types their name',
+                },
+              },
+            },
           },
           required: ['id', 'expiresAt'],
         },
         handler: async (args) => {
-          const nowIso = now();
-          // Validation and the 30-day clamp both live in createShareLink() now
-          // (steering: REST follows "the same rules as the MCP tool" — one
-          // implementation instead of two hand-copied ones).
-          const { grantId, token, hasPassword, label, expiresAt } = await createShareLink(
+          // Validation, the 30-day clamp and the review rules all live in
+          // mintApiShareLink() — ONE implementation for this tool and REST.
+          const { token, ...link } = await mintApiShareLink(
             db,
             principal,
             {
               collection: slug,
               documentId: String(args.id ?? ''),
-              actions: ['read'],
-              expiresAt: typeof args.expiresAt === 'string' ? args.expiresAt : undefined,
-              maxTtlDays: SHARE_LINK_MAX_TTL_DAYS,
-              password: typeof args.password === 'string' && args.password ? args.password : undefined,
-              label: typeof args.label === 'string' && args.label ? args.label : undefined,
+              expiresAt: args.expiresAt,
+              password: args.password,
+              label: args.label,
+              review: args.review,
             },
             ctx.secret ?? '',
-            nowIso,
+            now(),
           );
           // The plaintext token intentionally enters the agent's context — that
           // IS the capability; it stays revocable from the Share panel/matrix.
-          return { grantId, url: `${baseUrl}/s/${token}`, expiresAt, hasPassword, label };
+          return { grantId: link.grantId, url: `${baseUrl}/s/${token}`, expiresAt: link.expiresAt, hasPassword: link.hasPassword, label: link.label, review: link.review };
         },
       });
     }

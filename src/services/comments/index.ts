@@ -664,10 +664,21 @@ export async function createReviewLink(
   input: ReviewLinkInput,
   secret: string,
   now: string,
-): Promise<{ grantId: string; token: string; reviewer: cq.ReviewerRecord | null }> {
+): Promise<{
+  grantId: string;
+  token: string;
+  expiresAt: string | null;
+  hasPassword: boolean;
+  label: string | null;
+  reviewer: cq.ReviewerRecord | null;
+}> {
   if (!(grantQ.REVIEW_MODES as readonly string[]).includes(input.mode)) {
     throw new InputValidationError([{ path: 'mode', message: "Mode must be 'group' or 'individual'." }]);
   }
+  // A review link hands the holder `comment` on this document, so the minter
+  // must hold it too — `share_link` alone only ever conferred READ (D26/D61).
+  // (`createShareLink` below still authorizes `share_link` itself.)
+  await authorize(db, principal, 'comment', { collection: input.collection, documentId: input.documentId }, now);
   const name = input.reviewer ? cleanName(input.reviewer.name) : null;
   const email = input.reviewer?.email?.trim() || null;
   if (email && !EMAIL_RE.test(email)) {
@@ -696,7 +707,14 @@ export async function createReviewLink(
         now,
       )
     : null;
-  return { grantId: link.grantId, token: link.token, reviewer };
+  return {
+    grantId: link.grantId,
+    token: link.token,
+    expiresAt: link.expiresAt ?? null,
+    hasPassword: link.hasPassword,
+    label: link.label ?? null,
+    reviewer,
+  };
 }
 
 export interface ReviewLinkListItem extends ShareLinkListItem {

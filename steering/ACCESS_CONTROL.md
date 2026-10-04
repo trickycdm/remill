@@ -42,8 +42,8 @@
    `anonymous`. A role holds permission rows `(collection | *, action, condition?)`.
    - **Closed action vocabulary**: `read, create, update, delete, publish, share_link, comment,
      manage_schema, manage_access`. `share_link` (D26) is the narrow right to mint an anonymous,
-     expiring, read-only share link for a document — held by `admin`/`editor` system roles by
-     default. `comment` (D55) is the right to read and write a document's review threads — held by
+     expiring share link for a document — read-only, or (D61) a review link when the minter also
+     holds `comment` on it — held by `admin`/`editor` system roles by default. `comment` (D55) is the right to read and write a document's review threads — held by
      `admin`/`editor`, and by `author` on their own documents (`own`). Reading and resolving
      threads ALSO admits `update` on the document (D56 — whoever may edit the text may see and
      close the feedback on it); posting and replying need `comment`. The comments service's
@@ -220,9 +220,12 @@ code. The audit log is itself readable only with `manage_access`.
   `createAgent`, `renameAgent`, `setAgentDisabled`, `deleteAgent`, and all team CRUD/membership/invite operations
   are `refuseAgentEscalation`-guarded; granting an agent
   `manage_access` requires a human decision recorded in the audit log. The one deliberate
-  carve-out is `share_link` (D26): minting an expiring read-only link on a single document is a
-  separately grantable action a human MAY hand to an agent — it is not escalation, because the
-  link never grants more than that one document's read.
+  carve-out is `share_link` (D26): minting an expiring link on a single document is a separately
+  grantable action a human MAY hand to an agent — it is not escalation, because the link never
+  grants more than the minter itself holds on that one document: `read`, or `read` + `comment`
+  for a review link (D61 — `createReviewLink` authorizes `comment` as well as `share_link`). A
+  link can never carry `update`, `delete`, `publish` or any management action, and one minted
+  over REST/MCP always expires within 30 days (`mintApiShareLink`).
 - **SEC-8, refined for OAuth (D48): issuance authority is always a recorded human consent.** The
   OAuth token endpoint mints `rmo_` access tokens *without a human in-flight* — that is NOT a
   violation, because the **privilege decision** already happened at the consent screen
