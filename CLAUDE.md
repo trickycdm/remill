@@ -153,7 +153,8 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
-  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41), unlisted via /:c/doc_… (D50) + /:c index pages (D42) + /s/:token share links (anonymous, optionally password-locked, D51; `?preview=1` + session = draft preview, D49)
+  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41; or the viewer shell around a sandboxed frame, D60), unlisted via /:c/doc_… (D50) + /:c index pages (D42) + /s/:token share links (anonymous, optionally password-locked, D51; `?preview=1` + session = draft preview, D49)
+                     /frame/:ticket   Framed-page CONTENT (D60): the author's html for the viewer shell's sandboxed iframe — cookieless, ticketed, own CSP
                      / · /rss.xml · /sitemap.xml · /robots.txt   Discovery pack (D35, anonymous gated reads)
   Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29: purges · D32: publish drain as the system actor)
 
@@ -181,7 +182,9 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   inside mutation batches via eventInsert, D33).
 - **Fields** `src/fields/` — the FieldType registry; one module per type, including `relation.tsx`
   (graph edges and backlinks) and `html.tsx` (D25 trusted raw HTML; powers `renderMode: 'raw'`
-  pages, D27). The most important interface in the codebase (SCHEMA_ENGINE.md).
+  pages, D27, and `renderMode: 'frame'` pages, D60 — the sandboxed viewer: `src/lib/frame/` holds
+  the policy, ticket and document preparation, `src/services/frame/` the ticketed read,
+  `ViewerShell` the chrome). The most important interface in the codebase (SCHEMA_ENGINE.md).
 - **Templates** `src/templates/` — the render-template registry (the code side of the public
   reading surface); a collection selects a template by name via its `template` key (D41) and can
   pin slots explicitly via `bind` ({title/hero/lead}→field key — the escape hatch convention falls

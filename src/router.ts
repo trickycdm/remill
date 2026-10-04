@@ -97,6 +97,7 @@ import * as api_media from './routes/api/media';
 import * as api_packs_index from './routes/api/packs';
 import * as api_templates_index from './routes/api/templates';
 import * as api_trash_index from './routes/api/trash';
+import * as frame_ticket from './routes/frame/[ticket]';
 import * as media_id_index from './routes/media/[id]';
 import * as oauth_authorize_index from './routes/oauth/authorize';
 import * as oauth_device_index from './routes/oauth/device';
@@ -230,6 +231,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.get('/api/packs', ...api_packs_index.onRequestGet);
 	app.get('/api/templates', ...api_templates_index.onRequestGet);
 	app.get('/api/trash', ...api_trash_index.onRequestGet);
+	app.get('/frame/:ticket', ...frame_ticket.onRequestGet);
 	app.get('/media/:id', ...media_id_index.onRequestGet);
 	app.get('/oauth/authorize', ...oauth_authorize_index.onRequestGet);
 	app.post('/oauth/authorize', ...oauth_authorize_index.onRequestPost);

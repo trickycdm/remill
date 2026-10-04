@@ -2,11 +2,15 @@
  * Security response headers (SECURITY_STANDARDS.md §8, SEC-3), forked per
  * surface since D27:
  *
- *  - PROTECTED surfaces (/admin, /api, /mcp, /auth, /media) always get the
- *    strict policy.
+ *  - PROTECTED surfaces (/admin, /api, /mcp, /auth, /media, /oauth) always get
+ *    the strict policy.
  *  - PUBLIC surfaces (/, /:collection/:slug, /s/:token) get the same strict
  *    policy by default, widening `script-src` to the CDN allowlist ONLY while
  *    the admin-settable `allowCdnScripts` setting is on.
+ *  - The FRAME surface (/frame/:ticket, D60) gets its own policy from
+ *    `@/lib/frame/policy`: the author's document is sandboxed into an opaque
+ *    origin and may be framed by remill's own shell — the ONE response family
+ *    without `X-Frame-Options: DENY` / `frame-ancestors 'none'`.
  *
  * The CSP keeps the admin working: Datastar is vendored same-origin (`'self'`)
  * and compiles its `data-*` expressions with the `Function` constructor, so
@@ -26,6 +30,10 @@ import type { MiddlewareHandler } from 'hono';
 import type { Env } from '@/types';
 import { getDb } from '@/db/client';
 import { getSettings } from '@/services/settings';
+import { frameResponseHeaders } from '@/lib/frame/policy';
+
+/** The framed-content prefix (D60). Checked BEFORE the protected/public split. */
+export const FRAME_PREFIX = '/frame/';
 
 const PROTECTED_PREFIXES = ['/admin', '/api', '/mcp', '/auth', '/media', '/oauth'] as const;
 
@@ -60,11 +68,22 @@ function policy(extraScriptSrc: readonly string[] = []) {
 const strict = policy();
 const publicCdn = policy(CDN_SCRIPT_HOSTS);
 
-/** One dispatcher for every route: strict on protected prefixes; on public
- *  paths, one settings PK read decides strict vs CDN-widened. */
+/** The frame policy: set on the way out so it also covers the refusal document.
+ *  Keyed to the REQUEST origin — never the admin-editable site URL. */
+const frame: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+  await next();
+  for (const [name, value] of Object.entries(frameResponseHeaders(new URL(c.req.url).origin))) {
+    c.res.headers.set(name, value);
+  }
+};
+
+/** One dispatcher for every route: the frame policy on framed content; strict
+ *  on protected prefixes; on public paths, one settings PK read decides strict
+ *  vs CDN-widened. */
 export function securityHeaders(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
     const p = c.req.path;
+    if (p.startsWith(FRAME_PREFIX)) return frame(c, next);
     if (PROTECTED_PREFIXES.some((x) => p === x || p.startsWith(`${x}/`))) return strict(c, next);
     const settings = await getSettings(getDb(c.env.DB));
     return (settings.allowCdnScripts ? publicCdn : strict)(c, next);

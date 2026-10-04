@@ -215,7 +215,10 @@ export async function buildToolsForPrincipal(
         'title/hero/lead slots to specific fields; for a ready-made shape, prefer install_pack. ' +
         'Optional `access` sets visibility: {publicRead: true} lets anyone read published documents; ' +
         '{private: true} hides the collection from discovery (list_collections, the REST API index, ' +
-        'OpenAPI) for principals without read access. The two are mutually exclusive.',
+        'OpenAPI) for principals without read access. The two are mutually exclusive. ' +
+        "Optional `renderMode` picks how a collection with an `html` field is shown: 'frame' renders the " +
+        "first html field as a full page inside remill's viewer, in a sandboxed frame (use this for " +
+        "standalone HTML pages); 'raw' serves it as the bare page; 'shell' (default) inlines it.",
       inputSchema: {
         type: 'object',
         properties: { definition: { type: 'object' } },

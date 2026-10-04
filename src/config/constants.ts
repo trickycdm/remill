@@ -20,9 +20,9 @@ export const PROTECTED_COLLECTIONS = ['settings', 'media'] as const;
  *  segments — a collection named one of these would be shadowed by them on the
  *  public `/:collection/:slug` surface. (`media`/`settings` need no entry: the
  *  seeded collections already hold those slugs, so the uniqueness check covers
- *  them.) `s` is the share-link namespace (C3); `assets`/`src`/`vendor` are
- *  build/static paths. */
-export const RESERVED_COLLECTION_SLUGS = ['admin', 'api', 'assets', 'auth', 'mcp', 's', 'src', 'vendor'] as const;
+ *  them.) `s` is the share-link namespace (C3); `frame` serves framed-page
+ *  content (D60); `assets`/`src`/`vendor` are build/static paths. */
+export const RESERVED_COLLECTION_SLUGS = ['admin', 'api', 'assets', 'auth', 'frame', 'mcp', 's', 'src', 'vendor'] as const;
 
 /** Rough chars-per-token heuristic for text-render budgets (D47) — an
  *  approximation shared by every surface that accepts a `budget` arg. */

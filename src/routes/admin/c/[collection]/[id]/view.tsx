@@ -10,13 +10,17 @@ import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Button } from '@/components/ui';
 import { DocumentView } from '@/components/document-view';
-import { readingPageOf } from '@/lib/def-helpers';
+import { readingPageOf, titleOf, effectiveVisibility } from '@/lib/def-helpers';
+import { ViewerShell } from '@/components/layouts/viewer-shell';
+import { framePageHtml } from '@/lib/frame/document';
+import { mintFrameSrc } from '@/services/frame';
 
 const factory = createFactory<{ Bindings: Env }>();
 
 /** GET /admin/c/:collection/:id/view — the read-only detail view (C2): the same
  *  DocumentView the public page renders, on the admin surface (admin-routed
- *  links, drafts visible to those who may read them). */
+ *  links, drafts visible to those who may read them). A frame-mode collection
+ *  (D60) gets the viewer shell instead. */
 export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
   const db = getDb(c.env.DB);
@@ -27,6 +31,28 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
   const def = await getCollectionOrThrow(db, slug);
   const doc = await getDocument(db, principal, slug, id, now);
+
+  // Frame mode (D60): the page renders in the viewer shell's sandboxed iframe,
+  // never inlined into the admin DOM — the author's scripts must not run on
+  // the admin origin.
+  if (framePageHtml(def, doc.data) !== null) {
+    const title = titleOf(def, doc);
+    return c.render(
+      <ViewerShell
+        title={title}
+        frameSrc={await mintFrameSrc(c.env.SESSION_SECRET, principal, doc.id, now)}
+        home={{ href: `/admin/c/${slug}`, label: `Back to ${def.name}` }}
+        visibility={effectiveVisibility(def, doc)}
+        actions={
+          <Button href={`/admin/c/${slug}/${id}`} variant="secondary" size="sm">
+            Edit
+          </Button>
+        }
+      />,
+      { title, bare: true, noindex: true },
+    );
+  }
+
   const backlinks = await getBacklinks(db, principal, slug, id, now);
 
   // The styled reading page, when the collection has one (`readingPageOf`:

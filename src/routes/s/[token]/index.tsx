@@ -13,7 +13,7 @@ import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { readingTimeMinutes } from '@/lib/reading-time';
 import { resolveTemplate } from '@/templates/registry';
-import { publicUrlOf } from '@/lib/def-helpers';
+import { publicUrlOf, titleOf } from '@/lib/def-helpers';
 import { buildDocumentHead } from '@/lib/seo';
 import { NotFoundError, ForbiddenError } from '@/lib/errors';
 import { nowIso } from '@/lib/now';
@@ -24,6 +24,9 @@ import { DocumentView, rawPageHtml } from '@/components/document-view';
 import { Card, CardContent, Button, FormField, Input } from '@/components/ui';
 import { isReviewLink } from '@/services/comments';
 import { reviewerRequest, reviewerPanel } from '@/lib/review-http';
+import { ViewerShell } from '@/components/layouts/viewer-shell';
+import { framePageHtml } from '@/lib/frame/document';
+import { mintFrameSrc } from '@/services/frame';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -139,6 +142,24 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     // Raw mode (D27): the html field IS the page (JSON arm stays first above).
     const raw = rawPageHtml(def, doc);
     if (raw !== null) return c.html(raw);
+    // Frame mode (D60): the page renders in the viewer shell's sandboxed
+    // iframe. The ticket names THIS link as the viewer, so the content read
+    // re-checks the grant — and is only ever minted past the password gate
+    // above. Never cacheable: the ticket is short-lived. `bare`: a capability
+    // URL advertises nothing but its title.
+    if (framePageHtml(def, doc.data) !== null) {
+      c.header('Cache-Control', 'private, no-store');
+      const title = titleOf(def, doc);
+      const reader = { ...anonymousPrincipal('rest'), linkId: grant.subjectId };
+      return c.render(
+        <ViewerShell
+          title={title}
+          frameSrc={await mintFrameSrc(c.env.SESSION_SECRET, reader, doc.id, now)}
+          home={{ href: '/', label: `${settings.siteName?.trim() || 'remill'} home` }}
+        />,
+        { title, bare: true, noindex: true },
+      );
+    }
     // Backlinks stay access-scoped: the link grants ONE document, so referrers
     // only appear when they're independently public.
     const backlinks = await getBacklinks(

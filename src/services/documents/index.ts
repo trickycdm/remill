@@ -1581,10 +1581,28 @@ export async function restoreRevision(
     { collection: collectionSlug, documentId: id },
     now,
   );
-  const revs = await dq.listRevisions(db, id, readGrant);
-  const target = revs.find((r) => r.revision === revision);
+  const target = await dq.getRevision(db, id, revision, readGrant);
   if (!target) throw new NotFoundError(`Revision ${revision}`);
   return updateDocument(db, principal, collectionSlug, id, target.data, now, opts);
+}
+
+/**
+ * ONE past revision's data (D60 — the framed viewer's "view this version").
+ * Gated on `update`, not `read`: history can hold text an editor deliberately
+ * removed, so a reader — or a share link — sees only the current document.
+ */
+export async function getRevisionData(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  revision: number,
+  now: string,
+): Promise<Record<string, unknown>> {
+  const grant = await authorize(db, principal, 'update', { collection: collectionSlug, documentId: id }, now);
+  const target = await dq.getRevision(db, id, revision, grant);
+  if (!target) throw new NotFoundError(`Revision ${revision}`);
+  return target.data;
 }
 
 // ---------------------------------------------------------------------------

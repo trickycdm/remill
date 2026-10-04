@@ -707,6 +707,30 @@ export async function listRevisions(
   }));
 }
 
+/** ONE revision's data, or null when the document has no such revision. Witness
+ *  required. `listRevisions` loads every revision's full data — untenable for
+ *  megabyte html pages — so anything that needs a single revision reads it here. */
+export async function getRevision(
+  db: Database,
+  documentId: string,
+  revision: number,
+  _grant: Grant,
+): Promise<{ revision: number; data: Record<string, unknown>; savedBy: string | null; savedAt: string } | null> {
+  const rows = await db
+    .select()
+    .from(documentRevisions)
+    .where(and(eq(documentRevisions.documentId, documentId), eq(documentRevisions.revision, revision)))
+    .limit(1);
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    revision: r.revision,
+    data: JSON.parse(r.dataJson || '{}') as Record<string, unknown>,
+    savedBy: r.savedBy,
+    savedAt: r.savedAt,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Graph queries (D45) — the /admin/graph explorer's data plumbing.
 // ---------------------------------------------------------------------------

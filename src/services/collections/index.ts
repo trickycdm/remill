@@ -181,14 +181,14 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     }
   }
   if (input.renderMode !== undefined) {
-    if (input.renderMode !== 'shell' && input.renderMode !== 'raw') {
-      issues.push({ path: 'renderMode', message: "renderMode must be 'shell' or 'raw'." });
-    } else if (input.renderMode === 'raw' && !(input.fields ?? []).some((f) => f.type === 'html')) {
-      // In raw mode the FIRST html field IS the page (D27) — without one there
-      // is nothing to render.
+    if (input.renderMode !== 'shell' && input.renderMode !== 'raw' && input.renderMode !== 'frame') {
+      issues.push({ path: 'renderMode', message: "renderMode must be 'shell', 'raw' or 'frame'." });
+    } else if (input.renderMode !== 'shell' && !(input.fields ?? []).some((f) => f.type === 'html')) {
+      // In raw and frame mode the FIRST html field IS the page (D27/D60) —
+      // without one there is nothing to render.
       issues.push({
         path: 'renderMode',
-        message: "renderMode 'raw' requires at least one 'html' field.",
+        message: `renderMode '${input.renderMode}' requires at least one 'html' field.`,
       });
     }
   }

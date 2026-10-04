@@ -68,8 +68,11 @@ export interface CollectionDefinition {
    *  (branded PublicShell). 'raw' = the collection's FIRST `html` field IS the
    *  page — returned as a full standalone document (no shell, no design-system
    *  CSS); requires at least one html field; an empty value falls back to the
-   *  shell so a published page is never blank. */
-  readonly renderMode?: 'shell' | 'raw';
+   *  shell so a published page is never blank. 'frame' (D60) = the same first
+   *  `html` field, shown in a sandboxed iframe inside the viewer shell — on the
+   *  public, share-link AND admin surfaces — so the author's scripts never run
+   *  on remill's own origin. */
+  readonly renderMode?: 'shell' | 'raw' | 'frame';
   /** Selects a reading TEMPLATE from the registry (src/templates/) for the public
    *  page — the code side of the render surface (templates are code; this key is
    *  data). Absent ⇒ the generic DocumentView shell; `renderMode: 'raw'` still

@@ -253,6 +253,14 @@ code. The audit log is itself readable only with `manage_access`.
   need: `getSettings()` reads the `settings` singleton's non-sensitive display fields via a witness-free
   query (mirroring `collectionPublicRead`). WRITES to settings still run the full `authorize()`-gated
   document pipeline. Do not widen this to document content.
+- **A frame ticket carries identity, never access (D60).** The viewer shell signs a short-lived
+  ticket naming the document, the revision and the viewer it just authorized a read for; the
+  cookieless `/frame/:ticket` route rebuilds that principal (`principalOf` in `src/services/frame/`
+  — a session user, a share-link reader with `linkId`, or anonymous) and calls `getDocument`, i.e.
+  the full `authorize()` read with its audit row. Nothing is ever read on the strength of the
+  signature alone, so revoking a link or a role takes effect on the next frame load. Past
+  revisions additionally require `update` (`getRevisionData`). If you add a viewer kind, add it to
+  the ticket AND to `principalOf` — never a branch that skips `authorize()`.
 - **Trash (D29): `delete` on the collection gates the whole surface** — who can delete can list,
   restore, and destroy those snapshots; no new action. Listing compiles the caller's own/published
   delete-conditions into the query (`TrashScope`, mirroring `compileReadFilter` — never post-filter);
