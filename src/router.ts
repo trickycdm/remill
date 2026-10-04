@@ -71,6 +71,7 @@ import * as admin_settings_rebuild_search from './routes/admin/settings/rebuild-
 import * as admin_settings_snapshot from './routes/admin/settings/snapshot';
 import * as api_c_collection_index from './routes/api/c/[collection]';
 import * as api_collections_slug from './routes/api/collections/[slug]';
+import * as api_pages_id from './routes/api/pages/[id]';
 import * as api_trash_id_index from './routes/api/trash/[id]';
 import * as auth_join_token from './routes/auth/join/[token]';
 import * as auth_set_password_token from './routes/auth/set-password/[token]';
@@ -96,6 +97,7 @@ import * as api_events_index from './routes/api/events';
 import * as api_me_index from './routes/api/me';
 import * as api_media from './routes/api/media';
 import * as api_packs_index from './routes/api/packs';
+import * as api_pages_index from './routes/api/pages';
 import * as api_templates_index from './routes/api/templates';
 import * as api_trash_index from './routes/api/trash';
 import * as frame_ticket from './routes/frame/[ticket]';
@@ -200,6 +202,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/api/c/:collection', ...api_c_collection_index.onRequestPost);
 	app.get('/api/collections/:slug', ...api_collections_slug.onRequestGet);
 	app.patch('/api/collections/:slug', ...api_collections_slug.onRequestPatch);
+	app.put('/api/pages/:id', ...api_pages_id.onRequestPut);
 	app.delete('/api/trash/:id', ...api_trash_id_index.onRequestDelete);
 	app.get('/auth/join/:token', ...auth_join_token.onRequestGet);
 	app.post('/auth/join/:token', ...auth_join_token.onRequestPost);
@@ -231,6 +234,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.get('/api/me', ...api_me_index.onRequestGet);
 	app.post('/api/media', ...api_media.onRequestPost);
 	app.get('/api/packs', ...api_packs_index.onRequestGet);
+	app.post('/api/pages', ...api_pages_index.onRequestPost);
 	app.get('/api/templates', ...api_templates_index.onRequestGet);
 	app.get('/api/trash', ...api_trash_index.onRequestGet);
 	app.get('/frame/:ticket', ...frame_ticket.onRequestGet);

@@ -374,7 +374,76 @@ function collectionPaths(def: CollectionDefinition): Record<string, unknown> {
  *  iterates collection definitions. Extend when adding a static /api route. */
 function staticPaths(): Record<string, unknown> {
   const trashTag = 'Trash';
+  const pageBody = {
+    required: true,
+    content: {
+      'text/html': {
+        schema: { type: 'string', description: 'The complete HTML document. Metadata rides the query string.' },
+      },
+      'application/json': {
+        schema: {
+          type: 'object',
+          required: ['html'],
+          properties: {
+            html: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            tags: { type: 'array', items: { type: 'string' } },
+            expectedRevision: { type: 'integer' },
+            share: {
+              type: 'object',
+              required: ['expiresAt'],
+              properties: {
+                expiresAt: { type: 'string' },
+                password: { type: 'string' },
+                label: { type: 'string' },
+                review: {
+                  type: 'object',
+                  properties: {
+                    mode: { type: 'string', enum: ['group', 'individual'] },
+                    reviewer: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+  const pageQuery = [
+    { name: 'title', in: 'query', schema: { type: 'string' }, description: 'text/html form only' },
+    { name: 'description', in: 'query', schema: { type: 'string' }, description: 'text/html form only' },
+    { name: 'tags', in: 'query', schema: { type: 'string' }, description: 'text/html form only; comma-separated' },
+  ];
+  const pageResult = '{id, url, title, revision, visibility, share, warnings}';
   return {
+    '/api/pages': {
+      post: {
+        tags: ['Pages'],
+        summary: 'Publish a standalone HTML page (D62)',
+        description:
+          'Creates a page in the built-in pages collection, shown in the framed viewer. Send the page as text/html (metadata in the query string) or as JSON; the JSON form may also mint a share or review link in the same call. The title defaults to the page\'s <title>, then its first <h1>. Pages are private until shared. `warnings` lists what the frame will block (off-allowlist scripts and styles, network calls, storage). Body cap 2 MiB. Requires create on the pages collection.',
+        parameters: pageQuery,
+        requestBody: pageBody,
+        responses: { '201': { description: `Created ${pageResult}` } },
+      },
+    },
+    '/api/pages/{id}': {
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      put: {
+        tags: ['Pages'],
+        summary: 'Replace a page\'s html (D62)',
+        description:
+          'Updates an existing page: its URL and share links keep working and the previous content stays in its revision history. Omitted title, description and tags keep their stored values. If-Match: "<revision>" (or expectedRevision in the JSON form) makes the save conditional; a stale revision is 409 STALE_REVISION. Requires update on the page.',
+        parameters: [
+          ...pageQuery,
+          { name: 'If-Match', in: 'header', schema: { type: 'string' }, description: 'The revision this save is based on.' },
+        ],
+        requestBody: pageBody,
+        responses: { '200': { description: `Updated ${pageResult}` }, '409': { description: 'STALE_REVISION' } },
+      },
+    },
     '/api/templates': {
       get: {
         tags: ['Packs'],

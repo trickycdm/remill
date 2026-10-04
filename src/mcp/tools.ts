@@ -23,6 +23,8 @@ import {
 } from '@/services/access';
 import { InputValidationError } from '@/lib/errors';
 import { mintApiShareLink } from '@/services/sharing';
+import { publishPage } from '@/services/pages';
+import { PAGES_COLLECTION } from '@/config/constants';
 import {
   listCollections,
   getCollection,
@@ -319,6 +321,71 @@ export async function buildToolsForPrincipal(
           },
           now(),
         ),
+    });
+  }
+
+  // Pages (D62): publish a standalone HTML page in ONE call — the built-in
+  // `pages` collection in the framed viewer. Static sugar over create/update +
+  // share_link for that collection (services/pages); registered BEFORE the
+  // generated tools so a pre-existing collection whose tools collide by name
+  // (slug `page` → `publish_page`) can never shadow it.
+  const pagesDef = collections.find(
+    (d) => d.slug === PAGES_COLLECTION && d.renderMode === 'frame' && d.fields.some((f) => f.type === 'html'),
+  );
+  if (
+    pagesDef &&
+    (couldDo(perms, principal, 'create', pagesDef.slug, false) || couldDo(perms, principal, 'update', pagesDef.slug, false))
+  ) {
+    tools.push({
+      name: 'publish_page',
+      description:
+        'Publish a standalone HTML page and get its URL — the way to share a report, chart, dashboard or any ' +
+        'self-contained document. Pass the COMPLETE HTML document (doctype, head, body, your own CSS and JS inline). ' +
+        'It renders in a sandboxed frame inside a viewer with sharing, comments and version history. ' +
+        'In the frame: inline scripts and styles run; scripts/styles may also load from cdnjs.cloudflare.com, ' +
+        'cdn.jsdelivr.net and unpkg.com (and /vendor/chart.umd.js on this site); Google Fonts and https images load; ' +
+        'network calls (fetch/XHR) and localStorage/cookies do NOT work — embed the data in the page. ' +
+        'Pages are private: `url` opens for signed-in people who can read it. To hand it to anyone else, pass `share` ' +
+        'for a link in the same call (add `share.review` to let them comment). ' +
+        'To revise a page, call again with its `id` — the URL and links stay the same and the old version is kept. ' +
+        'The result lists `warnings` for anything in the page the frame will block.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          html: { type: 'string', description: 'the complete HTML document' },
+          title: {
+            type: 'string',
+            description: "shown in the viewer and lists; defaults to the page's <title>, then its first <h1>",
+          },
+          description: { type: 'string', description: 'one or two sentences on what the page is' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'labels for finding it later' },
+          id: { type: 'string', description: 'an existing page id — update that page instead of creating one' },
+          expectedRevision: {
+            type: 'integer',
+            description: 'with `id`: the revision you based this on; the save is refused (STALE_REVISION) if it moved on',
+          },
+          share: {
+            type: 'object',
+            description: 'also mint an anonymous link to the page',
+            properties: {
+              expiresAt: { type: 'string', description: 'REQUIRED ISO-8601 expiry (clamped to 30 days out)' },
+              password: { type: 'string', description: 'optional password (min 8 characters)' },
+              label: { type: 'string', description: 'optional human label shown in the Share panel' },
+              review: {
+                type: 'object',
+                description: 'make it a REVIEW link: whoever opens it can also comment',
+                properties: {
+                  mode: { type: 'string', enum: ['group', 'individual'] },
+                  reviewer: { type: 'string', description: 'name the one person this link is for' },
+                },
+              },
+            },
+            required: ['expiresAt'],
+          },
+        },
+        required: ['html'],
+      },
+      handler: async (args) => publishPage(db, principal, args, { secret: ctx.secret ?? '', baseUrl }, now()),
     });
   }
 
@@ -956,5 +1023,10 @@ export async function buildToolsForPrincipal(
       }),
   });
 
-  return tools;
+  // Tool names are the dispatch key: where two collide (a collection whose
+  // generated tools repeat an earlier name), the FIRST registered wins and the
+  // rest are dropped, so `tools/list` never advertises a tool `tools/call`
+  // would not reach.
+  const seen = new Set<string>();
+  return tools.filter((t) => !seen.has(t.name) && seen.add(t.name));
 }

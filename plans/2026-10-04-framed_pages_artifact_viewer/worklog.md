@@ -24,3 +24,8 @@
 | 2026-10-04 15:17 | phase 4 shipped to PR | PR #56 (feat/pages-collection), stacked on #55 |
 | 2026-10-04 15:17 | phase 5 built | mintApiShareLink (one implementation for MCP share_link_<slug> and REST share-links) with optional review; createReviewLink now also authorizes `comment`; OpenAPI + steering + D61 |
 | 2026-10-04 15:17 | verified | 850 unit tests (7 new: service, MCP/REST parity), lint, type-check. No UI change, so no e2e added |
+| 2026-10-04 15:25 | phase 5 shipped to PR | PR #57 (feat/agent-review-links), stacked on #56 |
+| 2026-10-04 15:25 | phase 6 built | publishPage service, static MCP `publish_page` (registered before generated tools; tool list de-duplicated by name), REST POST /api/pages + PUT /api/pages/:id (text/html or JSON), analyzeFramedHtml warnings sharing the CSP allowlists via frameAllows, OpenAPI + steering |
+| 2026-10-04 15:25 | decision | the raw text/html REST form takes no `share`: a link password must not ride a query string. The JSON form has full parity with the MCP tool |
+| 2026-10-04 15:25 | verified | 869 unit tests, lint, type-check; e2e 109 passed, 1 flaky (revision-diff, flaky on main). Live check on the built preview: an editor-role agent token published over MCP with a review link in one call; the share page rendered the viewer with the review panel; the frame served the document under the frame CSP; REST text/html publish worked |
+| 2026-10-04 15:25 | blocked on owner | phase 7 (live migration) needs PRs #53-#58 merged and a release tag, then the token scope widened with `comment` |

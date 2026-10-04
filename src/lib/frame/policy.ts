@@ -48,6 +48,43 @@ export const FRAME_SANDBOX_TOKENS = [
 
 export const FRAME_SANDBOX = FRAME_SANDBOX_TOKENS.join(' ');
 
+/** What kind of resource a framed page is loading — the frame CSP's directives. */
+export type FrameResourceKind = 'script' | 'style' | 'font' | 'image';
+
+const hostIn = (url: URL, hosts: readonly string[]) => hosts.includes(url.origin);
+
+/**
+ * Whether the frame policy lets a page load `raw` (a URL as written in the
+ * page: absolute, protocol-relative, or site-relative) as `kind`. The SAME
+ * allowlists `frameCsp` emits, read the other way — so the warnings an author
+ * gets at publish time (`analyzeFramedHtml`) cannot disagree with the headers.
+ * `data:`/`blob:` are answered per kind; anything unparseable is refused.
+ */
+export function frameAllows(kind: FrameResourceKind, raw: string): boolean {
+  const value = raw.trim();
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(value)?.[1].toLowerCase();
+  if (scheme === 'data') return kind === 'image' || kind === 'font';
+  if (scheme === 'blob') return kind === 'image';
+  // Site-relative (served by remill itself): path-scoped, except images.
+  if (!scheme && !value.startsWith('//')) {
+    const path = value.startsWith('/') ? value : `/${value}`;
+    if (kind === 'image') return true;
+    if (kind === 'font') return path.startsWith('/fonts/');
+    return path.startsWith('/vendor/');
+  }
+  let url: URL;
+  try {
+    url = new URL(value.startsWith('//') ? `https:${value}` : value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:') return false;
+  if (kind === 'image') return true;
+  if (kind === 'script') return hostIn(url, FRAME_CDN_HOSTS);
+  if (kind === 'style') return hostIn(url, FRAME_CDN_HOSTS) || url.origin === FRAME_FONT_STYLE_HOST;
+  return hostIn(url, FRAME_CDN_HOSTS) || url.origin === FRAME_FONT_FILE_HOST;
+}
+
 /**
  * The Content-Security-Policy for a framed document. `origin` is the REQUEST
  * origin (never the admin-editable site URL): `'self'` does not match under an
