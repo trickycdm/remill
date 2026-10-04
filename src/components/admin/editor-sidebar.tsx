@@ -27,7 +27,16 @@ import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { publicUrlOf } from '@/lib/def-helpers';
-import { Button, Card, CardHeader, CardTitle, CardContent, Dialog, Input } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  Dialog,
+  Input,
+} from '@/components/ui';
 
 type Revision = { readonly revision: number; readonly savedAt: string };
 
@@ -59,6 +68,10 @@ type EditorSidebarProps =
       /** The Comments card (D55) — undefined when the viewer can't comment or
        *  the collection has nothing to annotate. */
       reviewSlot?: unknown;
+      /** D57: on a collection WITHOUT public pages, whether the viewer may
+       *  turn them on (manage_schema) and how many OTHER documents that would
+       *  switch to private first. Unused on publicRead collections. */
+      enablePublic?: { readonly canManageSchema: boolean; readonly otherCount: number };
     };
 
 const VISIBILITY_OPTIONS: { value: Visibility; label: string; help: string }[] = [
@@ -69,6 +82,80 @@ const VISIBILITY_OPTIONS: { value: Visibility; label: string; help: string }[] =
 
 const RADIO_BASE =
   'mt-0.5 size-4 shrink-0 border border-border-strong bg-surface accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+/** The Visibility card on a collection WITHOUT public pages (D57). The stored
+ *  visibility is inert there, so the effective answer is always Private; a
+ *  schema manager can pick Public/Unlisted and "Enable public pages & apply",
+ *  which switches every OTHER document to private in the same batch. */
+function PrivateCollectionVisibility(props: {
+  def: CollectionDefinition;
+  slug: string;
+  id: string;
+  enablePublic?: { readonly canManageSchema: boolean; readonly otherCount: number };
+}): JSX.Element {
+  const name = props.def.name;
+  const others = props.enablePublic?.otherCount ?? 0;
+  return (
+    <Card>
+      <CardHeader class="flex flex-row items-center justify-between gap-2">
+        <CardTitle as="h2">Visibility</CardTitle>
+        <Badge tone="warning">Private</Badge>
+      </CardHeader>
+      <CardContent class="flex flex-col gap-3">
+        <p class="text-sm text-ink-muted">
+          {name} has no public pages. Only people with access, or a share link, can read this.
+        </p>
+        {props.enablePublic?.canManageSchema ? (
+          <form
+            method="post"
+            action={`/admin/c/${props.slug}/${props.id}/visibility`}
+            class="flex flex-col gap-3"
+            data-signals="{visibility: 'private'}"
+          >
+            <fieldset class="flex flex-col gap-3">
+              <legend class="text-[13px] font-medium text-ink-muted">Make this document</legend>
+              {VISIBILITY_OPTIONS.map((opt) => (
+                <label class="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    value={opt.value}
+                    checked={opt.value === 'private'}
+                    class={RADIO_BASE}
+                    data-bind="visibility"
+                  />
+                  <span class="flex flex-col gap-0.5">
+                    <span class="text-sm font-medium text-ink">{opt.label}</span>
+                    <span class="text-[13px] leading-normal text-ink-muted">{opt.help}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <p class="text-[13px] leading-normal text-ink-subtle">
+              {`Turns on public pages for ${name}.`}
+              {others > 0
+                ? ` The other ${others} ${others === 1 ? 'document' : 'documents'} will be set to Private first, so only this one goes live.`
+                : ''}
+            </p>
+            <Button
+              type="submit"
+              variant="secondary"
+              size="sm"
+              class="self-start"
+              data-attr:disabled="$visibility === 'private'"
+            >
+              Enable public pages &amp; apply
+            </Button>
+          </form>
+        ) : (
+          <p class="text-[13px] leading-normal text-ink-subtle">
+            Ask an admin to enable public pages for this collection.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 /** A tiny `<details>` chevron shared by every rail disclosure — matches the
  *  ScopePicker "Individual actions" precedent (a plain glyph, no icon import). */
@@ -212,8 +299,9 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
         </p>
       ) : (
         <>
-          {/* ── Visibility (D50) — only meaningful when the collection is
-              publicRead; without it, everything is already private. ────────── */}
+          {/* ── Visibility (D50/D57) — on a publicRead collection, the three-way
+              control; otherwise the document is private by construction, so
+              say so and (for schema managers) offer the safe enable. ───────── */}
           {props.def.access?.publicRead ? (
             <Card>
               <CardHeader>
@@ -272,7 +360,14 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
                 </form>
               </CardContent>
             </Card>
-          ) : null}
+          ) : (
+            <PrivateCollectionVisibility
+              def={props.def}
+              slug={props.slug}
+              id={props.id}
+              enablePublic={props.enablePublic}
+            />
+          )}
 
           {props.shareSlot}
 

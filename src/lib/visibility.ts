@@ -47,3 +47,11 @@ export function isAnonymouslyReadable(def: VisibilityDef, doc: ReadableDoc): boo
     (doc.visibility ?? 'public') !== 'private'
   );
 }
+
+/** The audience a document ACTUALLY has (D57): its own visibility on a
+ *  publicRead collection, else `'private'` — without publicRead nothing in the
+ *  collection has a public URL, whatever the stored (inert, default `'public'`)
+ *  value says. Every admin label reads this, never the raw column. */
+export function effectiveVisibility(def: VisibilityDef, doc: VisibilityDoc): Visibility {
+  return def.access?.publicRead === true ? (doc.visibility ?? 'public') : 'private';
+}

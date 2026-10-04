@@ -5,7 +5,7 @@ import { requireAuth, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
-import { getCollectionOrThrow } from '@/services/collections';
+import { getCollectionOrThrow, countExposableDocuments } from '@/services/collections';
 import {
   getDocument,
   updateDocument,
@@ -16,7 +16,7 @@ import {
 } from '@/services/documents';
 import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
-import { publicUrlOf } from '@/lib/def-helpers';
+import { publicUrlOf, effectiveVisibility } from '@/lib/def-helpers';
 import { hasLifecycle } from '@/lib/lifecycle';
 import {
   getPrincipalPermissions,
@@ -89,6 +89,20 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const canComment = reviewable && (await canAuthorize(db, principal, 'comment', { collection: slug, documentId: id }, now));
   const threads = canComment ? await listThreads(db, { kind: 'principal', principal }, slug, id, {}, now) : null;
 
+  // Visibility on a collection without public pages (D57): may this viewer
+  // turn them on, and how many OTHER documents would that switch to private?
+  const canManageSchema =
+    !def.access?.publicRead && (await canAuthorize(db, principal, 'manage_schema', { collection: slug }, now));
+  const enablePublic = def.access?.publicRead
+    ? undefined
+    : {
+        canManageSchema,
+        otherCount: canManageSchema
+          ? (await countExposableDocuments(db, principal, slug, now)) - (doc.visibility !== 'private' ? 1 : 0)
+          : 0,
+      };
+  const audience = effectiveVisibility(def, doc);
+
   // Title the page by the document's primary display value (its first list field),
   // falling back to a generic edit label for an untitled doc.
   const titleField = def.fields.find((f) => f.admin?.showInList) ?? def.fields[0];
@@ -130,18 +144,19 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         ]}
         title={docTitle}
         description={
-          // Status/visibility read at a glance under the title; lifecycle-none
-          // collections and always-public docs render nothing here.
-          (hasLifecycle(def) || (def.access?.publicRead && (doc.visibility ?? 'public') !== 'public')) ? (
+          // Status + EFFECTIVE audience (D57) read at a glance under the title:
+          // a doc in a collection without public pages reads "Private" even
+          // though its inert stored visibility says public.
+          (hasLifecycle(def) || audience !== 'public') ? (
             <span class="inline-flex flex-wrap items-center gap-2">
               {hasLifecycle(def) ? (
                 <Badge tone={doc.status === 'published' ? 'success' : doc.publishAt ? 'warning' : 'neutral'}>
                   {doc.status === 'published' ? 'Published' : doc.publishAt ? 'Scheduled' : 'Draft'}
                 </Badge>
               ) : null}
-              {def.access?.publicRead && (doc.visibility ?? 'public') !== 'public' ? (
-                <Badge tone={doc.visibility === 'private' ? 'warning' : 'accent'}>
-                  {doc.visibility === 'private' ? 'Private' : 'Unlisted'}
+              {audience !== 'public' ? (
+                <Badge tone={audience === 'private' ? 'warning' : 'accent'}>
+                  {audience === 'private' ? 'Private' : 'Unlisted'}
                 </Badge>
               ) : null}
             </span>
@@ -191,6 +206,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           authorName={authorName}
           settings={settings}
           baseUrl={resolveBaseUrl(c.env, settings, c.req.url)}
+          enablePublic={enablePublic}
           shareSlot={
             share || shareLinks ? (
               <SharePanel

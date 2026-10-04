@@ -14,6 +14,9 @@ import type { Database } from '@/db/client';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import { requireFieldType, isIndexable, isMultiValued } from '@/fields/registry';
 import * as q from '@/db/queries/collections';
+import * as dq from '@/db/queries/documents';
+import type { Grant } from '@/access/grant';
+import { VISIBILITIES, type Visibility } from '@/lib/visibility';
 import { authorize, type Principal } from '@/access';
 import { getPrincipalPermissions, type EffectivePermission } from '@/db/queries/roles';
 import { collectionsWithActionFrom } from '@/services/access';
@@ -347,12 +350,44 @@ export async function installPack(
   return created;
 }
 
+/** What to do with a collection's existing documents when an update turns
+ *  `publicRead` ON (D57): `'private'` switches every non-private document to
+ *  private first (only `except` goes live); `'keep'` leaves their stored
+ *  visibility (default `'public'`) in force — publishing them all. */
+export type OnEnablePublic = 'private' | 'keep';
+export const ON_ENABLE_PUBLIC: readonly OnEnablePublic[] = ['private', 'keep'];
+
+/** Parse an `onEnablePublic` value off a transport (form, query, MCP arg):
+ *  absent → undefined (the guard then refuses an exposing flip); anything else
+ *  must be one of ON_ENABLE_PUBLIC. */
+export function parseOnEnablePublic(raw: unknown): OnEnablePublic | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeof raw === 'string' && (ON_ENABLE_PUBLIC as readonly string[]).includes(raw)) {
+    return raw as OnEnablePublic;
+  }
+  throw new InputValidationError([
+    {
+      path: 'onEnablePublic',
+      message: `onEnablePublic must be one of: ${ON_ENABLE_PUBLIC.join(', ')}`,
+    },
+  ]);
+}
+
+export interface UpdateCollectionOptions {
+  readonly onEnablePublic?: OnEnablePublic;
+  /** The one document to set explicitly while enabling (the editor's
+   *  "Enable public pages & apply"). Its visibility is authorized as a
+   *  publish, exactly like setVisibility. */
+  readonly except?: { readonly id: string; readonly visibility: Visibility };
+}
+
 export async function updateCollection(
   db: Database,
   principal: Principal,
   slug: string,
   input: CollectionDefinition,
   now: string,
+  opts: UpdateCollectionOptions = {},
 ): Promise<CollectionDefinition> {
   const grant = await authorize(db, principal, 'manage_schema', { collection: slug }, now);
   const existing = await q.getCollection(db, slug);
@@ -362,14 +397,121 @@ export async function updateCollection(
     throw new ForbiddenError(`Cannot change the slug or shape of protected collection '${slug}'.`);
   }
   const def = validateDefinition({ ...input, slug, protected: existing.protected });
-  await q.updateCollectionRow(db, slug, def, now, grant, {
-    type: 'collection.updated',
-    collection: slug,
-    resource: slug,
+  const docVisibility = await publicEnableChanges(db, principal, existing, def, opts, grant, now);
+  await q.updateCollectionRow(
+    db,
+    slug,
+    def,
+    now,
+    grant,
+    {
+      type: 'collection.updated',
+      collection: slug,
+      resource: slug,
+      principalId: principal.id,
+      at: now,
+    },
+    docVisibility,
+  );
+  return def;
+}
+
+/**
+ * The D57 guard: `publicRead` never turns on without an explicit choice about
+ * the documents already in the collection. Their stored visibility defaults to
+ * `'public'` and is inert until now, so a bare flip would publish every one of
+ * them at once. Returns the per-document changes to batch with the update.
+ */
+async function publicEnableChanges(
+  db: Database,
+  principal: Principal,
+  before: CollectionDefinition,
+  after: CollectionDefinition,
+  opts: UpdateCollectionOptions,
+  grant: Grant,
+  now: string,
+): Promise<q.DocVisibilityChange[]> {
+  const enabling = before.access?.publicRead !== true && after.access?.publicRead === true;
+  if (!enabling) {
+    if (opts.except)
+      throw new ConflictError(`Collection '${after.slug}' already has public pages.`);
+    return [];
+  }
+  const eventFor = (id: string) => ({
+    type: 'document.visibility_changed' as const,
+    collection: after.slug,
+    resource: id,
     principalId: principal.id,
     at: now,
   });
-  return def;
+  const changes: q.DocVisibilityChange[] = [];
+  if (opts.except) {
+    const { id, visibility } = opts.except;
+    if (!VISIBILITIES.includes(visibility)) {
+      throw new InputValidationError([
+        { path: 'visibility', message: `visibility must be one of: ${VISIBILITIES.join(', ')}` },
+      ]);
+    }
+    const readGrant = await authorize(
+      db,
+      principal,
+      'read',
+      { collection: after.slug, documentId: id },
+      now,
+    );
+    const doc = await dq.getDocument(db, after.slug, id, readGrant);
+    if (!doc) throw new NotFoundError('Document');
+    await authorize(
+      db,
+      principal,
+      'publish',
+      { collection: after.slug, documentId: id, status: doc.status, visibility: doc.visibility },
+      now,
+    );
+    if (doc.visibility !== visibility) changes.push({ id, visibility, event: eventFor(id) });
+  }
+  const exposed = (await q.listNonPrivateDocumentIds(db, after.slug, grant)).filter(
+    (id) => id !== opts.except?.id,
+  );
+  if (exposed.length === 0 || opts.onEnablePublic === 'keep') return changes;
+  if (opts.onEnablePublic !== 'private') {
+    throw new ConflictError(
+      `Turning on public pages for '${after.slug}' would make ${exposed.length} existing ` +
+        `document(s) public. Pass onEnablePublic: 'private' to keep them private (recommended) ` +
+        `or 'keep' to publish them as they are.`,
+    );
+  }
+  return [
+    ...changes,
+    ...exposed.map((id) => ({ id, visibility: 'private' as const, event: eventFor(id) })),
+  ];
+}
+
+/** "Enable public pages & apply" (D57): turn on publicRead for a collection
+ *  that has none, set ONE document's visibility, and switch every other
+ *  document to private — one atomic batch. */
+export async function enablePublicPages(
+  db: Database,
+  principal: Principal,
+  slug: string,
+  except: { readonly id: string; readonly visibility: Visibility },
+  now: string,
+): Promise<CollectionDefinition> {
+  const existing = await getCollectionOrThrow(db, slug);
+  const def: CollectionDefinition = { ...existing, access: { publicRead: true } };
+  return updateCollection(db, principal, slug, def, now, { onEnablePublic: 'private', except });
+}
+
+/** How many documents a publicRead flip would expose (D57 UI copy). Gated on
+ *  manage_schema — only schema managers see or act on it. */
+export async function countExposableDocuments(
+  db: Database,
+  principal: Principal,
+  slug: string,
+  now: string,
+): Promise<number> {
+  const grant = await authorize(db, principal, 'manage_schema', { collection: slug }, now);
+  return (await q.listNonPrivateDocumentIds(db, slug, grant)).length;
 }
 
 export async function deleteCollection(

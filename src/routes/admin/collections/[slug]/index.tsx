@@ -4,7 +4,13 @@ import { requireAuth, getUser } from '@/lib/auth';
 import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
-import { getCollectionOrThrow, listCollections, updateCollection } from '@/services/collections';
+import {
+  getCollectionOrThrow,
+  listCollections,
+  updateCollection,
+  parseOnEnablePublic,
+  countExposableDocuments,
+} from '@/services/collections';
 import { nowIso } from '@/lib/now';
 import { dsRedirect, jsLiteral } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
@@ -21,6 +27,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const db = getDb(c.env.DB);
   const def = await getCollectionOrThrow(db, slug);
   const collectionSlugs = (await listCollections(db)).map((d) => d.slug);
+  // D57: what a switch to Public would expose (the builder's confirm step).
+  const exposableCount = def.access?.publicRead
+    ? 0
+    : await countExposableDocuments(db, requirePrincipal(c), slug, nowIso());
 
   return c.render(
     <AdminShell user={user} current="collections">
@@ -36,6 +46,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           action={`/admin/collections/${slug}`}
           submitLabel="Save changes"
           collectionSlugs={collectionSlugs}
+          exposableCount={exposableCount}
         />
 
         {!def.protected && (
@@ -61,7 +72,9 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
   const body = await c.req.parseBody();
   const def = parseCollectionForm(body);
   try {
-    await updateCollection(getDb(c.env.DB), requirePrincipal(c), slug, def, nowIso());
+    await updateCollection(getDb(c.env.DB), requirePrincipal(c), slug, def, nowIso(), {
+      onEnablePublic: parseOnEnablePublic(body.on_enable_public),
+    });
     return dsRedirect(c, `/admin/collections/${slug}`);
   } catch (err) {
     return renderSaveError(c, err);

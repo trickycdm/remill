@@ -52,7 +52,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       <PageHeader
         breadcrumb={[{ label: 'Content', href: '/admin/c' }, { label: def.name }]}
         title={def.name}
-        description={`${total} ${total === 1 ? 'item' : 'items'}`}
+        // D57: say up front when nothing here has a public page — the
+        // per-row Published badge is lifecycle, not audience.
+        description={`${total} ${total === 1 ? 'item' : 'items'}${def.access?.publicRead ? '' : ' · Private collection: no public pages'}`}
         actions={
           <div class="flex items-center gap-2">
             <Button href={`/admin/c/${slug}/export`} variant="ghost" size="sm">

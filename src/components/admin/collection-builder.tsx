@@ -415,12 +415,16 @@ export function CollectionBuilder({
   action,
   submitLabel,
   collectionSlugs = [],
+  exposableCount = 0,
 }: {
   def?: CollectionDefinition;
   action: string;
   submitLabel: string;
   /** Existing collection slugs — the relation editor's target picker. */
   collectionSlugs?: string[];
+  /** D57: documents a switch to Public would expose (non-private ones) — 0
+   *  when the collection is already public or new. Drives the confirm step. */
+  exposableCount?: number;
 }) {
   const isEdit = !!def;
   const isProtected = def?.protected ?? false;
@@ -435,7 +439,12 @@ export function CollectionBuilder({
   // editor) and per-row option count (`optc_i`). jsonForScript is the sanctioned
   // way to embed a signals object (DATASTAR_PATTERNS.md) — it also handles the
   // string `ftype` values the old hand-concatenated seed couldn't.
-  const signals: Record<string, unknown> = { count: initialCount, busy: false };
+  const signals: Record<string, unknown> = {
+    count: initialCount,
+    busy: false,
+    // Collection visibility select (D46) — reveals the D57 confirm step.
+    colvis: visibilityValueOf(def),
+  };
   for (let i = 0; i < MAX_ROWS; i++) {
     const f = existing[i];
     signals[`ftype_${i}`] = f?.type ?? 'text';
@@ -534,7 +543,7 @@ export function CollectionBuilder({
             label="Visibility"
             description="Public: anyone can read published documents. Discoverable: listed in the API, content needs permission. Private: hidden entirely from anyone without access."
           >
-            <Select id="col-visibility" name="access_visibility">
+            <Select id="col-visibility" name="access_visibility" data-bind="colvis">
               <option value="default" selected={visibilityValueOf(def) === 'default'}>
                 Discoverable
               </option>
@@ -546,6 +555,36 @@ export function CollectionBuilder({
               </option>
             </Select>
           </FormField>
+          {/* D57: switching an existing collection to Public must decide what
+              happens to the documents already in it — their stored visibility
+              is 'public' by default, so a bare flip would publish them all. */}
+          {exposableCount > 0 ? (
+            <fieldset
+              class="flex flex-col gap-2 rounded-md border border-warning bg-warning-soft px-3 py-3 sm:col-span-2"
+              data-show="$colvis === 'public'"
+              style="display: none"
+            >
+              <legend class="px-1 text-sm font-medium text-ink">
+                {`${exposableCount} existing ${exposableCount === 1 ? 'document' : 'documents'}`}
+              </legend>
+              <label class="flex items-start gap-2 text-sm text-ink">
+                <input
+                  type="radio"
+                  name="on_enable_public"
+                  value="private"
+                  checked
+                  class="mt-0.5"
+                />
+                <span>
+                  Keep them private (recommended). Make each one public from its own page.
+                </span>
+              </label>
+              <label class="flex items-start gap-2 text-sm text-ink">
+                <input type="radio" name="on_enable_public" value="keep" class="mt-0.5" />
+                <span>Publish them all now.</span>
+              </label>
+            </fieldset>
+          ) : null}
         </div>
       </fieldset>
 

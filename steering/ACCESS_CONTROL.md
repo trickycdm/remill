@@ -146,6 +146,14 @@ still opens (by its `doc_…` id URL; the slug URL 404s, since `getDocumentBySlu
 as public. Changing visibility is a publication decision: `setVisibility` is gated by the
 `publish` action, not `manage_access`.
 
+**Invariant: `publicRead` never turns on without an explicit choice about existing documents
+(D57).** Stored visibility defaults to `public` and is inert while a collection has no
+`publicRead`, so `updateCollection` refuses (409) a flip that would expose non-private documents
+unless `onEnablePublic` is `'private'` (switch them first, same batch) or `'keep'`.
+`enablePublicPages` (the editor's "Enable public pages & apply") is the one-document form: it
+needs `manage_schema` plus `publish` on the chosen document. Admin labels show
+`effectiveVisibility` — `private` on a non-publicRead collection, whatever the column says.
+
 **Password-protected share links (D51).** A `link` subject grant may also carry a
 `password_hash` (scrypt) and a `label`. `openShareLink` resolves a token to
 `{state: 'locked', grant}` when a password is set and not yet unlocked, or `{state: 'open',

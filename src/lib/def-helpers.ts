@@ -9,7 +9,7 @@
 import type { CollectionDefinition } from '@/fields/types';
 import { isListed, type Visibility } from '@/lib/visibility';
 
-export { isListed, isAnonymouslyReadable } from '@/lib/visibility';
+export { isListed, isAnonymouslyReadable, effectiveVisibility } from '@/lib/visibility';
 
 /** The minimal document shape these helpers read — structural, so queries- and
  *  service-layer records both fit without importing either layer. */

@@ -3,7 +3,11 @@ import type { Env } from '@/types';
 import { pathParam } from '@/lib/http';
 import { apiPrincipal, jsonBody, apiJson } from '@/lib/api';
 import { getDb } from '@/db/client';
-import { getCollectionForDiscovery, updateCollection } from '@/services/collections';
+import {
+  getCollectionForDiscovery,
+  updateCollection,
+  parseOnEnablePublic,
+} from '@/services/collections';
 import type { CollectionDefinition } from '@/fields/types';
 import { nowIso } from '@/lib/now';
 import { NotFoundError } from '@/lib/errors';
@@ -20,7 +24,9 @@ export const onRequestGet = factory.createHandlers(async (c) => {
   return apiJson(c, { data: def });
 });
 
-/** PATCH /api/collections/:slug — modify a collection (requires manage_schema). */
+/** PATCH /api/collections/:slug — modify a collection (requires manage_schema).
+ *  `?onEnablePublic=private|keep` is required when the change turns publicRead
+ *  on over existing non-private documents (D57 — 409 otherwise). */
 export const onRequestPatch = factory.createHandlers(async (c) => {
   const now = nowIso();
   const slug = pathParam(c, 'slug');
@@ -30,6 +36,7 @@ export const onRequestPatch = factory.createHandlers(async (c) => {
     slug,
     (await jsonBody(c)) as unknown as CollectionDefinition,
     now,
+    { onEnablePublic: parseOnEnablePublic(c.req.query('onEnablePublic')) },
   );
   return apiJson(c, { data: def });
 });
