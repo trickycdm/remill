@@ -102,6 +102,15 @@ rendered public pages + share links.)
 > `webauthn_challenges`, `@simplewebauthn/server` for verification, the `src/client/passkey.ts`
 > island, `src/lib/relying-party.ts`). Same session as a password login; single-use challenges,
 > user verification required, current password re-checked to enrol.
+> **D59 built 2026-10-04** (plan: [`plans/2026-10-04-admin_edit_page_rework/`](plans/2026-10-04-admin_edit_page_rework/)):
+> **the edit page has one scroller** — the rail no longer scrolls on its own (sticky Save card
+> only, hairline `RailSection`s, `MobileSaveBar` below `lg`) and the markdown editor grows with the
+> page; **sharing is a drawer** (`share-drawer.tsx` — one "New link" form, one list of read-only
+> and review links, People & roles; Datastar posts re-render `#share-manager` + `#share-summary`
+> in place, no interstitial pages; `getShareOverview` in `src/services/sharing/`); **relations are
+> picked by title** (chips + search — `src/client/relation-picker.ts`,
+> `GET /admin/c/:collection/picker`, `expanded` on `FieldEditProps`); and `VisibilityStamp` is the
+> one non-public marker across list, header and rail.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -195,7 +204,8 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   tokens with edit-access/revoke dialogs, and a disable/delete danger zone; invite a person via
   `users.tsx`, custom roles, teams — a grant subject kind, D24 —
   at `/admin/access/teams`, the `matrix/` overview); item-grant sharing via
-  `src/components/admin/share-panel.tsx`, the `/api/c/:collection/:id/grants` route, and the MCP
+  the editor's Share drawer (`src/components/admin/share-drawer.tsx`, loaded by
+  `src/services/sharing/`, D59), the `/api/c/:collection/:id/grants` route, and the MCP
   `share_<slug>` tools; the `share_link` action (D26) lets granted agents mint expiring anonymous
   links over MCP; public invite consumption at `src/routes/auth/set-password/[token].tsx`, team
   join links at `/auth/join/:token`, "Shared with me" at `/admin/shared`. Admin also surfaces activity
@@ -229,7 +239,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `layouts/public-shell.tsx` (read-only render), `share-bar.tsx` (reader share UI — copy-link +
   Web Share, D41), `backlinks.tsx` (relation backlinks list), `admin/graph-panel.tsx` (shared GraphPanel wiring the D45 island for both /admin dashboard hero and /admin/graph, with accessible fallback summary); **`src/client/`** browser islands:
   `init.ts` (global loader), `markdown-editor.ts` (CodeMirror 6, D38), `media-picker.ts` (dialog
-  picker, D38), `share.ts` (reader share Web Share API, D41), `graph.ts` (3D canvas galaxy, D45).
+  picker, D38), `relation-picker.ts` (title search + chips for relation fields, D59), `share.ts` (reader share Web Share API, D41), `graph.ts` (3D canvas galaxy, D45).
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
 operations go through services → queries. Cron jobs also call services only. All authorization goes through

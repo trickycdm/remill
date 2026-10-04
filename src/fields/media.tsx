@@ -37,24 +37,31 @@ export const mediaField: FieldType<MediaConfig, string> = {
       signal={signal}
       help="Browse the media library, or paste a media id."
     >
-      <div class="flex items-center gap-3" data-media-picker data-picker-dialog={`rm-media-picker-${signal}`}>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-2" data-media-picker data-picker-dialog={`rm-media-picker-${signal}`}>
         <img
           data-picker-preview
           src={value ? `/media/${value}` : undefined}
           alt=""
-          class={`size-12 rounded-md object-cover ${value ? '' : 'hidden'}`}
+          class={`size-10 shrink-0 rounded-md object-cover ${value ? '' : 'hidden'}`}
         />
         <Input
           {...controlProps({ field, signal }, { placeholder: 'med_…', required: false })}
           type="text"
           value={value ?? ''}
+          class="min-w-0 flex-1 font-mono"
         />
         {/* Hidden until the island mounts — useless without JS. type=button:
             this sits inside #editor-form. */}
         <Button type="button" variant="secondary" size="sm" class="hidden whitespace-nowrap" data-picker-open>
           Browse…
         </Button>
-        <a href="/admin/media" target="_blank" rel="noopener" class="whitespace-nowrap text-sm text-accent-text hover:underline">
+        {/* Own line (basis-full): every control in the form shares one right edge. */}
+        <a
+          href="/admin/media"
+          target="_blank"
+          rel="noopener"
+          class="basis-full rounded-sm text-[13px] text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
           Media library ↗
         </a>
       </div>

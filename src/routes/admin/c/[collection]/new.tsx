@@ -13,7 +13,7 @@ import { dsRedirect } from '@/lib/datastar-response';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader } from '@/components/ui';
 import { GeneratedForm } from '@/components/admin/generated';
-import { EditorSidebar } from '@/components/admin/editor-sidebar';
+import { EditorSidebar, MobileSaveBar } from '@/components/admin/editor-sidebar';
 import { renderSaveError } from '@/lib/save-error';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -30,6 +30,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
           only discovers them here + layouts.tsx, never in shared components). */}
       <Script src="/src/client/markdown-editor.ts" />
       <Script src="/src/client/media-picker.ts" />
+      <Script src="/src/client/relation-picker.ts" />
       <PageHeader
         breadcrumb={[
           { label: 'Content', href: '/admin/c' },
@@ -38,8 +39,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         ]}
         title={`New ${def.name}`}
       />
-      <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div class="max-w-2xl">
+      <div class="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div class="min-w-0">
           <GeneratedForm
             def={def}
             action={`/admin/c/${slug}/new`}
@@ -50,6 +51,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         </div>
         <EditorSidebar mode="create" formId="editor-form" submitLabel={`Create ${def.name}`} def={def} />
       </div>
+      <MobileSaveBar formId="editor-form" submitLabel={`Create ${def.name}`} />
     </AdminShell>,
   );
 });

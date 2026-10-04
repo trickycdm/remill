@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Browser } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
+import { openShare, openNewLink, linkRow, linkUrl } from './helpers/share';
 
 // Distinct client IP so the login rate-limiter (SEC-2) buckets this file separately.
 test.use({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.93' } });
@@ -72,9 +73,18 @@ async function saveAndSettle(page: Page): Promise<void> {
   await reloaded;
 }
 
-async function linkUrl(page: Page, label: string): Promise<string> {
-  const card = page.locator('div.rounded-md', { hasText: label }).filter({ has: page.locator('input[id^=review-link-url-]') });
-  return card.locator('input[id^=review-link-url-]').first().inputValue();
+/** Create a review link from the Share drawer and wait for its row. Returns
+ *  once the list shows one more link than before. */
+async function createReviewLink(page: Page, name: string, mode: 'group' | 'individual'): Promise<void> {
+  const share = await openShare(page);
+  const rows = share.locator('li[data-share-link]');
+  const before = await rows.count();
+  await openNewLink(share);
+  await share.getByRole('radio', { name: /^Read and comment/ }).check();
+  await share.getByLabel('Reviewer name (optional)').fill(name);
+  await share.getByLabel('Reviewers see').selectOption(mode);
+  await share.getByRole('button', { name: 'Create link', exact: true }).click();
+  await expect(rows).toHaveCount(before + 1);
 }
 
 test.describe.serial('Document review — review links, anchored comments, the owner overlay (D55)', () => {
@@ -88,16 +98,9 @@ test.describe.serial('Document review — review links, anchored comments, the o
     editUrl = page.url();
     docId = editUrl.split('/').pop()!;
 
-    const create = async (name: string, mode: 'group' | 'individual') => {
-      await page.getByText('New review link').click();
-      await page.getByLabel('Reviewer name (optional)').fill(name);
-      await page.getByLabel('Reviewers see').selectOption(mode);
-      await page.getByRole('button', { name: 'Create review link' }).click();
-      await page.waitForURL(editUrl);
-    };
-    await create('Alice', 'group');
-    await create('Carol', 'individual');
-    await create('', 'group');
+    await createReviewLink(page, 'Alice', 'group');
+    await createReviewLink(page, 'Carol', 'individual');
+    await createReviewLink(page, '', 'group');
 
     links.alice = await linkUrl(page, 'Review: Alice');
     links.carol = await linkUrl(page, 'Review: Carol');
@@ -174,11 +177,14 @@ test.describe.serial('Document review — review links, anchored comments, the o
   test('flipping a link to group warns with counts, then shares its past comments', async ({ page, browser }) => {
     await loginAsAdmin(page);
     await page.goto(editUrl);
-    const carolCard = page.locator('div.rounded-md', { hasText: 'Review: Carol' });
-    await carolCard.getByRole('button', { name: 'Switch to group…' }).click();
-    await expect(page.getByRole('alert')).toContainText('This will make 1 comment from 1 reviewer visible');
-    await page.getByRole('button', { name: 'Switch to group' }).click();
-    await page.waitForURL(editUrl);
+    const share = await openShare(page);
+    const carol = linkRow(share, 'Review: Carol');
+    await carol.locator('summary', { hasText: 'Manage' }).click();
+    await carol.getByRole('button', { name: 'Switch to group…' }).click();
+    // The confirmation lands in Carol's own row, saying what becomes visible.
+    await expect(carol.getByRole('alert')).toContainText('This will make 1 comment from 1 reviewer visible');
+    await carol.getByRole('button', { name: 'Switch to group', exact: true }).click();
+    await expect(share.getByText('Switched to group review.')).toBeVisible();
 
     const alice = await reviewerPage(browser, links.alice);
     await expect(panel(alice).getByText('Carol private note')).toBeVisible();
@@ -190,8 +196,10 @@ test.describe.serial('Document review — review links, anchored comments, the o
     await page.goto(editUrl);
     await expect(page.getByRole('heading', { name: 'Comments' })).toBeVisible();
     await expect(page.getByText(/^5 open/)).toBeVisible();
-    // The Share card says which links can comment.
-    await expect(page.getByText('Can comment').first()).toBeVisible();
+    // The rail counts the review links; the drawer says which can comment.
+    await expect(page.locator('#share-summary')).toContainText('3 review links');
+    const share = await openShare(page);
+    await expect(share.getByText('Can comment', { exact: true }).first()).toBeVisible();
 
     // The owner's way in: the preview banner offers "Show comments".
     await page.goto(`/reports/${docId}?preview=1`);
@@ -255,8 +263,7 @@ test.describe('Document review — narrow screens', () => {
     await page.getByLabel(/^page/i).fill('<p>A short page to review on a phone.</p>');
     await page.getByRole('button', { name: /Create Reports/i }).click();
     await page.waitForURL(/\/admin\/c\/reports\/doc_/);
-    await page.getByText('New review link').click();
-    await page.getByRole('button', { name: 'Create review link' }).click();
+    await createReviewLink(page, '', 'group');
     const url = await linkUrl(page, 'Open review link');
 
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });

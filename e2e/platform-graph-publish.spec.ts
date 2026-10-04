@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
 import { fillMarkdown } from './helpers/editor';
+import { openShare, openNewLink } from './helpers/share';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2) buckets
 // this file separately from the others.
@@ -76,7 +77,25 @@ test.describe.serial('Roadmap — relations, graph, lifecycle, publish & share',
     await page.getByRole('link', { name: 'ACME Corp' }).click();
     const companyId = page.url().match(/(doc_[A-Za-z0-9_-]+)/)![1];
 
-    const personId = await createDoc(page, 'people', { name: 'Ada Lovelace', employer: companyId });
+    // Link the employer by TITLE through the relation picker (search → pick →
+    // chip); the hidden id input it writes to is what gets saved.
+    await page.goto('/admin/c/people/new');
+    await page.getByLabel('name').fill('Ada Lovelace');
+    await page.getByLabel('employer').fill('ACME');
+    await page.getByRole('option', { name: /ACME Corp/ }).click();
+    await expect(page.locator('[data-relation-chips]').getByRole('link', { name: 'ACME Corp' })).toBeVisible();
+    await expect(page.locator('[data-relation-picker] input[data-bind]')).toHaveValue(companyId);
+    await page.getByRole('button', { name: /Create /i }).click();
+    await page.waitForURL(/\/admin\/c\/people\/doc_/);
+    const personId = page.url().match(/(doc_[A-Za-z0-9_-]+)/)![1];
+
+    // The saved link comes back as a titled chip, and can be removed.
+    const chip = page.locator('[data-relation-chips]').getByRole('link', { name: 'ACME Corp' });
+    await expect(chip).toBeVisible();
+    await page.getByRole('button', { name: 'Remove ACME Corp' }).click();
+    await expect(chip).toHaveCount(0);
+    await expect(page.locator('[data-relation-picker] input[data-bind]')).toHaveValue('');
+    await page.reload(); // discard the removal — the saved link stands
 
     // Read-expansion: the person's detail view shows the company TITLE as a link.
     await page.goto(`/admin/c/people/${personId}/view`);
@@ -144,14 +163,12 @@ test.describe.serial('Roadmap — relations, graph, lifecycle, publish & share',
     // A draft in `posts` (not publicRead) — maximally private.
     const docId = await createDoc(page, 'posts', { title: 'Secret Share Target' });
 
-    // Mint the link from the Share panel (behind a disclosure — open by
-    // default here since the doc is a draft with no links yet).
-    const summary = page.locator('summary', { hasText: 'New share link' });
-    const details = page.locator('details', { has: summary });
-    if ((await details.getAttribute('open')) === null) await summary.click();
-    await page.getByRole('button', { name: 'Create link', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Share link created' })).toBeVisible();
-    const url = await page.getByLabel('Share link URL').inputValue();
+    // Mint the link from the Share drawer; it appears in place.
+    let share = await openShare(page);
+    await openNewLink(share);
+    await share.getByRole('button', { name: 'Create link', exact: true }).click();
+    await expect(share.getByText('Link created.')).toBeVisible();
+    const url = await share.locator('input[id^=share-link-url-]').inputValue();
     expect(url).toContain('/s/rms_');
 
     const anon = await browser.newContext();
@@ -159,14 +176,13 @@ test.describe.serial('Roadmap — relations, graph, lifecycle, publish & share',
     await anonPage.goto(url);
     await expect(anonPage.getByRole('heading', { name: 'Secret Share Target' })).toBeVisible();
 
-    // Revoke from the Share links section (D51) → the same URL is a uniform
-    // 404. Unscoped: this doc has exactly one share link and no item grants,
-    // so "Revoke" is unique on the page (a `div`-ancestor filter chain here
-    // strict-mode-violates — both the row and its list-container div satisfy
-    // "has text 'link'", matching the button twice).
+    // Revoke from the link's "Manage" disclosure (D51) → the same URL is a
+    // uniform 404. This doc has exactly one link, so the row is unambiguous.
     await page.goto(`/admin/c/posts/${docId}`);
-    await page.getByRole('button', { name: 'Revoke' }).click();
-    await page.waitForURL(new RegExp(`/admin/c/posts/${docId}$`));
+    share = await openShare(page);
+    await share.locator('summary', { hasText: 'Manage' }).click();
+    await share.getByRole('button', { name: /^Revoke/ }).click();
+    await expect(share.getByText('Link revoked.')).toBeVisible();
     const revokedRes = await anonPage.goto(url);
     expect(revokedRes?.status()).toBe(404);
     await expect(anonPage.getByRole('heading', { name: 'Not found' })).toBeVisible();

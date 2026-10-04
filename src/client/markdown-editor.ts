@@ -31,8 +31,9 @@ const theme = EditorView.theme({
   '.cm-scroller': {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
     lineHeight: '1.6',
+    // No maxHeight: the editor grows with its content so the PAGE is the only
+    // scroller (CodeMirror virtualises against the window).
     minHeight: '16rem',
-    maxHeight: '42rem',
   },
   '.cm-content': { padding: '0.625rem 0.75rem', caretColor: 'var(--color-ink)' },
   '.cm-cursor': { borderLeftColor: 'var(--color-ink)' },
@@ -73,7 +74,10 @@ function mount(wrapper: HTMLElement): void {
   // NOT display:none). It leaves the tab order and the accessibility tree —
   // the CodeMirror content role="textbox" replaces it; a label click (for=
   // the textarea id) forwards focus into the editor.
-  textarea.classList.add('sr-only');
+  // REPLACE the class list rather than adding to it: the control's own `w-full`
+  // outranks sr-only's `width: 1px`, which left an absolutely-positioned,
+  // viewport-wide box that scrolled the whole page sideways.
+  textarea.className = 'sr-only';
   textarea.setAttribute('tabindex', '-1');
   textarea.setAttribute('aria-hidden', 'true');
   textarea.addEventListener('focus', () => view.focus());

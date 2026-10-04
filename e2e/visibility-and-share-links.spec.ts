@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
+import { openShare, linkRow, linkUrl, newLinkDetails } from './helpers/share';
 import { fillMarkdown } from './helpers/editor';
 
 // Distinct client IP so the login rate-limiter (SEC-2) buckets this file separately.
@@ -99,30 +100,37 @@ test.describe.serial('Document visibility + share links', () => {
     await loginAsAdmin(page);
     await page.goto(editUrl);
 
-    // The doc is already Private (previous test) with no links yet, so "New
-    // share link" opens by default — its next step should be obvious without
-    // a click.
-    const summary = page.locator('summary', { hasText: 'New share link' });
-    const details = page.locator('details', { has: summary });
-    await expect(details).toHaveAttribute('open', '');
+    // The doc has no links yet, so the drawer's "New link" form is open by
+    // default — the next step should be obvious without another click.
+    const share = await openShare(page);
+    await expect(newLinkDetails(share)).toHaveAttribute('open', '');
 
-    await page.getByLabel('Label (optional)').fill(`Review copy ${runId}`);
-    await page.getByLabel('Password (optional)').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Create link', exact: true }).click();
+    await share.getByLabel('Label (optional)').fill(`Review copy ${runId}`);
+    await share.getByLabel('Password (optional)').fill(PASSWORD);
+    await share.getByRole('button', { name: 'Create link', exact: true }).click();
 
-    await expect(page.getByRole('heading', { name: 'Share link created' })).toBeVisible();
-    shareLinkUrl = await page.getByLabel('Share link URL').inputValue();
+    // Created IN PLACE: no interstitial page, the editor never navigates, and
+    // the new link leads the list with its URL ready to copy.
+    await expect(share.getByText('Link created.')).toBeVisible();
+    expect(page.url()).toBe(new URL(editUrl, page.url()).href);
+    shareLinkUrl = await linkUrl(page, `Review copy ${runId}`);
     expect(shareLinkUrl).toMatch(/\/s\/[^/]+$/);
+    // The rail summary updated with it.
+    await expect(page.locator('#share-summary')).toContainText('1 read-only link');
   });
 
   test('the Share card lists the link with a Copy control matching the created URL', async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto(editUrl);
 
-    const linkRow = page.locator('label', { hasText: 'URL' }).locator('..');
-    const urlInput = linkRow.locator('input[readonly]');
-    await expect(urlInput).toHaveValue(shareLinkUrl);
-    await expect(linkRow.getByRole('button', { name: 'Copy' })).toBeVisible();
+    const share = await openShare(page);
+    const row = linkRow(share, `Review copy ${runId}`);
+    await expect(row.locator('input[readonly]')).toHaveValue(shareLinkUrl);
+    await expect(row.getByRole('button', { name: 'Copy' })).toBeVisible();
+
+    // Axe with the drawer open.
+    const axe = await new AxeBuilder({ page }).withTags(WCAG).analyze();
+    expect(axe.violations, `axe on share drawer: ${axe.violations.map((v) => v.id).join(',')}`).toEqual([]);
   });
 
   test('anonymous: the link is protected, no title/OG leak, axe clean, then unlocks with the right password', async ({

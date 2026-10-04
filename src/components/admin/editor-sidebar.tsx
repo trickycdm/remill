@@ -1,23 +1,30 @@
 /**
  * EditorSidebar — the document editor's action/metadata rail. The form
  * (GeneratedForm) is content-only; every action and all metadata live here in a
- * right column that scrolls independently once it's taller than the viewport, with
- * one clear hierarchy: a single primary Save, a secondary Publish, a Visibility
- * card, a Sharing slot, Details, Revisions, and an isolated destructive action
- * quietly footed at the end.
+ * right column with one clear hierarchy: a single primary Save, a secondary
+ * Publish, then Visibility, Sharing, Comments, Details, Revisions, and an
+ * isolated destructive action quietly footed at the end.
  *
- * The Save button lives here but drives the form in the left column via
- * `form="editor-form"` association — an associated submit fires the form's own
- * `@post`, so there are no nested forms and no route changes. `$busy` is a
- * page-global Datastar signal (seeded by the form), so the spinner works across
- * columns. Publish/Schedule/Restore/Delete are their own small native forms
- * (siblings), so they keep working with no JavaScript at all.
+ * ONE SCROLLER: the rail never scrolls on its own. It flows with the page, and
+ * only the Save card is sticky — so Save is always in reach while everything
+ * else lines up with the content beside it. That holds only while the rail
+ * stays short, so anything unbounded (share links, the full comment list, the
+ * full revision history) is summarised here and managed elsewhere (the Share
+ * drawer, the review overlay, the revisions page). Sections are divided by
+ * hairlines rather than boxed (DESIGN_SYSTEM "hairlines over boxes"); the Save
+ * card keeps its surface because it floats over the page while stuck.
+ *
+ * The Save button drives the form in the left column via `form="editor-form"`
+ * association — an associated submit fires the form's own `@post`, so there
+ * are no nested forms and no route changes. `$busy` is a page-global Datastar
+ * signal (seeded by the form), so the spinner works across columns.
+ * Publish/Schedule/Restore/Delete are their own small native forms (siblings),
+ * so they keep working with no JavaScript at all.
  *
  * `mode: 'create'` shows only the Save card (nothing exists yet to publish,
- * revise, share, or delete); `'edit'` adds the rest. The `shareSlot` prop is a
- * composition seam — the route passes `<SharePanel />` through it so this file
- * never imports that component's internals, but the two still render as one
- * sticky rail.
+ * revise, share, or delete); `'edit'` adds the rest. `shareSlot` / `reviewSlot`
+ * are composition seams — the route passes `<ShareSummary />` and
+ * `<CommentsSection />` through them so this file never imports their internals.
  */
 
 import type { JSX } from 'hono/jsx/jsx-runtime';
@@ -27,18 +34,40 @@ import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { publicUrlOf } from '@/lib/def-helpers';
-import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  Dialog,
-  Input,
-} from '@/components/ui';
+import { Button, Card, CardContent, Dialog, Input, cx } from '@/components/ui';
+import { VisibilityStamp } from '@/components/admin/visibility-stamp';
 
 type Revision = { readonly revision: number; readonly savedAt: string };
+
+/** Revisions listed in the rail; the rest live on the revisions page. */
+const RAIL_REVISIONS = 5;
+
+/** One hairline-divided rail section: a heading (with an optional trailing
+ *  action or marker) over its content. `id` makes it a Datastar morph target. */
+export function RailSection({
+  title,
+  aside,
+  id,
+  children,
+}: {
+  title: string;
+  aside?: unknown;
+  id?: string;
+  children: unknown;
+}): JSX.Element {
+  return (
+    <section id={id} class="flex flex-col gap-3 border-t border-border pt-5">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="font-display text-base leading-snug font-semibold tracking-tight text-ink">{title}</h2>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const RAIL_LINK =
+  'rounded-sm text-[13px] font-medium text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 type EditorSidebarProps =
   | {
@@ -62,7 +91,7 @@ type EditorSidebarProps =
       /** The site's absolute base URL (resolveBaseUrl), for showing the unlisted
        *  doc_ URL (D50). Falls back to a relative path when absent. */
       baseUrl?: string;
-      /** The Share card (SharePanel), composed in — undefined when neither
+      /** The Share section (ShareSummary), composed in — undefined when neither
        *  share_link nor manage_access is held. */
       shareSlot?: unknown;
       /** The Comments card (D55) — undefined when the viewer can't comment or
@@ -96,12 +125,8 @@ function PrivateCollectionVisibility(props: {
   const name = props.def.name;
   const others = props.enablePublic?.otherCount ?? 0;
   return (
-    <Card>
-      <CardHeader class="flex flex-row items-center justify-between gap-2">
-        <CardTitle as="h2">Visibility</CardTitle>
-        <Badge tone="warning">Private</Badge>
-      </CardHeader>
-      <CardContent class="flex flex-col gap-3">
+    <RailSection title="Visibility" aside={<VisibilityStamp visibility="private" />}>
+      <div class="flex flex-col gap-3">
         <p class="text-sm text-ink-muted">
           {name} has no public pages. Only people with access, or a share link, can read this.
         </p>
@@ -152,8 +177,8 @@ function PrivateCollectionVisibility(props: {
             Ask an admin to enable public pages for this collection.
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </RailSection>
   );
 }
 
@@ -171,22 +196,26 @@ function DisclosureChevron(): JSX.Element {
  *  button reads the input's current DOM value, writes it to the clipboard, and
  *  flips a per-instance signal that drives an aria-live "Copied" announcement.
  *  Shared between the Visibility card's unlisted URL, the Details card's ID,
- *  and the Share card's link rows (share-panel.tsx). */
+ *  and the Share drawer's link rows (share-drawer.tsx). */
 export function CopyField({
   id,
   label,
   value,
   mono = true,
+  hideLabel = false,
 }: {
   id: string;
   label: string;
   value: string;
   mono?: boolean;
+  /** Keep the label for assistive tech only — for rows where the surrounding
+   *  context already says what the value is. */
+  hideLabel?: boolean;
 }): JSX.Element {
   const signal = `copied_${id.replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
     <div class="flex flex-col gap-1" data-signals={`{${signal}: false}`}>
-      <label for={id} class="text-[13px] font-medium text-ink-muted">
+      <label for={id} class={hideLabel ? 'sr-only' : 'text-[13px] font-medium text-ink-muted'}>
         {label}
       </label>
       <div class="flex items-center gap-2">
@@ -205,7 +234,8 @@ export function CopyField({
           size="sm"
           data-on:click={`navigator.clipboard.writeText(document.getElementById('${id}').value).then(() => { $${signal} = true; setTimeout(() => $${signal} = false, 2000) })`}
         >
-          Copy
+          {/* The label itself confirms the copy; the sr-only status announces it. */}
+          <span data-text={`$${signal} ? 'Copied' : 'Copy'`}>Copy</span>
         </Button>
       </div>
       <span role="status" aria-live="polite" class="sr-only" data-text={`$${signal} ? 'Copied' : ''`} />
@@ -225,15 +255,15 @@ function MetaRow({ label, children }: { label: string; children: unknown }): JSX
 
 export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
   return (
-    <aside
-      class="flex min-w-0 flex-col gap-5 self-start lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-x-hidden lg:overflow-y-auto lg:overscroll-contain lg:p-1"
-      aria-label="Document actions"
-    >
-      {/* ── Publish ───────────────────────────────────────────────────────── */}
-      <Card>
-        <CardContent class="flex flex-col gap-3 pt-5">
+    // No own scroll and no max-height: the rail flows with the page (see the
+    // file header). `min-w-0` lets long values truncate instead of widening it.
+    <aside class="flex min-w-0 flex-col gap-5" aria-label="Document actions">
+      {/* ── Save / Publish — the one sticky piece ─────────────────────────── */}
+      <Card class="lg:sticky lg:top-20 lg:z-10">
+        <CardContent class="flex flex-col gap-3 p-4">
           {/* Associated submit: fires #editor-form's @post from outside the form. */}
-          <Button type="submit" form={props.formId} busy="$busy" class="w-full">
+          {/* Below lg the MobileSaveBar carries Save, so only one is ever shown. */}
+          <Button type="submit" form={props.formId} busy="$busy" class="w-full max-lg:hidden">
             {props.submitLabel}
           </Button>
 
@@ -303,63 +333,56 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
               control; otherwise the document is private by construction, so
               say so and (for schema managers) offer the safe enable. ───────── */}
           {props.def.access?.publicRead ? (
-            <Card>
-              <CardHeader>
-                <CardTitle as="h2">Visibility</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form
-                  method="post"
-                  action={`/admin/c/${props.slug}/${props.id}/visibility`}
-                  class="flex flex-col gap-3"
-                  data-signals={`{visibility: '${props.doc.visibility ?? 'public'}'}`}
+            <RailSection title="Visibility" aside={<VisibilityStamp visibility={props.doc.visibility} />}>
+              <form
+                method="post"
+                action={`/admin/c/${props.slug}/${props.id}/visibility`}
+                class="flex flex-col gap-3"
+                data-signals={`{visibility: '${props.doc.visibility ?? 'public'}'}`}
+              >
+                <fieldset class="flex flex-col gap-3">
+                  <legend class="sr-only">Visibility</legend>
+                  {VISIBILITY_OPTIONS.map((opt) => (
+                    <label class="flex items-start gap-2">
+                      <input
+                        type="radio"
+                        name="visibility"
+                        value={opt.value}
+                        checked={props.doc.visibility === opt.value}
+                        class={RADIO_BASE}
+                        data-bind="visibility"
+                      />
+                      <span class="flex flex-col gap-0.5">
+                        <span class="text-sm font-medium text-ink">{opt.label}</span>
+                        <span class="text-[13px] leading-normal text-ink-muted">{opt.help}</span>
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+
+                {(props.doc.visibility ?? 'public') === 'public' ? (
+                  <p class="text-[13px] leading-normal text-ink-subtle">Unlisted and Private retire the slug URL.</p>
+                ) : null}
+
+                {props.doc.visibility === 'unlisted' && props.doc.status === 'published' ? (
+                  <CopyField
+                    id="rm-unlisted-url"
+                    label="Unlisted URL"
+                    value={publicUrlOf(props.def, props.doc, props.baseUrl ?? '')}
+                  />
+                ) : null}
+
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  size="sm"
+                  class="self-start"
+                  data-attr:disabled={`$visibility === '${props.doc.visibility ?? 'public'}'`}
                 >
-                  <fieldset class="flex flex-col gap-3">
-                    <legend class="sr-only">Visibility</legend>
-                    {VISIBILITY_OPTIONS.map((opt) => (
-                      <label class="flex items-start gap-2">
-                        <input
-                          type="radio"
-                          name="visibility"
-                          value={opt.value}
-                          checked={props.doc.visibility === opt.value}
-                          class={RADIO_BASE}
-                          data-bind="visibility"
-                        />
-                        <span class="flex flex-col gap-0.5">
-                          <span class="text-sm font-medium text-ink">{opt.label}</span>
-                          <span class="text-[13px] leading-normal text-ink-muted">{opt.help}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </fieldset>
-
-                  {(props.doc.visibility ?? 'public') === 'public' ? (
-                    <p class="text-[13px] leading-normal text-ink-subtle">
-                      Unlisted and Private retire the slug URL.
-                    </p>
-                  ) : null}
-
-                  {props.doc.visibility === 'unlisted' && props.doc.status === 'published' ? (
-                    <CopyField
-                      id="rm-unlisted-url"
-                      label="Unlisted URL"
-                      value={publicUrlOf(props.def, props.doc, props.baseUrl ?? '')}
-                    />
-                  ) : null}
-
-                  <Button
-                    type="submit"
-                    variant="secondary"
-                    size="sm"
-                    class="self-start"
-                    data-attr:disabled={`$visibility === '${props.doc.visibility ?? 'public'}'`}
-                  >
-                    Apply
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+                  Apply
+                </Button>
+              </form>
+            </RailSection>
           ) : (
             <PrivateCollectionVisibility
               def={props.def}
@@ -374,68 +397,61 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
           {props.reviewSlot}
 
           {/* ── Details ───────────────────────────────────────────────────────── */}
-          <Card>
-            <CardHeader>
-              <CardTitle as="h2">Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl class="flex flex-col gap-2.5 text-sm">
-                <MetaRow label="Updated">
-                  <time dateTime={props.doc.updatedAt}>{formatDate(props.doc.updatedAt, props.settings)}</time>
+          <RailSection title="Details">
+            <dl class="flex flex-col gap-2.5 text-sm">
+              <MetaRow label="Updated">
+                <time dateTime={props.doc.updatedAt}>{formatDate(props.doc.updatedAt, props.settings)}</time>
+              </MetaRow>
+              <MetaRow label="Created">
+                <time dateTime={props.doc.createdAt}>{formatDate(props.doc.createdAt, props.settings)}</time>
+              </MetaRow>
+              {hasLifecycle(props.def) && props.doc.publishedAt ? (
+                <MetaRow label="Published">
+                  <time dateTime={props.doc.publishedAt}>{formatDate(props.doc.publishedAt, props.settings)}</time>
                 </MetaRow>
-                <MetaRow label="Created">
-                  <time dateTime={props.doc.createdAt}>{formatDate(props.doc.createdAt, props.settings)}</time>
-                </MetaRow>
-                {hasLifecycle(props.def) && props.doc.publishedAt ? (
-                  <MetaRow label="Published">
-                    <time dateTime={props.doc.publishedAt}>{formatDate(props.doc.publishedAt, props.settings)}</time>
-                  </MetaRow>
-                ) : null}
-                <MetaRow label="Author">{props.authorName}</MetaRow>
-              </dl>
-              <div class="mt-3 border-t border-border pt-3">
-                <CopyField id="rm-doc-id" label="ID" value={props.doc.id} />
-              </div>
-            </CardContent>
-          </Card>
+              ) : null}
+              <MetaRow label="Author">{props.authorName}</MetaRow>
+            </dl>
+            <CopyField id="rm-doc-id" label="ID" value={props.doc.id} />
+          </RailSection>
 
-          {/* ── Revisions ─────────────────────────────────────────────────────── */}
-          <Card>
-            <CardHeader>
-              <div class="flex items-center justify-between gap-2">
-                <CardTitle as="h2">Revisions</CardTitle>
-                {props.revisions.length >= 2 ? (
-                  <a
-                    href={`/admin/c/${props.slug}/${props.id}/revisions`}
-                    class="rounded-sm text-xs text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  >
-                    Compare
-                  </a>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <ol class="flex flex-col gap-2 text-sm">
-                {props.revisions.map((r) => (
-                  <li class="flex items-center justify-between gap-2">
-                    <span class="font-mono text-xs text-ink-subtle">
-                      #{r.revision} · {r.savedAt.slice(0, 16).replace('T', ' ')}
-                    </span>
-                    {r.revision === props.revisions[0]?.revision ? (
-                      <span class="text-xs font-medium text-ink-subtle">Current</span>
-                    ) : (
-                      <form method="post" action={`/admin/c/${props.slug}/${props.id}/restore`} class="contents">
-                        <input type="hidden" name="revision" value={String(r.revision)} />
-                        <button type="submit" class="rounded-sm text-xs text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-                          Restore
-                        </button>
-                      </form>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
+          {/* ── Revisions — the latest few; the full history (and compare) is
+              the revisions page, so this never grows the rail. ────────────── */}
+          <RailSection
+            title="Revisions"
+            aside={
+              props.revisions.length >= 2 ? (
+                <a href={`/admin/c/${props.slug}/${props.id}/revisions`} class={RAIL_LINK}>
+                  Compare
+                </a>
+              ) : undefined
+            }
+          >
+            <ol class="flex flex-col gap-2 text-sm">
+              {props.revisions.slice(0, RAIL_REVISIONS).map((r) => (
+                <li class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-xs text-ink-subtle">
+                    #{r.revision} · {r.savedAt.slice(0, 16).replace('T', ' ')}
+                  </span>
+                  {r.revision === props.revisions[0]?.revision ? (
+                    <span class="text-xs font-medium text-ink-subtle">Current</span>
+                  ) : (
+                    <form method="post" action={`/admin/c/${props.slug}/${props.id}/restore`} class="contents">
+                      <input type="hidden" name="revision" value={String(r.revision)} />
+                      <button type="submit" class={cx(RAIL_LINK, 'text-xs')}>
+                        Restore
+                      </button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ol>
+            {props.revisions.length > RAIL_REVISIONS ? (
+              <a href={`/admin/c/${props.slug}/${props.id}/revisions`} class={cx(RAIL_LINK, 'self-start')}>
+                All {props.revisions.length} revisions
+              </a>
+            ) : null}
+          </RailSection>
 
           {/* ── Delete (isolated destructive action, quietly footed) ────────── */}
           <div class="border-t border-border pt-4">
@@ -471,5 +487,19 @@ export function EditorSidebar(props: EditorSidebarProps): JSX.Element {
         </>
       )}
     </aside>
+  );
+}
+
+/** Save, pinned to the bottom of the viewport below `lg` — where the rail
+ *  stacks UNDER a body that now grows with the page, so its Save card can be a
+ *  long scroll away. Same associated submit as the rail's button; hidden from
+ *  `lg` up, where the sticky Save card does this job. */
+export function MobileSaveBar({ formId, submitLabel }: { formId: string; submitLabel: string }): JSX.Element {
+  return (
+    <div class="sticky bottom-0 z-10 -mx-4 mt-8 border-t border-border bg-surface/95 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:hidden">
+      <Button type="submit" form={formId} busy="$busy" class="w-full">
+        {submitLabel}
+      </Button>
+    </div>
   );
 }

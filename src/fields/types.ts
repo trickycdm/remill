@@ -111,6 +111,10 @@ export interface FieldEditProps<Config = unknown, Value = unknown> {
   readonly value: Value | undefined;
   /** kebab-case Datastar signal key bound to this field (DATASTAR_PATTERNS.md). */
   readonly signal: string;
+  /** The read path's relation expansion for this field, when the form was
+   *  given a stored document — lets a referencing widget show titles instead
+   *  of raw ids. Absent on create and for non-referencing types. */
+  readonly expanded?: ExpandedReference | ExpandedReference[];
 }
 
 /** What a referencing field's id(s) resolved to on the read path (B2): the

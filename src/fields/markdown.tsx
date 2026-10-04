@@ -53,7 +53,7 @@ export const markdownField: FieldType<MarkdownConfig, string> = {
     <FieldShell field={field} signal={signal}>
       {/* The island mounts CodeMirror here and sr-only's the textarea; the
           label text rides data-label for the editor's aria-label. */}
-      <div data-md-editor data-label={fieldLabel(field)}>
+      <div class="relative" data-md-editor data-label={fieldLabel(field)}>
         <Textarea {...controlProps({ field, signal })} value={value ?? ''} rows={12} />
       </div>
     </FieldShell>
