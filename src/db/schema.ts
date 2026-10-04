@@ -127,7 +127,7 @@ export const collections = sqliteTable('collections', {
   workflowJson: text('workflow_json'), // { draftPublish?: boolean, ... }
   accessJson: text('access_json'), // { publicRead?: boolean } | role→action map
   protected: integer('protected').notNull().default(0), // seeded/system collections (0/1)
-  renderMode: text('render_mode'), // null/'shell' = branded PublicShell | 'raw' = html field is the page (D27)
+  renderMode: text('render_mode'), // null/'shell' = branded PublicShell | 'raw' = html field is the page (D27) | 'frame' = html field in the viewer shell's sandboxed iframe (D60)
   template: text('template'), // null = generic shell | a registered reading-template key (src/templates/)
   bindJson: text('bind_json'), // { title?, hero?, lead? } explicit template-slot bindings (field keys)
   createdAt: text('created_at').notNull(),

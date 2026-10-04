@@ -707,6 +707,49 @@ export async function listRevisions(
   }));
 }
 
+/** Revision history WITHOUT the data — number, author, time — newest first.
+ *  Witness required. What a history list needs; megabyte pages make
+ *  `listRevisions` (full data per row) the wrong read for it. */
+export async function listRevisionMeta(
+  db: Database,
+  documentId: string,
+  _grant: Grant,
+): Promise<{ revision: number; savedBy: string | null; savedAt: string }[]> {
+  return db
+    .select({
+      revision: documentRevisions.revision,
+      savedBy: documentRevisions.savedBy,
+      savedAt: documentRevisions.savedAt,
+    })
+    .from(documentRevisions)
+    .where(eq(documentRevisions.documentId, documentId))
+    .orderBy(desc(documentRevisions.revision));
+}
+
+/** ONE revision's data, or null when the document has no such revision. Witness
+ *  required. `listRevisions` loads every revision's full data — untenable for
+ *  megabyte html pages — so anything that needs a single revision reads it here. */
+export async function getRevision(
+  db: Database,
+  documentId: string,
+  revision: number,
+  _grant: Grant,
+): Promise<{ revision: number; data: Record<string, unknown>; savedBy: string | null; savedAt: string } | null> {
+  const rows = await db
+    .select()
+    .from(documentRevisions)
+    .where(and(eq(documentRevisions.documentId, documentId), eq(documentRevisions.revision, revision)))
+    .limit(1);
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    revision: r.revision,
+    data: JSON.parse(r.dataJson || '{}') as Record<string, unknown>,
+    savedBy: r.savedBy,
+    savedAt: r.savedAt,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Graph queries (D45) — the /admin/graph explorer's data plumbing.
 // ---------------------------------------------------------------------------

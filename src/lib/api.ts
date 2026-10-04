@@ -32,6 +32,22 @@ export const MAX_MCP_BODY_BYTES = 8 * 1024 * 1024;
  *  (documented in API_AND_MCP_STANDARDS; per-line format makes splitting trivial). */
 export const MAX_IMPORT_BODY_BYTES = 10 * 1024 * 1024;
 
+/** The `/api/pages` body cap (D62): one HTML page, sent raw or as JSON. Above
+ *  the 1.8 MB a stored document may weigh (`MAX_DOCUMENT_BYTES`) so the JSON
+ *  form's escaping overhead never trips this first. */
+export const MAX_PAGE_BODY_BYTES = 2 * 1024 * 1024;
+
+/** Read a request body as text, enforcing `max` on the ACTUAL byte length —
+ *  `assertBodyWithinLimit` alone only trusts the declared Content-Length. */
+export async function textBody(c: Context, max: number): Promise<string> {
+  assertBodyWithinLimit(c, max);
+  const text = await c.req.text();
+  if (new TextEncoder().encode(text).length > max) {
+    throw new AppError(`Request body exceeds the ${max}-byte limit`, 413, 'PAYLOAD_TOO_LARGE', 'Request body is too large.');
+  }
+  return text;
+}
+
 export async function apiPrincipal(c: Context<{ Bindings: Env }>, now: string): Promise<Principal> {
   return resolvePrincipal(getDb(c.env.DB), c, 'rest', now);
 }

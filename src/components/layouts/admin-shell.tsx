@@ -12,8 +12,8 @@
  *
  * Theme: the toggle flips <html data-theme> and persists to localStorage
  * ('remill-theme'); tailwind.css resolves every token from `color-scheme` via
- * light-dark(), so no per-token class flipping is needed. The `theme` signal is
- * seeded from the resolved DOM theme on init so the icon/label stay correct.
+ * light-dark(), so no per-token class flipping is needed. The toggle itself is
+ * the shared `ThemeToggle` (ui/theme-toggle), which owns the `theme` signal.
  *
  * The layout owner (src/layouts.tsx) must render THEME_INIT_SNIPPET in <head>
  * (see its doc below) so a stored theme is applied before first paint.
@@ -27,6 +27,7 @@ import {
   ToastHost,
   Dashboard,
   FileText,
+  AppWindow,
   Image,
   Inbox,
   Waypoints,
@@ -36,13 +37,13 @@ import {
   Trash,
   Activity,
   Menu,
-  Sun,
-  Moon,
+  ThemeToggle,
   LogOut,
   ChevronDown,
   Store,
 } from '@/components/ui';
 import { Wordmark } from '@/components/auth-shell';
+import { PAGES_COLLECTION } from '@/config/constants';
 
 /**
  * No-flash theme init. A static, self-contained IIFE — the layout owner renders
@@ -59,6 +60,9 @@ export const THEME_INIT_SNIPPET =
 const NAV_ITEMS: readonly NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/admin', icon: Dashboard },
   { key: 'content', label: 'Content', href: '/admin/c', icon: FileText },
+  // The built-in Pages collection (D62) — an ordinary collection, surfaced
+  // here because publishing a standalone page is a first-class job.
+  { key: 'pages', label: 'Pages', href: `/admin/c/${PAGES_COLLECTION}`, icon: AppWindow },
   { key: 'graph', label: 'Graph', href: '/admin/graph', icon: Waypoints },
   { key: 'shared', label: 'Shared with me', href: '/admin/shared', icon: Inbox },
   { key: 'media', label: 'Media', href: '/admin/media', icon: Image },
@@ -82,6 +86,7 @@ const NAV_BY_ROLE: Record<string, readonly string[]> = {
   admin: [
     'dashboard',
     'content',
+    'pages',
     'graph',
     'shared',
     'media',
@@ -94,10 +99,17 @@ const NAV_BY_ROLE: Record<string, readonly string[]> = {
   ],
   // Trash shows for the roles that hold `delete` (the page itself scopes rows
   // to what the caller can actually act on; the system author role cannot delete).
-  editor: ['dashboard', 'content', 'graph', 'shared', 'media', 'trash'],
-  author: ['dashboard', 'content', 'graph', 'shared', 'media'],
-  reader: ['dashboard', 'content', 'graph', 'shared', 'media'],
+  editor: ['dashboard', 'content', 'pages', 'graph', 'shared', 'media', 'trash'],
+  author: ['dashboard', 'content', 'pages', 'graph', 'shared', 'media'],
+  reader: ['dashboard', 'content', 'pages', 'graph', 'shared', 'media'],
 };
+
+/** The nav item a collection's own screens highlight: its dedicated item when
+ *  it has one (Pages), else the general Content item. Derived from the nav
+ *  itself, so no route names a collection. */
+export function navKeyForCollection(slug: string): string {
+  return NAV_ITEMS.find((item) => item.href === `/admin/c/${slug}`)?.key ?? 'content';
+}
 
 function visibleNav(role: string): readonly NavItem[] {
   const allowed = NAV_BY_ROLE[role] ?? NAV_BY_ROLE.reader;
@@ -125,8 +137,7 @@ export function AdminShell({
   return (
     <div
       class="min-h-dvh bg-canvas text-ink"
-      data-signals="{navOpen: false, userMenuOpen: false, theme: 'light'}"
-      data-init="$theme = document.documentElement.getAttribute('data-theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')"
+      data-signals="{navOpen: false, userMenuOpen: false}"
       data-on:keydown__window="evt.key === 'Escape' && ($navOpen = false, $userMenuOpen = false)"
     >
       {/* Mobile drawer mechanics — scoped, robust, no Tailwind transform conflicts.
@@ -221,21 +232,7 @@ export function AdminShell({
 
           <div class="hidden flex-1 sm:block" />
 
-          {/* Theme toggle — flips <html data-theme> + persists; icon tracks $theme. */}
-          <button
-            type="button"
-            aria-label="Toggle color theme"
-            data-attr:aria-label="$theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
-            data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', $theme); localStorage.setItem('remill-theme', $theme)"
-            class="flex size-9 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <span class="contents" data-show="$theme === 'dark'" style="display:none">
-              <Sun class="size-5" />
-            </span>
-            <span class="contents" data-show="$theme !== 'dark'">
-              <Moon class="size-5" />
-            </span>
-          </button>
+          <ThemeToggle />
 
           <div aria-hidden="true" class="mx-1 h-6 w-px bg-border" />
 

@@ -63,13 +63,25 @@ export interface CollectionDefinition {
   // access is untouched: documents were already deny-by-default. Collection-
   // scoped permissions live in `role_permissions` (the authorizer's single
   // source); an inline role→action map is rejected on write (collections service).
-  readonly access?: { readonly publicRead?: boolean; readonly private?: boolean };
+  //
+  // `defaultVisibility` (D62) is the visibility a NEW document is born with on
+  // a `publicRead` collection — `'private'` makes public an explicit, per-
+  // document opt-in (the built-in Pages collection). Absent ⇒ `'public'`, the
+  // long-standing behaviour. Meaningless without `publicRead` (rejected).
+  readonly access?: {
+    readonly publicRead?: boolean;
+    readonly private?: boolean;
+    readonly defaultVisibility?: 'public' | 'unlisted' | 'private';
+  };
   /** How the public routes render documents (D27). Default/absent = 'shell'
    *  (branded PublicShell). 'raw' = the collection's FIRST `html` field IS the
    *  page — returned as a full standalone document (no shell, no design-system
    *  CSS); requires at least one html field; an empty value falls back to the
-   *  shell so a published page is never blank. */
-  readonly renderMode?: 'shell' | 'raw';
+   *  shell so a published page is never blank. 'frame' (D60) = the same first
+   *  `html` field, shown in a sandboxed iframe inside the viewer shell — on the
+   *  public, share-link AND admin surfaces — so the author's scripts never run
+   *  on remill's own origin. */
+  readonly renderMode?: 'shell' | 'raw' | 'frame';
   /** Selects a reading TEMPLATE from the registry (src/templates/) for the public
    *  page — the code side of the render surface (templates are code; this key is
    *  data). Absent ⇒ the generic DocumentView shell; `renderMode: 'raw'` still

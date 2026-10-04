@@ -95,3 +95,130 @@ describe('migration 0017 — comment permission for existing installs (D55)', ()
     expect(db.prepare("SELECT COUNT(*) AS n FROM role_permissions WHERE action = 'comment'").get()).toEqual({ n: 0 });
   });
 });
+
+/**
+ * D60: migration 0019 widens the `render_mode` CHECK to admit 'frame' by
+ * swapping the column — NOT by rebuilding `collections`, whose drop would
+ * cascade through `documents.collection` and delete every document. Simulate an
+ * install with content, then apply it.
+ */
+describe('migration 0019 — frame render mode without losing documents (D60)', () => {
+  const MIGRATIONS = join(import.meta.dirname, 'migrations');
+  const run = (db: InstanceType<typeof Database>, file: string) => {
+    for (const stmt of readFileSync(join(MIGRATIONS, file), 'utf-8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) db.exec(stmt);
+    }
+  };
+  const files = readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+  const d60 = files.find((f) => f.startsWith('0019_'))!;
+
+  const installWithContent = () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    for (const f of files.filter((f) => f < d60)) run(db, f);
+    const now = '2026-10-04T00:00:00Z';
+    const collection = db.prepare(
+      "INSERT INTO collections (slug, name, shape, fields_json, render_mode, created_at, updated_at) VALUES (?, ?, 'collection', '[]', ?, ?, ?)",
+    );
+    collection.run('reports', 'Reports', 'raw', now, now);
+    collection.run('notes', 'Notes', null, now, now);
+    const doc = db.prepare(
+      "INSERT INTO documents (id, collection, data_json, status, created_at, updated_at) VALUES (?, ?, '{}', 'published', ?, ?)",
+    );
+    doc.run('doc_r1', 'reports', now, now);
+    doc.run('doc_n1', 'notes', now, now);
+    return db;
+  };
+
+  it('keeps every document and every existing render mode', () => {
+    const db = installWithContent();
+    run(db, d60);
+    expect(db.prepare('SELECT id FROM documents ORDER BY id').all()).toEqual([{ id: 'doc_n1' }, { id: 'doc_r1' }]);
+    expect(db.prepare('SELECT slug, render_mode FROM collections ORDER BY slug').all()).toEqual([
+      { slug: 'notes', render_mode: null },
+      { slug: 'reports', render_mode: 'raw' },
+    ]);
+  });
+
+  it("admits 'frame' and still rejects an unknown mode", () => {
+    const db = installWithContent();
+    run(db, d60);
+    db.prepare("UPDATE collections SET render_mode = 'frame' WHERE slug = 'reports'").run();
+    expect(db.prepare("SELECT render_mode FROM collections WHERE slug = 'reports'").get()).toEqual({ render_mode: 'frame' });
+    expect(() => db.prepare("UPDATE collections SET render_mode = 'bogus' WHERE slug = 'notes'").run()).toThrow(/CHECK/);
+    // The documents FK still points at the (never-rebuilt) parent.
+    expect(() =>
+      db
+        .prepare("INSERT INTO documents (id, collection, data_json, status, created_at, updated_at) VALUES ('doc_x', 'nope', '{}', 'published', 'n', 'n')")
+        .run(),
+    ).toThrow(/FOREIGN KEY/);
+  });
+});
+
+/**
+ * D62: the built-in `pages` collection reaches a fresh install through seed.sql
+ * and an EXISTING one through migration 0020 — two hand-mirrored copies of one
+ * row, so they are compared here.
+ */
+describe('migration 0020 — the built-in pages collection (D62)', () => {
+  const MIGRATIONS = join(import.meta.dirname, 'migrations');
+  const SEED = readFileSync(join(import.meta.dirname, 'seed.sql'), 'utf-8');
+  const run = (db: InstanceType<typeof Database>, file: string) => {
+    for (const stmt of readFileSync(join(MIGRATIONS, file), 'utf-8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) db.exec(stmt);
+    }
+  };
+  const files = readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+  const d62 = files.find((f) => f.startsWith('0020_'))!;
+  const migrated = (upTo?: string) => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    for (const f of files.filter((f) => !upTo || f < upTo)) run(db, f);
+    return db;
+  };
+  /** The seed as it stood before D62: everything but the pages insert. */
+  const seedWithoutPages = SEED.slice(0, SEED.indexOf("-- `pages` — collection, protected (D62)"));
+  const pagesRow = (db: InstanceType<typeof Database>) =>
+    db
+      .prepare(
+        "SELECT slug, name, shape, fields_json, workflow_json, access_json, protected, render_mode, template, bind_json FROM collections WHERE slug = 'pages'",
+      )
+      .get();
+
+  it('adds pages to an install that was seeded before it existed', () => {
+    const db = migrated(d62);
+    db.exec(seedWithoutPages);
+    expect(pagesRow(db)).toBeUndefined();
+    run(db, d62);
+    expect(pagesRow(db)).toMatchObject({ slug: 'pages', protected: 1, render_mode: 'frame' });
+  });
+
+  it('the migration row and the seed row are the same row', () => {
+    const viaMigration = migrated(d62);
+    viaMigration.exec(seedWithoutPages);
+    run(viaMigration, d62);
+    const viaSeed = migrated();
+    viaSeed.exec(SEED);
+    expect(pagesRow(viaMigration)).toEqual(pagesRow(viaSeed));
+  });
+
+  it('leaves a migrations-only database alone (the seed brings the row)', () => {
+    expect(pagesRow(migrated())).toBeUndefined();
+  });
+
+  it('never overwrites a collection someone already made at that slug', () => {
+    const db = migrated(d62);
+    db.exec(seedWithoutPages);
+    db.prepare(
+      "INSERT INTO collections (slug, name, shape, fields_json, created_at, updated_at) VALUES ('pages', 'My pages', 'collection', '[]', 'n', 'n')",
+    ).run();
+    run(db, d62);
+    db.exec(SEED);
+    expect(pagesRow(db)).toMatchObject({ name: 'My pages', protected: 0, render_mode: null });
+  });
+});
+

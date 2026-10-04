@@ -21,7 +21,11 @@ import { authorize, type Principal } from '@/access';
 import { getPrincipalPermissions, type EffectivePermission } from '@/db/queries/roles';
 import { collectionsWithActionFrom } from '@/services/access';
 import { InputValidationError, NotFoundError, ConflictError, ForbiddenError } from '@/lib/errors';
-import { RESERVED_FIELD_KEYS, RESERVED_COLLECTION_SLUGS } from '@/config/constants';
+import {
+  RESERVED_FIELD_KEYS,
+  RESERVED_COLLECTION_SLUGS,
+  TOOL_RESERVED_COLLECTION_SLUGS,
+} from '@/config/constants';
 import { TEMPLATE_KEYS, isTemplateKey } from '@/templates/keys';
 import { PACKS, resolvePack, type PackKey } from '@/templates/packs';
 import type { ErrorDetails } from '@/lib/errors';
@@ -45,6 +49,8 @@ const WORKFLOW_SCHEMA = z.strictObject({
 const ACCESS_SCHEMA = z.strictObject({
   publicRead: z.boolean().optional(),
   private: z.boolean().optional(),
+  // What a new document is born as on a publicRead collection (D62).
+  defaultVisibility: z.enum(VISIBILITIES).optional(),
 });
 // Explicit render bindings (templates' escape hatch when convention would guess
 // wrong). CLOSED shape like workflow/access; slot-appropriate field types are
@@ -178,17 +184,24 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
         path: 'access',
         message: 'private and publicRead are contradictory — pick one.',
       });
+    } else if (r.data.defaultVisibility !== undefined && !r.data.publicRead) {
+      // Without publicRead every document is private whatever its stored
+      // visibility says (D57) — a default there would be a setting that lies.
+      issues.push({
+        path: 'access.defaultVisibility',
+        message: 'defaultVisibility only applies to a publicRead collection.',
+      });
     }
   }
   if (input.renderMode !== undefined) {
-    if (input.renderMode !== 'shell' && input.renderMode !== 'raw') {
-      issues.push({ path: 'renderMode', message: "renderMode must be 'shell' or 'raw'." });
-    } else if (input.renderMode === 'raw' && !(input.fields ?? []).some((f) => f.type === 'html')) {
-      // In raw mode the FIRST html field IS the page (D27) — without one there
-      // is nothing to render.
+    if (input.renderMode !== 'shell' && input.renderMode !== 'raw' && input.renderMode !== 'frame') {
+      issues.push({ path: 'renderMode', message: "renderMode must be 'shell', 'raw' or 'frame'." });
+    } else if (input.renderMode !== 'shell' && !(input.fields ?? []).some((f) => f.type === 'html')) {
+      // In raw and frame mode the FIRST html field IS the page (D27/D60) —
+      // without one there is nothing to render.
       issues.push({
         path: 'renderMode',
-        message: "renderMode 'raw' requires at least one 'html' field.",
+        message: `renderMode '${input.renderMode}' requires at least one 'html' field.`,
       });
     }
   }
@@ -258,6 +271,12 @@ export async function createCollection(
 ): Promise<CollectionDefinition> {
   const grant = await authorize(db, principal, 'manage_schema', { collection: input.slug }, now);
   const def = validateDefinition(input);
+  // Reserved on CREATE only (an install that already has such a collection
+  // must still be able to edit it): the slug would generate collection tools
+  // that shadow a static MCP tool of the same name.
+  if ((TOOL_RESERVED_COLLECTION_SLUGS as readonly string[]).includes(def.slug)) {
+    throw new InputValidationError([{ path: 'slug', message: `'${def.slug}' is reserved.` }]);
+  }
   if (await q.getCollection(db, def.slug)) {
     throw new ConflictError(`A collection '${def.slug}' already exists.`);
   }

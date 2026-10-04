@@ -18,11 +18,13 @@ import {
   getPrincipalPermissions,
   grantItem,
   listTeams,
-  createShareLink,
   listAuditPage,
   describeSelf,
 } from '@/services/access';
 import { InputValidationError } from '@/lib/errors';
+import { mintApiShareLink } from '@/services/sharing';
+import { publishPage } from '@/services/pages';
+import { PAGES_COLLECTION } from '@/config/constants';
 import {
   listCollections,
   getCollection,
@@ -145,10 +147,6 @@ function filtersFromArgs(raw: unknown): Record<string, Partial<Record<docs.Filte
   return filters;
 }
 
-/** Agent-minted share links MUST expire; requested expiries are clamped to 30
- *  days (D26). Humans in the admin Share panel may still mint open-ended links. */
-const SHARE_LINK_MAX_TTL_DAYS = 30;
-
 /** Build the permission-filtered tool set for a principal. `baseUrl` is the
  *  absolute origin for tools that mint URLs (threaded from the route — this
  *  module has no request Context). */
@@ -215,7 +213,10 @@ export async function buildToolsForPrincipal(
         'title/hero/lead slots to specific fields; for a ready-made shape, prefer install_pack. ' +
         'Optional `access` sets visibility: {publicRead: true} lets anyone read published documents; ' +
         '{private: true} hides the collection from discovery (list_collections, the REST API index, ' +
-        'OpenAPI) for principals without read access. The two are mutually exclusive.',
+        'OpenAPI) for principals without read access. The two are mutually exclusive. ' +
+        "Optional `renderMode` picks how a collection with an `html` field is shown: 'frame' renders the " +
+        "first html field as a full page inside remill's viewer, in a sandboxed frame (use this for " +
+        "standalone HTML pages); 'raw' serves it as the bare page; 'shell' (default) inlines it.",
       inputSchema: {
         type: 'object',
         properties: { definition: { type: 'object' } },
@@ -320,6 +321,71 @@ export async function buildToolsForPrincipal(
           },
           now(),
         ),
+    });
+  }
+
+  // Pages (D62): publish a standalone HTML page in ONE call — the built-in
+  // `pages` collection in the framed viewer. Static sugar over create/update +
+  // share_link for that collection (services/pages); registered BEFORE the
+  // generated tools so a pre-existing collection whose tools collide by name
+  // (slug `page` → `publish_page`) can never shadow it.
+  const pagesDef = collections.find(
+    (d) => d.slug === PAGES_COLLECTION && d.renderMode === 'frame' && d.fields.some((f) => f.type === 'html'),
+  );
+  if (
+    pagesDef &&
+    (couldDo(perms, principal, 'create', pagesDef.slug, false) || couldDo(perms, principal, 'update', pagesDef.slug, false))
+  ) {
+    tools.push({
+      name: 'publish_page',
+      description:
+        'Publish a standalone HTML page and get its URL — the way to share a report, chart, dashboard or any ' +
+        'self-contained document. Pass the COMPLETE HTML document (doctype, head, body, your own CSS and JS inline). ' +
+        'It renders in a sandboxed frame inside a viewer with sharing, comments and version history. ' +
+        'In the frame: inline scripts and styles run; scripts/styles may also load from cdnjs.cloudflare.com, ' +
+        'cdn.jsdelivr.net and unpkg.com (and /vendor/chart.umd.js on this site); Google Fonts and https images load; ' +
+        'network calls (fetch/XHR) and localStorage/cookies do NOT work — embed the data in the page. ' +
+        'Pages are private: `url` opens for signed-in people who can read it. To hand it to anyone else, pass `share` ' +
+        'for a link in the same call (add `share.review` to let them comment). ' +
+        'To revise a page, call again with its `id` — the URL and links stay the same and the old version is kept. ' +
+        'The result lists `warnings` for anything in the page the frame will block.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          html: { type: 'string', description: 'the complete HTML document' },
+          title: {
+            type: 'string',
+            description: "shown in the viewer and lists; defaults to the page's <title>, then its first <h1>",
+          },
+          description: { type: 'string', description: 'one or two sentences on what the page is' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'labels for finding it later' },
+          id: { type: 'string', description: 'an existing page id — update that page instead of creating one' },
+          expectedRevision: {
+            type: 'integer',
+            description: 'with `id`: the revision you based this on; the save is refused (STALE_REVISION) if it moved on',
+          },
+          share: {
+            type: 'object',
+            description: 'also mint an anonymous link to the page',
+            properties: {
+              expiresAt: { type: 'string', description: 'REQUIRED ISO-8601 expiry (clamped to 30 days out)' },
+              password: { type: 'string', description: 'optional password (min 8 characters)' },
+              label: { type: 'string', description: 'optional human label shown in the Share panel' },
+              review: {
+                type: 'object',
+                description: 'make it a REVIEW link: whoever opens it can also comment',
+                properties: {
+                  mode: { type: 'string', enum: ['group', 'individual'] },
+                  reviewer: { type: 'string', description: 'name the one person this link is for' },
+                },
+              },
+            },
+            required: ['expiresAt'],
+          },
+        },
+        required: ['html'],
+      },
+      handler: async (args) => publishPage(db, principal, args, { secret: ctx.secret ?? '', baseUrl }, now()),
     });
   }
 
@@ -787,7 +853,7 @@ export async function buildToolsForPrincipal(
     if (couldDo(perms, principal, 'share_link', slug, false)) {
       tools.push({
         name: `share_link_${slug}`,
-        description: `Mint an anonymous, expiring, READ-ONLY share link for one ${def.name} document. Anyone with the URL can open it — no account needed. Expiry is required and clamped to 30 days.`,
+        description: `Mint an anonymous, expiring share link for one ${def.name} document. Anyone with the URL can open it — no account needed. READ-ONLY by default; pass \`review\` for a review link whose holders can also comment. Expiry is required and clamped to 30 days.`,
         inputSchema: {
           type: 'object',
           properties: {
@@ -801,32 +867,45 @@ export async function buildToolsForPrincipal(
               description: 'optional password to require before the link opens (min 8 characters)',
             },
             label: { type: 'string', description: 'optional human label shown in the Share panel' },
+            review: {
+              type: 'object',
+              description:
+                'optional — make this a REVIEW link: whoever opens it can also comment on the document (needs your `comment` permission as well as `share_link`). Omit for a read-only link.',
+              properties: {
+                mode: {
+                  type: 'string',
+                  enum: ['group', 'individual'],
+                  description: "'group' (default): reviewers on group links see each other's comments. 'individual': each reviewer sees only their own.",
+                },
+                reviewer: {
+                  type: 'string',
+                  description: 'name the one person this link is for; omit for an open link where each reviewer types their name',
+                },
+              },
+            },
           },
           required: ['id', 'expiresAt'],
         },
         handler: async (args) => {
-          const nowIso = now();
-          // Validation and the 30-day clamp both live in createShareLink() now
-          // (steering: REST follows "the same rules as the MCP tool" — one
-          // implementation instead of two hand-copied ones).
-          const { grantId, token, hasPassword, label, expiresAt } = await createShareLink(
+          // Validation, the 30-day clamp and the review rules all live in
+          // mintApiShareLink() — ONE implementation for this tool and REST.
+          const { token, ...link } = await mintApiShareLink(
             db,
             principal,
             {
               collection: slug,
               documentId: String(args.id ?? ''),
-              actions: ['read'],
-              expiresAt: typeof args.expiresAt === 'string' ? args.expiresAt : undefined,
-              maxTtlDays: SHARE_LINK_MAX_TTL_DAYS,
-              password: typeof args.password === 'string' && args.password ? args.password : undefined,
-              label: typeof args.label === 'string' && args.label ? args.label : undefined,
+              expiresAt: args.expiresAt,
+              password: args.password,
+              label: args.label,
+              review: args.review,
             },
             ctx.secret ?? '',
-            nowIso,
+            now(),
           );
           // The plaintext token intentionally enters the agent's context — that
           // IS the capability; it stays revocable from the Share panel/matrix.
-          return { grantId, url: `${baseUrl}/s/${token}`, expiresAt, hasPassword, label };
+          return { grantId: link.grantId, url: `${baseUrl}/s/${token}`, expiresAt: link.expiresAt, hasPassword: link.hasPassword, label: link.label, review: link.review };
         },
       });
     }
@@ -944,5 +1023,10 @@ export async function buildToolsForPrincipal(
       }),
   });
 
-  return tools;
+  // Tool names are the dispatch key: where two collide (a collection whose
+  // generated tools repeat an earlier name), the FIRST registered wins and the
+  // rest are dropped, so `tools/list` never advertises a tool `tools/call`
+  // would not reach.
+  const seen = new Set<string>();
+  return tools.filter((t) => !seen.has(t.name) && seen.add(t.name));
 }

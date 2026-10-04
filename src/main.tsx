@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { logger } from 'hono/logger';
 import { cors } from 'hono/cors';
-import { securityHeaders } from '@/middleware/security-headers';
+import { securityHeaders, FRAME_PREFIX } from '@/middleware/security-headers';
 import type { Env } from '@/types';
 import { RootLayout } from '@/layouts';
 import { sessionSetup } from '@/middleware/session';
@@ -60,7 +60,11 @@ app.use('/oauth/token', machineOAuthCors);
 app.use('/oauth/revoke', machineOAuthCors);
 app.use('/oauth/device-authorization', machineOAuthCors);
 
-app.use('*', sessionSetup()); // must run before any auth-reading route
+// Framed content (D60) is cookieless by design — the ticket in the URL names
+// the viewer — so the session middleware (which would read and re-issue the
+// session cookie) is skipped for it.
+const session = sessionSetup(); // must run before any auth-reading route
+app.use('*', (c, next) => (c.req.path.startsWith(FRAME_PREFIX) ? next() : session(c, next)));
 app.use('*', RootLayout);
 
 // ---------------------------------------------------------------------------

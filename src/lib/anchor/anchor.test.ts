@@ -59,6 +59,44 @@ describe('canonical text (D55)', () => {
   });
 });
 
+describe('canonical text — whole documents (D60)', () => {
+  const PAGE =
+    '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>Head title</title>\n' +
+    '<style>p { color: red }</style>\n</head>\n<body>\n<h1>Report</h1>\n<p>Revenue grew 12%.</p>\n' +
+    '<figure data-rm-anchor="chart"><img src="/media/a.png"></figure>\n<script>draw()</script>\n</body>\n</html>';
+
+  it("the document profile leaves <title> out — it is head text, and the frame bridge skips it too", () => {
+    expect(canonicalFromHtml(PAGE, 'document').text).toBe('Report Revenue grew 12%.');
+    // The field profile (a fragment inlined into a page) still reads it.
+    expect(canonicalFromHtml(PAGE).text).toBe('Head title Report Revenue grew 12%.');
+    expect(canonicalFromHtml(PAGE, 'document').blocks.map((b) => b.id)).toEqual(['img:/media/a.png', 'chart']);
+  });
+
+  it('a fragment with no <title> reads identically under both profiles', () => {
+    const fragment = '<h2>Notes</h2>\n<p>One <em>two</em> three.</p><script>x()</script>';
+    expect(canonicalFromHtml(fragment, 'document')).toEqual(canonicalFromHtml(fragment));
+  });
+
+  it("canonicalDocument uses the document profile for a frame collection's PAGE field only", () => {
+    const fields: CollectionDefinition['fields'] = [
+      { key: 'title', type: 'text' },
+      { key: 'page', type: 'html' },
+      { key: 'appendix', type: 'html' },
+    ];
+    const base = { slug: 'pages', name: 'Pages', shape: 'collection' as const, fields };
+    const data = { page: PAGE, appendix: '<title>Kept</title><p>Extra</p>' };
+
+    const framed = canonicalDocument({ ...base, renderMode: 'frame' }, data);
+    expect(framed.get('page')!.text).toBe('Report Revenue grew 12%.');
+    expect(framed.get('appendix')!.text).toBe('KeptExtra');
+
+    // Shell and raw collections are unchanged: existing anchors must not move.
+    for (const renderMode of [undefined, 'shell', 'raw'] as const) {
+      expect(canonicalDocument({ ...base, renderMode }, data).get('page')!.text).toBe('Head title Report Revenue grew 12%.');
+    }
+  });
+});
+
 describe('locateQuote', () => {
   const text = 'the cat sat. the cat ran. the dog sat.';
 

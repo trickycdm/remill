@@ -41,8 +41,8 @@ closes one of those, or a class like it. New code must comply; fix violations as
   revocable, not a one-time secret). Resolution returns the same null for unknown/expired/revoked (no
   enumeration oracle), and consumption still runs through `authorize()` — the token is a credential,
   not a bypass. Minting is gated per document by the `share_link` action (D26) — separately grantable,
-  NOT agent-refused — so an agent may mint expiring read-only links when a human grants it that
-  capability; identity/role/token mutations (`assignRole`, `issueToken`, `updateTokenScope`, `createUser`,
+  NOT agent-refused — so an agent may mint expiring links when a human grants it that
+  capability: read-only, or review links (read + comment, D61) when it also holds `comment`; identity/role/token mutations (`assignRole`, `issueToken`, `updateTokenScope`, `createUser`,
   `createAgent`, `renameAgent`, `setAgentDisabled`, `deleteAgent`, team CRUD) still refuse agents. Rotating `SESSION_SECRET` makes existing links un-copyable (decrypt
   fails, `url` comes back null) without breaking them — the hash-based lookup is untouched — and, as
   before (D51), invalidates every outstanding `/s/:token` unlock cookie.
@@ -219,6 +219,22 @@ onto the record — any field an attacker named got written. remill's fix, from 
   permission only** (field-level access remains reserved, v1) — the field is writable over
   REST/MCP **by design**, so scope html-bearing collections to trusted roles. Do not add a third
   exception without a decision-log entry.
+- **Frame mode (D60) is how an `html` page should be shown whenever its author is not fully
+  trusted with the viewer's session** — an agent, or anyone when an admin will open the page. In
+  `renderMode: 'frame'` the html never reaches a remill-origin DOM: it is served from
+  `/frame/:ticket` into an `<iframe sandbox>` without `allow-same-origin` (an opaque origin — no
+  cookies, no storage, no API calls as the viewer). **Never add `allow-same-origin` or
+  `allow-top-navigation` to `FRAME_SANDBOX_TOKENS`**, and never inline a frame-mode page into a
+  shell or admin DOM. The frame CSP's `connect-src 'none'` is defence in depth, not an
+  exfiltration boundary (images and popups still leave), so D25's trusted-author rule still
+  governs who may write the field.
+- **Messages from a framed page are untrusted input (D60).** The frame bridge shares its window
+  with the author's scripts, which can send anything the bridge can. The shell accepts a message
+  only when `event.source` is its own iframe AND `parseFrameMessage` (`src/lib/frame/messages.ts`)
+  rebuilds it from one of the known, size-bounded shapes. A frame message may propose an anchor or
+  ask to focus a thread — never post, navigate, or carry markup (quotes are written with
+  `textContent`). Add a message type only by extending that parser and its tests; never act on
+  `event.data` directly, and never send the frame anything but thread ids and quotes of its own text.
 - **Review comments (D55) are plain text on every surface** — stored raw, rendered through JSX
   escaping (`whitespace-pre-wrap` for line breaks), never markdown or HTML: review links make them
   the one anonymous write surface, so they get no markup path at all.
@@ -228,7 +244,10 @@ onto the record — any field an attacker named got written. remill's fix, from 
 
 ## 8. Response headers & abuse controls
 
-- Set security headers on all responses: `Strict-Transport-Security`, `X-Frame-Options: DENY`,
+- Set security headers on all responses: `Strict-Transport-Security`, `X-Frame-Options: DENY`
+  (**one exception, D60:** `/frame/:ticket` answers `frame-ancestors 'self'` with no
+  `X-Frame-Options`, because its only purpose is to be framed by remill's own viewer shell; it
+  carries the frame policy from `src/lib/frame/policy.ts` instead — see below),
   `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a
   Content-Security-Policy. The real policy (`src/middleware/security-headers.ts`) is
   `script-src 'self' 'unsafe-inline' 'unsafe-eval'`. **`'unsafe-eval'` is a required, justified
@@ -237,6 +256,13 @@ onto the record — any field an attacker named got written. remill's fix, from 
   covers the theme-init snippet and the `data-signals` bootstrap. Datastar is **vendored same-origin
   (`'self'`), not loaded from a CDN.** `style-src 'self' 'unsafe-inline'` covers Tailwind; media serving
   uses `img-src 'self' data:` (publicRead assets are additionally designed for cross-origin embedding).
+- **Framed content has its own policy (D60).** `/frame/:ticket` is dispatched BEFORE the
+  protected/public split and answers with `frameResponseHeaders()` (`src/lib/frame/policy.ts`):
+  the frame CSP (exact-host allowlists, `connect-src 'none'`, `frame-ancestors 'self'`, and a
+  `sandbox` directive matching the iframe attribute), `Cache-Control: private, no-store`,
+  `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer` (the ticket is in the URL). The policy
+  is keyed to the REQUEST origin, never the admin-editable site URL. Change what a framed page
+  may load in that one module — it is the single source for headers and publish-time warnings.
 - **The CSP is forked per surface (D27)** in `src/middleware/security-headers.ts`:
   `PROTECTED_PREFIXES` (`/admin`, `/api`, `/mcp`, `/auth`, `/media`) always get the strict policy;
   public paths widen `script-src` to exactly `https://cdn.jsdelivr.net` + `https://unpkg.com` and

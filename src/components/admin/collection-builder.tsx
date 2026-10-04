@@ -100,7 +100,13 @@ function parseOptions(body: RawBody, i: number): SelectOption[] {
  * service rejects it (the select config requires ≥1 option) — honest feedback,
  * not the old dummy `{ value: 'option' }` seed that produced an unusable field.
  */
-export function parseCollectionForm(body: RawBody): CollectionDefinition {
+export function parseCollectionForm(body: RawBody, existing?: CollectionDefinition): CollectionDefinition {
+  // What the form cannot express must survive a save: the builder has no
+  // control for `template`/`bind`, for field `admin` hints, or for any field
+  // config beyond select options and relation targets. Editing a collection
+  // carries those over from the stored definition (per field: same key AND
+  // type) instead of silently stripping them.
+  const prior = (key: string, type: string) => existing?.fields.find((f) => f.key === key && f.type === type);
   const fields: FieldDescriptor[] = [];
   for (let i = 0; `field_${i}_key` in body; i++) {
     const key = firstString(body[`field_${i}_key`]).trim();
@@ -119,7 +125,8 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
           ? { options: parseOptions(body, i) }
           : type === 'relation'
             ? parseRelationConfig(body, i)
-            : undefined,
+            : prior(key, type)?.config,
+      admin: prior(key, type)?.admin,
     });
   }
 
@@ -142,12 +149,32 @@ export function parseCollectionForm(body: RawBody): CollectionDefinition {
           : undefined,
     access:
       visibility === 'public'
-        ? { publicRead: true }
+        ? // No control for `defaultVisibility` (D62) — carried over, like template.
+          { publicRead: true, ...(existing?.access?.defaultVisibility ? { defaultVisibility: existing.access.defaultVisibility } : {}) }
         : visibility === 'private'
           ? { private: true }
           : undefined,
-    renderMode: firstString(body.render_mode) === 'raw' ? 'raw' : undefined,
+    renderMode: renderModeOf(firstString(body.render_mode)),
+    template: existing?.template,
+    bind: carriedBind(existing?.bind, fields),
   };
+}
+
+/** The stored `bind`, minus any slot whose field this save removed — a dangling
+ *  binding would be rejected by the service with no control here to fix it. */
+function carriedBind(
+  bind: CollectionDefinition['bind'],
+  fields: readonly FieldDescriptor[],
+): CollectionDefinition['bind'] {
+  if (!bind) return undefined;
+  const kept = Object.entries(bind).filter(([, key]) => fields.some((f) => f.key === key));
+  return kept.length ? (Object.fromEntries(kept) as CollectionDefinition['bind']) : undefined;
+}
+
+/** The render-mode select's value → the definition's `renderMode` (shell is the
+ *  default, stored as absent). */
+function renderModeOf(value: string): CollectionDefinition['renderMode'] {
+  return value === 'raw' || value === 'frame' ? value : undefined;
 }
 
 /** The builder's 3-way lifecycle value for an existing definition. */
@@ -527,11 +554,14 @@ export function CollectionBuilder({
           <FormField
             fieldId="col-render-mode"
             label="Public rendering"
-            description="Branded page renders inside the site shell; raw HTML serves the first html field as a standalone document."
+            description="Branded page renders inside the site shell. Framed page shows the first html field in a sandboxed frame with remill's viewer around it. Raw HTML serves that field as a standalone document."
           >
             <Select id="col-render-mode" name="render_mode">
-              <option value="shell" selected={def?.renderMode !== 'raw'}>
+              <option value="shell" selected={(def?.renderMode ?? 'shell') === 'shell'}>
                 Branded page (shell)
+              </option>
+              <option value="frame" selected={def?.renderMode === 'frame'}>
+                Framed page
               </option>
               <option value="raw" selected={def?.renderMode === 'raw'}>
                 Raw HTML page

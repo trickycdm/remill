@@ -42,8 +42,8 @@
    `anonymous`. A role holds permission rows `(collection | *, action, condition?)`.
    - **Closed action vocabulary**: `read, create, update, delete, publish, share_link, comment,
      manage_schema, manage_access`. `share_link` (D26) is the narrow right to mint an anonymous,
-     expiring, read-only share link for a document — held by `admin`/`editor` system roles by
-     default. `comment` (D55) is the right to read and write a document's review threads — held by
+     expiring share link for a document — read-only, or (D61) a review link when the minter also
+     holds `comment` on it — held by `admin`/`editor` system roles by default. `comment` (D55) is the right to read and write a document's review threads — held by
      `admin`/`editor`, and by `author` on their own documents (`own`). Reading and resolving
      threads ALSO admits `update` on the document (D56 — whoever may edit the text may see and
      close the feedback on it); posting and replying need `comment`. The comments service's
@@ -220,9 +220,12 @@ code. The audit log is itself readable only with `manage_access`.
   `createAgent`, `renameAgent`, `setAgentDisabled`, `deleteAgent`, and all team CRUD/membership/invite operations
   are `refuseAgentEscalation`-guarded; granting an agent
   `manage_access` requires a human decision recorded in the audit log. The one deliberate
-  carve-out is `share_link` (D26): minting an expiring read-only link on a single document is a
-  separately grantable action a human MAY hand to an agent — it is not escalation, because the
-  link never grants more than that one document's read.
+  carve-out is `share_link` (D26): minting an expiring link on a single document is a separately
+  grantable action a human MAY hand to an agent — it is not escalation, because the link never
+  grants more than the minter itself holds on that one document: `read`, or `read` + `comment`
+  for a review link (D61 — `createReviewLink` authorizes `comment` as well as `share_link`). A
+  link can never carry `update`, `delete`, `publish` or any management action, and one minted
+  over REST/MCP always expires within 30 days (`mintApiShareLink`).
 - **SEC-8, refined for OAuth (D48): issuance authority is always a recorded human consent.** The
   OAuth token endpoint mints `rmo_` access tokens *without a human in-flight* — that is NOT a
   violation, because the **privilege decision** already happened at the consent screen
@@ -253,6 +256,14 @@ code. The audit log is itself readable only with `manage_access`.
   need: `getSettings()` reads the `settings` singleton's non-sensitive display fields via a witness-free
   query (mirroring `collectionPublicRead`). WRITES to settings still run the full `authorize()`-gated
   document pipeline. Do not widen this to document content.
+- **A frame ticket carries identity, never access (D60).** The viewer shell signs a short-lived
+  ticket naming the document, the revision and the viewer it just authorized a read for; the
+  cookieless `/frame/:ticket` route rebuilds that principal (`principalOf` in `src/services/frame/`
+  — a session user, a share-link reader with `linkId`, or anonymous) and calls `getDocument`, i.e.
+  the full `authorize()` read with its audit row. Nothing is ever read on the strength of the
+  signature alone, so revoking a link or a role takes effect on the next frame load. Past
+  revisions additionally require `update` (`getRevisionData`). If you add a viewer kind, add it to
+  the ticket AND to `principalOf` — never a branch that skips `authorize()`.
 - **Trash (D29): `delete` on the collection gates the whole surface** — who can delete can list,
   restore, and destroy those snapshots; no new action. Listing compiles the caller's own/published
   delete-conditions into the query (`TrashScope`, mirroring `compileReadFilter` — never post-filter);

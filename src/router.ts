@@ -14,6 +14,7 @@ import * as s_token_review_comments_commentId_replies from './routes/s/[token]/r
 import * as admin_account_passkeys_id_delete from './routes/admin/account/passkeys/[id]/delete';
 import * as admin_account_passkeys_id_rename from './routes/admin/account/passkeys/[id]/rename';
 import * as admin_c_collection_id_delete from './routes/admin/c/[collection]/[id]/delete';
+import * as admin_c_collection_id_download from './routes/admin/c/[collection]/[id]/download';
 import * as admin_c_collection_id_publish from './routes/admin/c/[collection]/[id]/publish';
 import * as admin_c_collection_id_restore from './routes/admin/c/[collection]/[id]/restore';
 import * as admin_c_collection_id_revisions from './routes/admin/c/[collection]/[id]/revisions';
@@ -70,6 +71,7 @@ import * as admin_settings_rebuild_search from './routes/admin/settings/rebuild-
 import * as admin_settings_snapshot from './routes/admin/settings/snapshot';
 import * as api_c_collection_index from './routes/api/c/[collection]';
 import * as api_collections_slug from './routes/api/collections/[slug]';
+import * as api_pages_id from './routes/api/pages/[id]';
 import * as api_trash_id_index from './routes/api/trash/[id]';
 import * as auth_join_token from './routes/auth/join/[token]';
 import * as auth_set_password_token from './routes/auth/set-password/[token]';
@@ -95,8 +97,10 @@ import * as api_events_index from './routes/api/events';
 import * as api_me_index from './routes/api/me';
 import * as api_media from './routes/api/media';
 import * as api_packs_index from './routes/api/packs';
+import * as api_pages_index from './routes/api/pages';
 import * as api_templates_index from './routes/api/templates';
 import * as api_trash_index from './routes/api/trash';
+import * as frame_ticket from './routes/frame/[ticket]';
 import * as media_id_index from './routes/media/[id]';
 import * as oauth_authorize_index from './routes/oauth/authorize';
 import * as oauth_device_index from './routes/oauth/device';
@@ -124,6 +128,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/account/passkeys/:id/delete', ...admin_account_passkeys_id_delete.onRequestPost);
 	app.post('/admin/account/passkeys/:id/rename', ...admin_account_passkeys_id_rename.onRequestPost);
 	app.post('/admin/c/:collection/:id/delete', ...admin_c_collection_id_delete.onRequestPost);
+	app.get('/admin/c/:collection/:id/download', ...admin_c_collection_id_download.onRequestGet);
 	app.post('/admin/c/:collection/:id/publish', ...admin_c_collection_id_publish.onRequestPost);
 	app.post('/admin/c/:collection/:id/restore', ...admin_c_collection_id_restore.onRequestPost);
 	app.get('/admin/c/:collection/:id/revisions', ...admin_c_collection_id_revisions.onRequestGet);
@@ -197,6 +202,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/api/c/:collection', ...api_c_collection_index.onRequestPost);
 	app.get('/api/collections/:slug', ...api_collections_slug.onRequestGet);
 	app.patch('/api/collections/:slug', ...api_collections_slug.onRequestPatch);
+	app.put('/api/pages/:id', ...api_pages_id.onRequestPut);
 	app.delete('/api/trash/:id', ...api_trash_id_index.onRequestDelete);
 	app.get('/auth/join/:token', ...auth_join_token.onRequestGet);
 	app.post('/auth/join/:token', ...auth_join_token.onRequestPost);
@@ -228,8 +234,10 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.get('/api/me', ...api_me_index.onRequestGet);
 	app.post('/api/media', ...api_media.onRequestPost);
 	app.get('/api/packs', ...api_packs_index.onRequestGet);
+	app.post('/api/pages', ...api_pages_index.onRequestPost);
 	app.get('/api/templates', ...api_templates_index.onRequestGet);
 	app.get('/api/trash', ...api_trash_index.onRequestGet);
+	app.get('/frame/:ticket', ...frame_ticket.onRequestGet);
 	app.get('/media/:id', ...media_id_index.onRequestGet);
 	app.get('/oauth/authorize', ...oauth_authorize_index.onRequestGet);
 	app.post('/oauth/authorize', ...oauth_authorize_index.onRequestPost);

@@ -10,7 +10,7 @@ import { createDocument } from '@/services/documents';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
-import { AdminShell } from '@/components/layouts/admin-shell';
+import { AdminShell, navKeyForCollection } from '@/components/layouts/admin-shell';
 import { PageHeader } from '@/components/ui';
 import { GeneratedForm } from '@/components/admin/generated';
 import { EditorSidebar, MobileSaveBar } from '@/components/admin/editor-sidebar';
@@ -25,7 +25,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const def = await getCollectionOrThrow(getDb(c.env.DB), slug);
 
   return c.render(
-    <AdminShell user={user} current="content">
+    <AdminShell user={user} current={navKeyForCollection(slug)}>
       {/* Editor islands (D38) — Scripts live in ROUTE files (vite-ssr-components
           only discovers them here + layouts.tsx, never in shared components). */}
       <Script src="/src/client/markdown-editor.ts" />

@@ -12,7 +12,7 @@ import {
 } from '@/services/documents';
 import { getCollectionOrThrow } from '@/services/collections';
 import { getSettings } from '@/services/settings';
-import { publicUrlOf } from '@/lib/def-helpers';
+import { publicUrlOf, titleOf, effectiveVisibility } from '@/lib/def-helpers';
 import { buildDocumentHead } from '@/lib/seo';
 import { resolveBaseUrl } from '@/lib/base-url';
 import { readingTimeMinutes } from '@/lib/reading-time';
@@ -24,6 +24,10 @@ import { DocumentView, rawPageHtml } from '@/components/document-view';
 import { Script } from 'vite-ssr-components/hono';
 import { hasAnnotatableFields } from '@/services/comments';
 import { principalPanel } from '@/lib/review-http';
+import { ViewerShell } from '@/components/layouts/viewer-shell';
+import { framePageHtml } from '@/lib/frame/document';
+import { mintFrameSrc } from '@/services/frame';
+import { Button } from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -79,7 +83,8 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     // security headers middleware still applies.
     const raw = rawPageHtml(def, doc);
     if (raw !== null) return c.html(raw);
-    const backlinks = await getBacklinks(db, principal, collection, doc.id, now);
+    const framed = framePageHtml(def, doc.data) !== null;
+    const backlinks = framed ? [] : await getBacklinks(db, principal, collection, doc.id, now);
 
     // Per-page head (D36): full title composed HERE (the layout does no DB
     // reads); canonical is the slug-or-id public URL; og:image resolves from
@@ -108,6 +113,35 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       indexable,
       template: def.template,
     });
+
+    // Frame mode (D60): the page renders in the viewer shell's sandboxed
+    // iframe, with the document's own head (title, OG, canonical) on the shell.
+    // The ticket names the SAME principal this request read with — anonymous,
+    // or the session user in preview — so the content read re-checks it. Never
+    // cacheable: the ticket is short-lived.
+    if (framed) {
+      c.header('Cache-Control', 'no-store');
+      return c.render(
+        <ViewerShell
+          title={titleOf(def, doc)}
+          frameSrc={await mintFrameSrc(c.env.SESSION_SECRET, principal, doc.id, now)}
+          home={
+            preview
+              ? { href: `/admin/c/${collection}`, label: `Back to ${def.name}` }
+              : { href: '/', label: `${settings.siteName?.trim() || 'remill'} home` }
+          }
+          visibility={preview ? effectiveVisibility(def, doc) : undefined}
+          actions={
+            preview ? (
+              <Button href={`/admin/c/${collection}/${doc.id}`} variant="secondary" size="sm">
+                Edit
+              </Button>
+            ) : undefined
+          }
+        />,
+        head,
+      );
+    }
 
     // A registered template renders the reading layout; otherwise the generic
     // shell (DocumentView). `renderMode: 'raw'` already short-circuited above.

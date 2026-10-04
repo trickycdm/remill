@@ -273,3 +273,17 @@ holds a Lucide-derived set (24×24 stroke, `currentColor`); each icon is a typed
 in the adjacent text or the button's `aria-label`. Add an icon by pasting its Lucide
 path data into a new exported function; wire status/nav icons through props, never a
 runtime icon-name lookup.
+
+## Lessons from the framed viewer (D60)
+
+- **Never butt a Tailwind class against `${` in a template literal.** `` `lg:flex-row${on ? ' x' : ''}` ``
+  makes the scanner read `lg:flex-row${on` as the candidate, so `lg:flex-row` is never generated and
+  the layout silently stays in its base form. Join conditional classes with `cx(...)`. (It shipped a
+  zero-height iframe that every DOM-only assertion passed; a bounding-box check caught it.)
+- **A scroll container that holds `sr-only` labels must be positioned.** `sr-only` is
+  `position: absolute`; inside a `position: static` scroller its containing block is the page, so
+  each hidden label stretches the DOCUMENT height instead of scrolling with the panel.
+- **Assert geometry for layout shells.** For a full-viewport shell, check the main regions'
+  bounding boxes and `scrollWidth/scrollHeight <= clientWidth/clientHeight`; visibility and text
+  assertions pass on a collapsed or overflowing layout.
+

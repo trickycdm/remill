@@ -145,8 +145,18 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   action (import must not bypass "agent drafts, human publishes"). The header's def slug must
   match the target; import NEVER mutates the definition. `?dryRun=1` validates without writing.
   Response `{created, updated, failed, errors:[{line, id?, error}]}` — per-line errors, the run
-  never aborts. Body-cap table: REST JSON 1 MiB · /mcp 8 MiB · import 10 MiB · media multipart
-  25 MiB (service cap).
+  never aborts. Body-cap table: REST JSON 1 MiB · /mcp 8 MiB · import 10 MiB · `/api/pages`
+  2 MiB (checked on the real byte length, `textBody`) · media multipart 25 MiB (service cap).
+  Independently, a stored document may not exceed `MAX_DOCUMENT_BYTES` (1.8 MB of JSON, D62).
+- **Pages (D62)**: `POST /api/pages` and `PUT /api/pages/:id` publish a standalone HTML page into
+  the built-in pages collection. Two body forms: `text/html` (the body is the page; `title`,
+  `description`, comma-separated `tags` in the query — and NO share, because a link password must
+  never ride a URL) or `application/json` (the same object as the MCP `publish_page` tool,
+  `share` included). `If-Match` / `expectedRevision` on PUT (D54). Response
+  `{id, url, title, revision, visibility, share, warnings}`; `warnings` come from
+  `analyzeFramedHtml`, which reads the same allowlists as the frame CSP. Both routes and the tool
+  call `publishPage` (services/pages), which itself only composes `createDocument` /
+  `updateDocument` / `mintApiShareLink` — it must never grow a rule of its own.
 - **Visibility (D50)**: `POST /api/c/:collection/:id/visibility` with body `{visibility: 'public' |
   'unlisted' | 'private'}`. Publish-gated (changing a document's exposure is a publication
   decision), allowed on drafts (remembered, takes effect on publish). Document payloads in
@@ -223,6 +233,10 @@ tokens** as REST.
     service: authorize every target slug FIRST (no conflict-vs-forbidden existence oracle), then
     pre-flight all slugs (all-or-nothing), then loop `createCollection`.
   - Teams: `list_teams` (visible only with `manage_access`).
+  - Pages: `publish_page` (D62 — one call to publish or revise a standalone HTML page, optionally
+    minting a share or review link; offered when the caller could `create` or `update` in the
+    built-in pages collection). Static tools are registered BEFORE the generated ones and the tool
+    list is de-duplicated by name (first wins), so a collection can never shadow a static tool.
   - Media: `list_media`, `get_media_url`, and `upload_media` (D34 — base64, create-gated,
     offered only when the route threads the R2 bucket via `McpToolContext`; reuses the REST
     upload service verbatim: MIME sniffed from bytes, 25 MiB service cap, alt required for
@@ -243,8 +257,12 @@ tokens** as REST.
     declared (no push channel; clients poll).
 - **`share_link_<slug>` (D26/D51)** mints an anonymous share link for one document. Visibility and
   gating key on the `share_link` action — not `manage_access`, and not agent-refused. The grant is
-  read-only (`actions: ['read']` hardcoded); `expiresAt` is REQUIRED and clamped to 30 days; the
-  tool returns `{ grantId, url, expiresAt, hasPassword, label }`. Optional `password` (min 8 chars,
+  read-only by default; an optional `review: { mode?, reviewer? }` makes it a REVIEW link (read +
+  comment, D61), which also requires the caller's `comment` on the document and a collection whose
+  pages render the comment panel (not raw mode). `expiresAt` is REQUIRED and clamped to 30 days;
+  the tool returns `{ grantId, url, expiresAt, hasPassword, label, review }`. The tool and REST
+  `POST …/share-links` both call `mintApiShareLink` (services/sharing) — add a rule there, never
+  in one surface. Optional `password` (min 8 chars,
   hashed, never echoed back) and `label` (trimmed, max 80 chars) args, D51. The plaintext URL
   **intentionally enters agent context** — the grant is revocable at any time from the Share panel
   or the access matrix; a password (delivered out of band) still gates the human recipient.

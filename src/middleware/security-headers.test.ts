@@ -63,6 +63,34 @@ describe('security headers (D27) — per-surface CSP fork + CDN toggle', () => {
     }
   });
 
+  it('framed content (D60) is the ONE surface without frame-ancestors none / XFO DENY', async () => {
+    const res = await app.request('/frame/not-a-ticket', {}, env);
+    const csp = res.headers.get('content-security-policy') ?? '';
+    expect(csp).toContain("frame-ancestors 'self'");
+    expect(csp).toContain('sandbox allow-scripts');
+    expect(csp).not.toContain('allow-same-origin');
+    expect(res.headers.get('x-frame-options')).toBeNull();
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+
+    // Everything else still refuses to be framed — including a path that only
+    // LOOKS like the frame prefix.
+    for (const path of [
+      '/',
+      '/nope/nope',
+      '/s/rms_bogus',
+      '/admin/login',
+      '/api/collections',
+      '/frame',
+      '/framed/x',
+    ]) {
+      const other = await app.request(path, {}, env);
+      expect(other.headers.get('x-frame-options'), path).toBe('DENY');
+      expect(other.headers.get('content-security-policy') ?? '', path).toContain(
+        "frame-ancestors 'none'",
+      );
+    }
+  });
+
   it('non-CSP headers ride along on both surfaces', async () => {
     const res = await app.request('/nope/nope', {}, env);
     expect(res.headers.get('x-frame-options')).toBe('DENY');

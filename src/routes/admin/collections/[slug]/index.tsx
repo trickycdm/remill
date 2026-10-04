@@ -70,9 +70,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
   const slug = pathParam(c, 'slug');
   const body = await c.req.parseBody();
-  const def = parseCollectionForm(body);
+  const db = getDb(c.env.DB);
+  const def = parseCollectionForm(body, await getCollectionOrThrow(db, slug));
   try {
-    await updateCollection(getDb(c.env.DB), requirePrincipal(c), slug, def, nowIso(), {
+    await updateCollection(db, requirePrincipal(c), slug, def, nowIso(), {
       onEnablePublic: parseOnEnablePublic(body.on_enable_public),
     });
     return dsRedirect(c, `/admin/collections/${slug}`);

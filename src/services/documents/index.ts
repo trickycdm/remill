@@ -53,6 +53,7 @@ import {
   StaleRevisionError,
   BadRequestError,
   ForbiddenError,
+  AppError,
   type ErrorDetails,
 } from '@/lib/errors';
 import { VISIBILITIES, type DocumentRecord, type Visibility } from '@/db/queries/documents';
@@ -997,6 +998,19 @@ export async function listRevisions(
   return dq.listRevisions(db, id, grant);
 }
 
+/** Revision history without the data (number, author, time), newest first —
+ *  the framed viewer's Versions list (D60). Read-gated like `listRevisions`. */
+export async function listRevisionMeta(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  now: string,
+) {
+  const grant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  return dq.listRevisionMeta(db, id, grant);
+}
+
 // ---------------------------------------------------------------------------
 // Write
 // ---------------------------------------------------------------------------
@@ -1015,6 +1029,28 @@ export interface CreateOverrides {
 
 const DOC_ID_RE = /^doc_[A-Za-z0-9_-]+$/;
 
+/**
+ * The largest document a save will accept, in BYTES of its stored JSON. D1
+ * refuses any row or bound value over 2,000,000 bytes, and every save writes
+ * the data twice (the document row and its revision) — so an over-large
+ * document would otherwise fail deep in the batch as an opaque database
+ * error. Field `maxLength`s count characters, not bytes, and a megabyte html
+ * page plus its other fields can cross the line; this is the honest refusal.
+ */
+export const MAX_DOCUMENT_BYTES = 1_800_000;
+
+function assertStorable(data: Record<string, unknown>): void {
+  const bytes = new TextEncoder().encode(JSON.stringify(data)).length;
+  if (bytes > MAX_DOCUMENT_BYTES) {
+    throw new AppError(
+      `Document data is ${bytes} bytes; the limit is ${MAX_DOCUMENT_BYTES}`,
+      413,
+      'PAYLOAD_TOO_LARGE',
+      'This document is too large to save. Large images belong in the media library, referenced by URL.',
+    );
+  }
+}
+
 export async function createDocument(
   db: Database,
   principal: Principal,
@@ -1028,7 +1064,11 @@ export async function createDocument(
 
   const validated = whitelistAndValidate(def, input);
   const data = await runTransforms(def, validated, principal.id, now, true);
+  assertStorable(data);
   await checkUnique(db, def, data);
+  // A publicRead collection may make its documents private (or unlisted) until
+  // someone opts one in (D62); an import's preserved visibility still wins.
+  const visibility = overrides?.visibility ?? def.access?.defaultVisibility;
 
   if (overrides?.id !== undefined && !DOC_ID_RE.test(overrides.id)) {
     throw new InputValidationError([
@@ -1050,7 +1090,7 @@ export async function createDocument(
         now,
         createdAt: overrides?.createdAt,
         publishedAt,
-        visibility: overrides?.visibility,
+        visibility,
         index: buildIndex(def, data),
         search: buildSearchText(def, data),
         event: {
@@ -1079,7 +1119,7 @@ export async function createDocument(
     updatedAt: now,
     publishedAt,
     publishAt: null,
-    visibility: overrides?.visibility ?? 'public',
+    visibility: visibility ?? 'public',
     revision: 1,
   };
 }
@@ -1155,6 +1195,7 @@ export async function updateDocument(
   const merged = { ...declaredOnly(def, existing.data), ...whitelistOnly(def, input) };
   const validated = whitelistAndValidate(def, merged);
   const data = await runTransforms(def, validated, principal.id, now, false);
+  assertStorable(data);
   await checkUnique(db, def, data, id);
 
   try {
@@ -1581,10 +1622,28 @@ export async function restoreRevision(
     { collection: collectionSlug, documentId: id },
     now,
   );
-  const revs = await dq.listRevisions(db, id, readGrant);
-  const target = revs.find((r) => r.revision === revision);
+  const target = await dq.getRevision(db, id, revision, readGrant);
   if (!target) throw new NotFoundError(`Revision ${revision}`);
   return updateDocument(db, principal, collectionSlug, id, target.data, now, opts);
+}
+
+/**
+ * ONE past revision's data (D60 — the framed viewer's "view this version").
+ * Gated on `update`, not `read`: history can hold text an editor deliberately
+ * removed, so a reader — or a share link — sees only the current document.
+ */
+export async function getRevisionData(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  revision: number,
+  now: string,
+): Promise<Record<string, unknown>> {
+  const grant = await authorize(db, principal, 'update', { collection: collectionSlug, documentId: id }, now);
+  const target = await dq.getRevision(db, id, revision, grant);
+  if (!target) throw new NotFoundError(`Revision ${revision}`);
+  return target.data;
 }
 
 // ---------------------------------------------------------------------------

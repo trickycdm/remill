@@ -46,11 +46,22 @@ FieldType contract against all six surfaces before merging.
   stays load-bearing in the access layer (the `published` condition, publicRead sugar), which is
   exactly why lifecycle-none docs must be born published. Gate on `hasLifecycle(def)`
   (`src/lib/lifecycle.ts`) — never re-derive the rule. `none` + `draftPublish` is rejected on write.
-- **Render mode (D27).** `renderMode: 'shell' | 'raw'` picks the public render for the collection:
-  `shell` (default) wraps `document-view` in the public shell; `raw` serves the **first** `html`
-  field's value verbatim as the whole page (`rawPageHtml(def, doc)`, bypassing the layout) on
-  `/:collection/:slug` and `/s/:token` alike. Validated on write — `raw` requires at least one
-  `html` field — and an empty value falls back to shell rendering.
+- **Default visibility (D62).** `access.defaultVisibility` (`public` | `unlisted` | `private`) is the
+  visibility a NEW document is born with on a `publicRead` collection; absent = `public`. It is
+  rejected without `publicRead` (there every document is private whatever is stored, D57). An
+  import's preserved visibility still wins. The collection builder has no control for it and
+  carries it over on save.
+- **Render mode (D27, D60).** `renderMode: 'shell' | 'raw' | 'frame'` picks the render for the
+  collection: `shell` (default) wraps `document-view` in the public shell; `raw` serves the
+  **first** `html` field's value verbatim as the whole page (`rawPageHtml(def, doc)`, bypassing the
+  layout) on `/:collection/:slug` and `/s/:token` alike; `frame` shows that same field in a
+  sandboxed iframe inside `ViewerShell` (`framePageHtml(def, data)` + `mintFrameSrc`) on those two
+  routes AND on the admin view, so the author's scripts never run on remill's origin. Validated on
+  write — `raw` and `frame` require at least one `html` field — and an empty value falls back to
+  shell rendering. Prefer `frame` for anything an agent writes or anyone comments on; keep `raw`
+  for public sites that must be indexed as their own page. The column's CHECK lists the modes: a
+  new mode is a column-swap migration (0019 is the precedent), **never a rebuild of `collections`**
+  — dropping it would cascade away every document.
 - **Render template (D41).** Beside `renderMode`, an optional `template` key selects a purpose-built
   READING layout from the registry (`src/templates/`) for the shell-rendered public page — the code
   side of the render surface (templates are CODE; the key is DATA — the field-registry grain applied
@@ -170,7 +181,7 @@ Rules:
   ],
   "workflow": { "draftPublish": true },     // declarative behaviors, not code hooks
   "access": { "publicRead": true },         // publicRead XOR private (D46) — anon read vs hide-from-discovery
-  "renderMode": "shell"                     // 'shell' (default) | 'raw' — see render mode (D27)
+  "renderMode": "shell"                     // 'shell' (default) | 'raw' | 'frame' — see render mode (D27, D60)
 }
 ```
 
@@ -212,7 +223,10 @@ migrations are a post-v1 feature with their own design.
 ## Built-in collections (dogfooding)
 
 `settings` (singleton) and `media` metadata ride the schema engine as seeded, **protected**
-collections (cannot be deleted; slugs reserved). If the engine can't express its own system needs,
+collections (cannot be deleted; slugs reserved). `pages` (D62) is the third: standalone HTML pages in the
+framed viewer, born private (`access.defaultVisibility`). A built-in collection ships in seed.sql
+AND a migration (production never re-runs the seed) — the same row, guarded on the seeded
+`settings` row and `INSERT OR IGNORE`; `seed.test.ts` compares the two copies. If the engine can't express its own system needs,
 the engine is not good enough — fix the engine, don't special-case.
 
 ## How to add a field type

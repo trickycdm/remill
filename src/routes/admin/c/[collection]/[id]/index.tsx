@@ -23,7 +23,7 @@ import { canAuthorize } from '@/access';
 import { coerceAdminForm } from '@/lib/admin-form';
 import { nowIso } from '@/lib/now';
 import { dsRedirect } from '@/lib/datastar-response';
-import { AdminShell } from '@/components/layouts/admin-shell';
+import { AdminShell, navKeyForCollection } from '@/components/layouts/admin-shell';
 import { PageHeader, Button, Badge } from '@/components/ui';
 import { formatDate } from '@/lib/format-date';
 import { GeneratedForm } from '@/components/admin/generated';
@@ -106,7 +106,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
     : '—';
 
   return c.render(
-    <AdminShell user={user} current="content">
+    <AdminShell user={user} current={navKeyForCollection(slug)}>
       {/* Editor islands (D38) — Scripts live in ROUTE files (vite-ssr-components
           only discovers them here + layouts.tsx, never in shared components). */}
       <Script src="/src/client/markdown-editor.ts" />
