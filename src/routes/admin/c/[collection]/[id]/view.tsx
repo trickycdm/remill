@@ -10,7 +10,7 @@ import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Button } from '@/components/ui';
 import { DocumentView } from '@/components/document-view';
-import { publicUrlOf } from '@/lib/def-helpers';
+import { readingPageOf } from '@/lib/def-helpers';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -29,15 +29,10 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const doc = await getDocument(db, principal, slug, id, now);
   const backlinks = await getBacklinks(db, principal, slug, id, now);
 
-  // The public URL: `publicUrlOf` (D50-aware — the doc_ id URL for
-  // unlisted/private, the slug otherwise) live for published/public docs,
-  // `?preview=1` (D49, session principal) for anything unpublished OR
-  // private on a publicRead collection.
-  const isLive = doc.status === 'published';
-  const needsPreview = !isLive || doc.visibility === 'private';
-  const publicHref = def.access?.publicRead
-    ? `${publicUrlOf(def, doc, '')}${needsPreview ? '?preview=1' : ''}`
-    : undefined;
+  // The styled reading page, when the collection has one (`readingPageOf`:
+  // D50-aware URL, `?preview=1` — D49, session principal — for anything an
+  // anonymous reader can't open).
+  const readingPage = readingPageOf(def, doc);
 
   return c.render(
     <AdminShell user={user} current="content">
@@ -50,9 +45,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         title={`View ${def.name}`}
         actions={
           <div class="flex items-center gap-2">
-            {publicHref ? (
-              <Button href={publicHref} variant="ghost" size="sm">
-                {needsPreview ? 'Preview ↗' : 'Public page ↗'}
+            {readingPage ? (
+              <Button href={readingPage.href} variant="ghost" size="sm">
+                {readingPage.live ? 'Public page ↗' : 'Preview ↗'}
               </Button>
             ) : null}
             <Button href={`/admin/c/${slug}/${id}`} variant="secondary" size="sm">

@@ -61,6 +61,24 @@ export function publicUrlOf(def: CollectionDefinition, doc: DocLike, baseUrl: st
   return `${baseUrl}/${def.slug}/${encodeURIComponent(ref)}`;
 }
 
+/** The admin's link to a document's styled reading page, or `undefined` when
+ *  the collection has none worth linking: a `publicRead` collection always has
+ *  one; any other collection has one only when it selects a reading `template`
+ *  (otherwise the generic shell adds nothing over the internal View). `live`
+ *  is true when an anonymous reader can open `href`; when false the href
+ *  carries `?preview=1` (D49) so it renders through the session principal —
+ *  always the case off a `publicRead` collection. */
+export function readingPageOf(
+  def: CollectionDefinition,
+  doc: DocLike & { readonly status?: string },
+): { readonly href: string; readonly live: boolean } | undefined {
+  const publicRead = def.access?.publicRead === true;
+  if (!publicRead && !def.template) return undefined;
+  const live = publicRead && doc.status === 'published' && (doc.visibility ?? 'public') !== 'private';
+  const url = publicUrlOf(def, doc, '');
+  return { href: live ? url : `${url}?preview=1`, live };
+}
+
 /** Collapse whitespace and truncate to `max` chars (word-safe, `…` suffix) —
  *  the feed/OG description shape. Feed callers hand it `buildSearchText` body
  *  text; anything already short passes through unchanged. */
