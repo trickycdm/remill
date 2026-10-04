@@ -96,6 +96,12 @@ rendered public pages + share links.)
 > collection public while switching every other document to private in one batch;
 > `updateCollection` 409s any `publicRead` flip over non-private documents without
 > `onEnablePublic` (`private`|`keep`) — builder confirm step, REST query param, MCP arg.
+> **D58 built 2026-10-04** (plan: [`plans/2026-10-04-passkey_login/`](plans/2026-10-04-passkey_login/)):
+> **passkey login** — WebAuthn passkeys alongside passwords: add/rename/remove at `/admin/account`,
+> one-tap or autofill sign-in at `/admin/login` (`src/services/passkeys/`, tables `passkeys` +
+> `webauthn_challenges`, `@simplewebauthn/server` for verification, the `src/client/passkey.ts`
+> island, `src/lib/relying-party.ts`). Same session as a password login; single-use challenges,
+> user verification required, current password re-checked to enrol.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -117,7 +123,8 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **Drizzle ORM** + **Cloudflare D1** (SQLite) — for the **fixed** tables only; content is
   schema-as-data, so migrations stay rare.
 - **R2** — media originals, streamed with range support.
-- **hono-sessions** (encrypted cookie) + **scrypt** (`@noble/hashes`) for human auth; **bearer tokens**
+- **hono-sessions** (encrypted cookie) + **scrypt** (`@noble/hashes`) for human auth, plus
+  **passkeys** (WebAuthn via `@simplewebauthn/server`, D58); **bearer tokens**
   (hashed at rest, scope-masked) for machine auth (REST + MCP).
 - **MCP** — a direct streamable-HTTP JSON-RPC endpoint at `/mcp` (decision **D18**; not the
   `agents`-SDK `McpAgent`-on-a-Durable-Object once planned — that dep was removed).

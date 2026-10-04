@@ -52,7 +52,10 @@ enums; document FK cascade, reviewer FK set-null so a revoked reviewer's comment
 their `author_name` snapshot) and `review_reviewers` (grant FK cascade). A document's current
 revision is `MAX(document_revisions.revision)`, read by a correlated subquery on every document
 select and written as `existing.revision + 1`; the `(document_id, revision)` unique index is the
-optimistic-concurrency backstop (D54). **Dynamic content never alters this
+optimistic-concurrency backstop (D54). Passkeys (D58): `passkeys` (principal FK cascade, unique
+`credential_id`, public key only) and `webauthn_challenges` (the challenge is the primary key;
+CHECK-constrained `purpose`; rows are deleted on use and expired ones purged by the daily cron).
+**Dynamic content never alters this
 schema — that is the entire point.** Adding a content type is a row in `collections`, not a migration.
 
 ## `document_index` — the EAV compromise (decision D4)

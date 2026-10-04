@@ -246,7 +246,9 @@ code. The audit log is itself readable only with `manage_access`.
   authorization. `/admin/account` (a human editing their own profile/password) operates strictly on
   the session principal (`getUser(c).id`), **never a body-supplied id**, so there is no cross-principal
   access to gate. Editing *other* principals stays under `manage_access`. (Password change: verify the
-  current password first — SECURITY_STANDARDS §4.)
+  current password first — SECURITY_STANDARDS §4.) The same exemption covers a human's own passkeys
+  (D58 — add/rename/remove under `/admin/account/passkeys`): every query is scoped by the session
+  principal, so another person's passkey id is simply "not found".
 - **Un-gated reads are a narrow, explicit exception** for render-path config that non-readers still
   need: `getSettings()` reads the `settings` singleton's non-sensitive display fields via a witness-free
   query (mirroring `collectionPublicRead`). WRITES to settings still run the full `authorize()`-gated
