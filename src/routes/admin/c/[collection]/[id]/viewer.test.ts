@@ -192,14 +192,32 @@ describe('admin framed viewer (D60)', () => {
 
   it('offers review links only where a comment panel renders', async () => {
     const opts = { secret: env.SESSION_SECRET, baseUrl: 'http://test' };
-    expect((await getShareOverview(db, admin, PAGES, docId, opts, NOW)).reviewLinks).toBeNull();
-    expect(
-      (await getShareOverview(db, admin, { ...PAGES, renderMode: 'raw' }, docId, opts, NOW))
-        .reviewLinks,
-    ).toBeNull();
-    expect(
-      (await getShareOverview(db, admin, { ...PAGES, renderMode: 'shell' }, docId, opts, NOW))
-        .reviewLinks,
-    ).toEqual([]);
+    // Framed: the panel sits in the viewer shell beside the frame.
+    expect((await getShareOverview(db, admin, PAGES, docId, opts, NOW)).reviewLinks).toEqual([]);
+    expect((await getShareOverview(db, admin, { ...PAGES, renderMode: 'shell' }, docId, opts, NOW)).reviewLinks).toEqual([]);
+    // Raw: the author's bare document — nowhere for a panel.
+    expect((await getShareOverview(db, admin, { ...PAGES, renderMode: 'raw' }, docId, opts, NOW)).reviewLinks).toBeNull();
+  });
+
+  it('?review=1 docks the review panel beside a marked frame — on the current version only', async () => {
+    const plain = await (await get(`${base}/view`)).text();
+    expect(plain).not.toContain('data-rm-review');
+    expect(plain).not.toContain('data-rm-frame=');
+    expect(plain).toContain(`${base}/view?review=1`);
+
+    const reviewing = await (await get(`${base}/view?review=1`)).text();
+    expect(reviewing).toContain('data-rm-review');
+    expect(reviewing).toMatch(/<iframe[^>]+data-rm-frame[^>]+data-rm-field="html"/);
+    expect(reviewing).toContain('rm-viewer-review');
+
+    const past = await (await get(`${base}/view?rev=1&review=1`)).text();
+    expect(past).toContain('Version 1 of 2');
+    expect(past).not.toContain('data-rm-review');
+
+    // A reader (no `comment`) is offered nothing and gets the plain view.
+    const reader = await login('rae@remill.test', 'password1');
+    const asReader = await (await get(`${base}/view?review=1`, reader)).text();
+    expect(asReader).not.toContain('data-rm-review');
+    expect(asReader).not.toContain('?review=1');
   });
 });

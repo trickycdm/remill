@@ -25,7 +25,7 @@ import { Card, CardContent, Button, FormField, Input } from '@/components/ui';
 import { isReviewLink } from '@/services/comments';
 import { reviewerRequest, reviewerPanel } from '@/lib/review-http';
 import { ViewerShell } from '@/components/layouts/viewer-shell';
-import { framePageHtml } from '@/lib/frame/document';
+import { framePageHtml, pageFieldOf } from '@/lib/frame/document';
 import { mintFrameSrc } from '@/services/frame';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -151,12 +151,18 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       c.header('Cache-Control', 'private, no-store');
       const title = titleOf(def, doc);
       const reader = { ...anonymousPrincipal('rest'), linkId: grant.subjectId };
+      // A review link (D55) adds the review panel beside the frame.
+      const field = pageFieldOf(def);
+      const panel = isReviewLink(grant) && field ? await reviewerPanel(await reviewerRequest(c)) : null;
       return c.render(
         <ViewerShell
           title={title}
           frameSrc={await mintFrameSrc(c.env.SESSION_SECRET, reader, doc.id, now)}
           home={{ href: '/', label: `${settings.siteName?.trim() || 'remill'} home` }}
-        />,
+          review={panel && field ? { panel, field } : undefined}
+        >
+          {panel ? <Script src="/src/client/review.ts" /> : null}
+        </ViewerShell>,
         { title, bare: true, noindex: true },
       );
     }

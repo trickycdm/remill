@@ -4,8 +4,8 @@
  * the viewer's actions) and the author's document filling everything below it
  * in a sandboxed iframe. ONE shell for the admin view, a share link and the
  * public URL — what differs per surface is only what fills the slots: the
- * `actions` in the bar, an optional `notice` strip under it, and `children`
- * for the drawers those actions open.
+ * `actions` in the bar, an optional `notice` strip under it, the `review`
+ * panel beside the frame, and `children` for the drawers those actions open.
  *
  * The iframe is the security boundary: `sandbox` WITHOUT `allow-same-origin`
  * puts the author's scripts in an opaque origin, so nothing in the document can
@@ -16,6 +16,7 @@
  */
 
 import type { Visibility } from '@/lib/visibility';
+import { cx } from '@/components/ui/cx';
 import { Wordmark } from '@/components/ui/wordmark';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { ToastHost } from '@/components/ui/toast';
@@ -29,6 +30,7 @@ export function ViewerShell({
   visibility,
   actions,
   notice,
+  review,
   children,
 }: {
   title: string;
@@ -42,6 +44,10 @@ export function ViewerShell({
   actions?: unknown;
   /** A status strip between the bar and the document (e.g. "an old version"). */
   notice?: unknown;
+  /** Review mode (D55 on a framed page): the server-rendered review panel,
+   *  laid out beside the frame, and the page field the frame's text belongs
+   *  to. The caller also renders the review island's `<Script>`. */
+  review?: { readonly panel: unknown; readonly field: string };
   /** Drawers and dialogs the actions open. */
   children?: unknown;
 }) {
@@ -66,22 +72,29 @@ export function ViewerShell({
           <h1 class="min-w-0 truncate text-sm font-medium text-ink">{title}</h1>
           <VisibilityStamp visibility={visibility} />
         </div>
-        <div class="ml-auto flex shrink-0 items-center gap-1">
+        <div class="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">
           {actions}
           <ThemeToggle />
         </div>
       </header>
       {notice}
-      <main id="main-content" class="min-h-0 flex-1">
+      {/* Reviewing: the panel is a column beside the frame on wide screens and
+          a strip under it on narrow ones — never an overlay on the document. */}
+      <main id="main-content" class={cx('flex min-h-0 flex-1 flex-col lg:flex-row', review && 'rm-viewer-review')}>
         <iframe
           src={frameSrc}
           title={title}
           sandbox={FRAME_SANDBOX}
           referrerpolicy="no-referrer"
+          // The review island finds the frame by this marker and learns which
+          // field its text is (src/client/review.ts).
+          data-rm-frame={review ? '' : undefined}
+          data-rm-field={review?.field}
           // White, not a theme token: this is the DOCUMENT's canvas, and a page
           // that sets no background expects the browser default in both themes.
-          class="block size-full border-0 bg-white"
+          class="block min-h-0 w-full flex-1 border-0 bg-white"
         />
+        {review?.panel}
       </main>
       {children}
       {/* Surfaces `dsError` toasts from the drawers' Datastar posts. */}

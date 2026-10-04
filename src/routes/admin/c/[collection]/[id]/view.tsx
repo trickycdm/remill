@@ -12,7 +12,10 @@ import { PageHeader, Button } from '@/components/ui';
 import { DocumentView } from '@/components/document-view';
 import { readingPageOf, titleOf, effectiveVisibility } from '@/lib/def-helpers';
 import { ViewerShell } from '@/components/layouts/viewer-shell';
-import { framePageHtml } from '@/lib/frame/document';
+import { framePageHtml, pageFieldOf } from '@/lib/frame/document';
+import { Script } from 'vite-ssr-components/hono';
+import { principalPanel } from '@/lib/review-http';
+import { ForbiddenError } from '@/lib/errors';
 import { mintFrameSrc } from '@/services/frame';
 import { canAuthorize } from '@/access';
 import { getSettings } from '@/services/settings';
@@ -64,6 +67,22 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
     const versions = canUpdate ? await listRevisionMeta(db, principal, slug, id, now) : [];
     const open = (drawer: string) => `document.getElementById('${drawer}').showModal()`;
 
+    // Comments (D55): `?review=1` docks the review panel beside the frame, for
+    // a principal who may take part. Only on the current version — anchors are
+    // located against the live text.
+    const field = pageFieldOf(def);
+    const view = `/admin/c/${slug}/${id}/view`;
+    let panel: unknown = null;
+    if (!past && field && c.req.query('review') != null) {
+      try {
+        panel = await principalPanel(db, principal, slug, id, now);
+      } catch (e) {
+        if (!(e instanceof ForbiddenError)) throw e;
+      }
+    }
+    const canReview =
+      !past && field && (panel !== null || (await canAuthorize(db, principal, 'comment', resource, now)));
+
     return c.render(
       <ViewerShell
         title={title}
@@ -75,6 +94,11 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             {canSeeSharing(overview) ? (
               <Button variant="secondary" size="sm" aria-haspopup="dialog" data-on:click={open(SHARE_DRAWER_ID)}>
                 Share
+              </Button>
+            ) : null}
+            {canReview ? (
+              <Button href={panel ? view : `${view}?review=1`} variant="ghost" size="sm">
+                {panel ? 'Hide comments' : 'Comments'}
               </Button>
             ) : null}
             {versions.length > 1 ? (
@@ -114,7 +138,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             </div>
           ) : undefined
         }
+        review={panel && field ? { panel, field } : undefined}
       >
+        {panel ? <Script src="/src/client/review.ts" /> : null}
         {canSeeSharing(overview) ? (
           <ShareDrawer
             slug={slug}

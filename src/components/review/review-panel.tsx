@@ -345,6 +345,7 @@ export function ReviewPanel({ base, viewer, threads, blocks, flash }: ReviewPane
           top can't see it — a sticky jump button keeps it one tap away. */}
       <a
         href={`#${REVIEW_PANEL_ID}`}
+        data-rm-jump
         class="fixed right-4 bottom-4 z-40 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:hidden"
       >
         Comments ({open.length})

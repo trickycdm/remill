@@ -68,8 +68,15 @@ describe('prepareFramedDocument (D60)', () => {
     expect(out).toContain('<body><p>text</p><head></head></body>');
   });
 
-  it('the default preamble opens links in a new tab', () => {
+  it('the default preamble is the frame bridge, as one safely inlined classic script', () => {
     expect(prepareFramedDocument('<p>x</p>')).toContain(FRAME_PREAMBLE);
+    expect(FRAME_PREAMBLE.startsWith('<script data-rm-frame>')).toBe(true);
+    // New-tab links, and the review messages.
     expect(FRAME_PREAMBLE).toContain('_blank');
+    expect(FRAME_PREAMBLE).toContain('rm-frame');
+    // Exactly one closing tag: nothing inside the bundle can end the script early.
+    expect(FRAME_PREAMBLE.match(/<\/script/gi)).toHaveLength(1);
+    // A classic script: no module syntax survives bundling.
+    expect(FRAME_PREAMBLE).not.toMatch(/\bimport\s|\bexport\s/);
   });
 });

@@ -11,6 +11,7 @@
  */
 
 import { Parser } from 'htmlparser2';
+import bridge from 'virtual:frame-bridge';
 import type { CollectionDefinition } from '@/fields/types';
 
 /** The collection's page field — the first `html` field, in `raw` and `frame`
@@ -33,20 +34,13 @@ export function framePageHtml(
 }
 
 /**
- * In-frame link behaviour. The sandbox forbids navigating the shell, and a
- * plain link would replace the framed document with a site that most likely
- * refuses to be framed — so every link that isn't a same-document fragment
- * opens in a new tab instead.
+ * What remill injects into every framed page: the frame bridge
+ * (src/client/frame-bridge.ts) — new-tab link handling, and the review
+ * island's hands inside the frame. Inlined as one classic script (see the
+ * `remill-frame-bridge` plugin in vite.config.ts for why it cannot be an
+ * asset). `</script` cannot appear inside an inline script, so it is escaped.
  */
-const LINK_SCRIPT =
-  "document.addEventListener('click',function(e){" +
-  "var t=e.target,a=t&&t.closest?t.closest('a[href]'):null;if(!a)return;" +
-  "var h=a.getAttribute('href')||'';if(h.charAt(0)==='#')return;" +
-  "var g=a.getAttribute('target');" +
-  "if(!g||g==='_self'||g==='_top'||g==='_parent'){a.setAttribute('target','_blank');a.setAttribute('rel','noopener')}" +
-  '},true);';
-
-export const FRAME_PREAMBLE = `<script data-rm-frame>${LINK_SCRIPT}</script>`;
+export const FRAME_PREAMBLE = `<script data-rm-frame>${bridge.replace(/<\/(script)/gi, '<\\/$1')}</script>`;
 
 /** Where the preamble may go: just inside `<head>`, else just inside `<html>`,
  *  else right after the doctype — never BEFORE the doctype (quirks mode). */

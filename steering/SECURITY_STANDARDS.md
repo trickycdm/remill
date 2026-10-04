@@ -228,6 +228,13 @@ onto the record — any field an attacker named got written. remill's fix, from 
   shell or admin DOM. The frame CSP's `connect-src 'none'` is defence in depth, not an
   exfiltration boundary (images and popups still leave), so D25's trusted-author rule still
   governs who may write the field.
+- **Messages from a framed page are untrusted input (D60).** The frame bridge shares its window
+  with the author's scripts, which can send anything the bridge can. The shell accepts a message
+  only when `event.source` is its own iframe AND `parseFrameMessage` (`src/lib/frame/messages.ts`)
+  rebuilds it from one of the known, size-bounded shapes. A frame message may propose an anchor or
+  ask to focus a thread — never post, navigate, or carry markup (quotes are written with
+  `textContent`). Add a message type only by extending that parser and its tests; never act on
+  `event.data` directly, and never send the frame anything but thread ids and quotes of its own text.
 - **Review comments (D55) are plain text on every surface** — stored raw, rendered through JSX
   escaping (`whitespace-pre-wrap` for line breaks), never markdown or HTML: review links make them
   the one anonymous write surface, so they get no markup path at all.

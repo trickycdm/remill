@@ -46,11 +46,12 @@ export interface ShareOverview {
 }
 
 /** Whether a review LINK is worth offering: the collection has something to
- *  annotate AND its page renders the review panel. Raw (D27) and frame (D60)
- *  pages are the author's own document with no panel in it, so a "can
- *  comment" link there would be a read-only link with a misleading name. */
+ *  annotate AND its page renders the review panel. A raw (D27) page is the
+ *  author's own document with no panel in it, so a "can comment" link there
+ *  would be a read-only link with a misleading name. (A framed page has one:
+ *  the panel sits in the viewer shell beside the frame, D60.) */
 function hasReviewSurface(def: CollectionDefinition): boolean {
-  return hasAnnotatableFields(def) && def.renderMode !== 'raw' && def.renderMode !== 'frame';
+  return hasAnnotatableFields(def) && def.renderMode !== 'raw';
 }
 
 export async function getShareOverview(

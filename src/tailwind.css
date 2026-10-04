@@ -322,6 +322,32 @@
       z-index: 40;
     }
   }
+  /* The framed viewer (D60) lays the panel out itself: a 24rem column beside
+     the frame on wide screens, a scrolling strip under it on narrow ones. The
+     "jump to comments" pill is for pages where the panel is below the fold —
+     here it is always on screen. */
+  .rm-viewer-review .rm-review-panel {
+    /* Positioned, so the panel's own `sr-only` (absolute) labels scroll with
+       it instead of stretching the page. */
+    position: relative;
+    flex: none;
+    width: auto;
+    max-height: 45dvh;
+    overflow-y: auto;
+    border-left-width: 0;
+    border-top: 1px solid var(--color-border);
+  }
+  .rm-viewer-review [data-rm-jump] {
+    display: none;
+  }
+  @media (min-width: 1024px) {
+    .rm-viewer-review .rm-review-panel {
+      width: 24rem;
+      max-height: none;
+      border-top-width: 0;
+      border-left: 1px solid var(--color-border);
+    }
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

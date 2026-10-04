@@ -37,7 +37,20 @@ export function hasAnnotatableFields(def: CollectionDefinition): boolean {
   return def.fields.some((f) => ANNOTATABLE_FIELD_TYPES.has(f.type));
 }
 
-export function canonicalFromHtml(html: string): CanonicalField {
+/** Tags skipped in the `document` profile, on top of SKIPPED_TAGS. A framed
+ *  page (D60) is a whole document: its `<title>` is head text, not prose, and
+ *  the frame bridge — which walks the live document — skips it too
+ *  (src/client/frame-bridge.ts). Keep the two lists identical. */
+const DOCUMENT_SKIPPED_TAGS: ReadonlySet<string> = new Set([...SKIPPED_TAGS, 'title']);
+
+/**
+ * `profile` picks what counts as prose: `'field'` (default) for a fragment
+ * inlined into a page; `'document'` for a field that IS a standalone document
+ * (frame mode). The profiles differ only in skipped tags, so a fragment with
+ * no `<title>` reads the same under both.
+ */
+export function canonicalFromHtml(html: string, profile: 'field' | 'document' = 'field'): CanonicalField {
+  const skipped = profile === 'document' ? DOCUMENT_SKIPPED_TAGS : SKIPPED_TAGS;
   const folder = createTextFolder();
   const blocks: CanonicalBlock[] = [];
   // One frame per open element: its block id (if any) and where it started.
@@ -47,7 +60,7 @@ export function canonicalFromHtml(html: string): CanonicalField {
   const parser = new Parser(
     {
       onopentag(name, attrs) {
-        if (SKIPPED_TAGS.has(name)) skipDepth++;
+        if (skipped.has(name)) skipDepth++;
         const explicit = attrs['data-rm-anchor']?.trim();
         const blockId = explicit || (name === 'img' && attrs.src ? `img:${attrs.src}` : null);
         open.push({ name, blockId, start: folder.length() });
@@ -57,7 +70,7 @@ export function canonicalFromHtml(html: string): CanonicalField {
       },
       onclosetag(name) {
         const frame = open.pop();
-        if (SKIPPED_TAGS.has(name)) skipDepth = Math.max(0, skipDepth - 1);
+        if (skipped.has(name)) skipDepth = Math.max(0, skipDepth - 1);
         if (frame?.blockId) {
           blocks.push({ id: frame.blockId, start: frame.start, end: folder.length() });
         }
@@ -76,18 +89,20 @@ export function canonicalFromHtml(html: string): CanonicalField {
 }
 
 /** The canonical text of every annotatable field on a document, keyed by field
- *  key. Empty fields are omitted. */
+ *  key. Empty fields are omitted. A frame-mode collection's page field (its
+ *  first `html` field, D60) is read as a whole document. */
 export function canonicalDocument(
   def: CollectionDefinition,
   data: Record<string, unknown>,
 ): Map<string, CanonicalField> {
   const out = new Map<string, CanonicalField>();
+  const pageField = def.renderMode === 'frame' ? def.fields.find((f) => f.type === 'html')?.key : undefined;
   for (const field of def.fields) {
     if (!ANNOTATABLE_FIELD_TYPES.has(field.type)) continue;
     const raw = data[field.key];
     if (typeof raw !== 'string' || raw.trim() === '') continue;
     const html = field.type === 'markdown' ? renderMarkdown(raw) : raw;
-    out.set(field.key, canonicalFromHtml(html));
+    out.set(field.key, canonicalFromHtml(html, field.key === pageField ? 'document' : 'field'));
   }
   return out;
 }

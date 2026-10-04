@@ -155,8 +155,6 @@ test.describe.serial('Framed pages — viewer shell, sandboxed document, share l
     await page.getByRole('button', { name: 'Share', exact: true }).click();
     const share = page.getByRole('dialog', { name: 'Share' });
     await expect(share).toBeVisible();
-    // A framed page has no comment panel yet, so no "can comment" link is offered.
-    await expect(share.getByRole('radio', { name: /^Read and comment/ })).toHaveCount(0);
     const rows = share.locator('li[data-share-link]');
     await openNewLink(share);
     await share.getByRole('button', { name: 'Create link', exact: true }).click();
