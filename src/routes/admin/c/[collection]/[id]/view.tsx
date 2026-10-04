@@ -5,7 +5,7 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
-import { getDocument, getBacklinks } from '@/services/documents';
+import { getDocument, getBacklinks, listRevisionMeta } from '@/services/documents';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Button } from '@/components/ui';
@@ -14,6 +14,12 @@ import { readingPageOf, titleOf, effectiveVisibility } from '@/lib/def-helpers';
 import { ViewerShell } from '@/components/layouts/viewer-shell';
 import { framePageHtml } from '@/lib/frame/document';
 import { mintFrameSrc } from '@/services/frame';
+import { canAuthorize } from '@/access';
+import { getSettings } from '@/services/settings';
+import { getShareOverview, canSeeSharing } from '@/services/sharing';
+import { resolveBaseUrl } from '@/lib/base-url';
+import { ShareDrawer, SHARE_DRAWER_ID } from '@/components/admin/share-drawer';
+import { VersionsDrawer, RestoreForm, VERSIONS_DRAWER_ID } from '@/components/viewer/versions-drawer';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -34,21 +40,96 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
 
   // Frame mode (D60): the page renders in the viewer shell's sandboxed iframe,
   // never inlined into the admin DOM — the author's scripts must not run on
-  // the admin origin.
+  // the admin origin. The bar carries what this principal may do: share, look
+  // through versions, download, edit.
   if (framePageHtml(def, doc.data) !== null) {
     const title = titleOf(def, doc);
+    const resource = { collection: slug, documentId: id };
+    const canUpdate = await canAuthorize(db, principal, 'update', resource, now);
+    const settings = await getSettings(db);
+    const overview = await getShareOverview(
+      db,
+      principal,
+      def,
+      id,
+      { secret: c.env.SESSION_SECRET, baseUrl: resolveBaseUrl(c.env, settings, c.req.url) },
+      now,
+    );
+
+    // `?rev=N` frames a past revision — only for someone who may update (the
+    // frame read enforces the same gate). Anything else shows the current one.
+    const asked = Number(c.req.query('rev') ?? 0);
+    const viewing = canUpdate && Number.isInteger(asked) && asked > 0 && asked < doc.revision ? asked : doc.revision;
+    const past = viewing !== doc.revision;
+    const versions = canUpdate ? await listRevisionMeta(db, principal, slug, id, now) : [];
+    const open = (drawer: string) => `document.getElementById('${drawer}').showModal()`;
+
     return c.render(
       <ViewerShell
         title={title}
-        frameSrc={await mintFrameSrc(c.env.SESSION_SECRET, principal, doc.id, now)}
+        frameSrc={await mintFrameSrc(c.env.SESSION_SECRET, principal, doc.id, now, past ? viewing : 0)}
         home={{ href: `/admin/c/${slug}`, label: `Back to ${def.name}` }}
         visibility={effectiveVisibility(def, doc)}
         actions={
-          <Button href={`/admin/c/${slug}/${id}`} variant="secondary" size="sm">
-            Edit
-          </Button>
+          <>
+            {canSeeSharing(overview) ? (
+              <Button variant="secondary" size="sm" aria-haspopup="dialog" data-on:click={open(SHARE_DRAWER_ID)}>
+                Share
+              </Button>
+            ) : null}
+            {versions.length > 1 ? (
+              <Button variant="ghost" size="sm" aria-haspopup="dialog" data-on:click={open(VERSIONS_DRAWER_ID)}>
+                Versions
+              </Button>
+            ) : null}
+            <Button
+              href={`/admin/c/${slug}/${id}/download${past ? `?rev=${viewing}` : ''}`}
+              variant="ghost"
+              size="sm"
+            >
+              Download
+            </Button>
+            {canUpdate ? (
+              <Button href={`/admin/c/${slug}/${id}`} variant="ghost" size="sm">
+                Edit
+              </Button>
+            ) : null}
+          </>
         }
-      />,
+        notice={
+          past ? (
+            <div
+              role="status"
+              class="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border bg-warning-soft px-4 py-2 text-sm text-warning"
+            >
+              <span>
+                Version {viewing} of {doc.revision}. This is not the current page.
+              </span>
+              <span class="flex items-center gap-2">
+                <Button href={`/admin/c/${slug}/${id}/view`} variant="ghost" size="sm">
+                  Back to current
+                </Button>
+                <RestoreForm slug={slug} id={id} revision={viewing} variant="secondary" />
+              </span>
+            </div>
+          ) : undefined
+        }
+      >
+        {canSeeSharing(overview) ? (
+          <ShareDrawer
+            slug={slug}
+            id={id}
+            def={def}
+            doc={doc}
+            overview={overview}
+            settings={settings}
+            surface="viewer"
+          />
+        ) : null}
+        {versions.length > 1 ? (
+          <VersionsDrawer slug={slug} id={id} versions={versions} current={doc.revision} viewing={viewing} />
+        ) : null}
+      </ViewerShell>,
       { title, bare: true, noindex: true },
     );
   }

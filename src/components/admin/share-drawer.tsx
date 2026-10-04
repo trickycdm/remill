@@ -72,9 +72,15 @@ export interface ShareFlash {
   readonly confirmFlip?: { readonly grantId: string; readonly to: 'group' | 'individual'; readonly warning: string };
 }
 
+/** Where the drawer is mounted. The handler answers the EDITOR with the rail
+ *  summary beside the manager and falls back to the edit page; the framed
+ *  VIEWER (D60) has no rail, and falls back to the view. */
+export type ShareSurface = 'editor' | 'viewer';
+
 interface ShareProps {
   slug: string;
   id: string;
+  surface?: ShareSurface;
   def: CollectionDefinition;
   doc: ShareDoc;
   overview: ShareOverview;
@@ -547,8 +553,8 @@ function PeopleSection({
 
 /** The drawer's content (`#share-manager`) — re-rendered whole by every share
  *  action. */
-export function ShareManager({ slug, id, def, doc, overview, settings, flash }: ShareProps & { flash?: ShareFlash }): JSX.Element {
-  const action = `/admin/c/${slug}/${id}/share`;
+export function ShareManager({ slug, id, def, doc, overview, settings, flash, surface = 'editor' }: ShareProps & { flash?: ShareFlash }): JSX.Element {
+  const action = `/admin/c/${slug}/${id}/share${surface === 'viewer' ? '?surface=viewer' : ''}`;
   const links: AnyLink[] = [
     ...(overview.links ?? []),
     ...(overview.reviewLinks ?? []).map((review) => ({ ...review, review })),

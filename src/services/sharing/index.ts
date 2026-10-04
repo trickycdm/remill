@@ -45,6 +45,14 @@ export interface ShareOverview {
   readonly people: SharePeople | null;
 }
 
+/** Whether a review LINK is worth offering: the collection has something to
+ *  annotate AND its page renders the review panel. Raw (D27) and frame (D60)
+ *  pages are the author's own document with no panel in it, so a "can
+ *  comment" link there would be a read-only link with a misleading name. */
+function hasReviewSurface(def: CollectionDefinition): boolean {
+  return hasAnnotatableFields(def) && def.renderMode !== 'raw' && def.renderMode !== 'frame';
+}
+
 export async function getShareOverview(
   db: Database,
   principal: Principal,
@@ -64,7 +72,7 @@ export async function getShareOverview(
     ? await listShareLinks(db, principal, collection, documentId, opts.secret, opts.baseUrl, now)
     : null;
   const reviewLinks =
-    canShareLink && hasAnnotatableFields(def)
+    canShareLink && hasReviewSurface(def)
       ? await listReviewLinks(db, principal, collection, documentId, opts.secret, opts.baseUrl, now)
       : null;
   const people = canManageAccess

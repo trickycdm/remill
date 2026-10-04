@@ -14,6 +14,7 @@ import * as s_token_review_comments_commentId_replies from './routes/s/[token]/r
 import * as admin_account_passkeys_id_delete from './routes/admin/account/passkeys/[id]/delete';
 import * as admin_account_passkeys_id_rename from './routes/admin/account/passkeys/[id]/rename';
 import * as admin_c_collection_id_delete from './routes/admin/c/[collection]/[id]/delete';
+import * as admin_c_collection_id_download from './routes/admin/c/[collection]/[id]/download';
 import * as admin_c_collection_id_publish from './routes/admin/c/[collection]/[id]/publish';
 import * as admin_c_collection_id_restore from './routes/admin/c/[collection]/[id]/restore';
 import * as admin_c_collection_id_revisions from './routes/admin/c/[collection]/[id]/revisions';
@@ -125,6 +126,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/account/passkeys/:id/delete', ...admin_account_passkeys_id_delete.onRequestPost);
 	app.post('/admin/account/passkeys/:id/rename', ...admin_account_passkeys_id_rename.onRequestPost);
 	app.post('/admin/c/:collection/:id/delete', ...admin_c_collection_id_delete.onRequestPost);
+	app.get('/admin/c/:collection/:id/download', ...admin_c_collection_id_download.onRequestGet);
 	app.post('/admin/c/:collection/:id/publish', ...admin_c_collection_id_publish.onRequestPost);
 	app.post('/admin/c/:collection/:id/restore', ...admin_c_collection_id_restore.onRequestPost);
 	app.get('/admin/c/:collection/:id/revisions', ...admin_c_collection_id_revisions.onRequestGet);

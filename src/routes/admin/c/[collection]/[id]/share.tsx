@@ -16,7 +16,7 @@ import { AppError } from '@/lib/errors';
 import type { Action } from '@/access';
 import { nowIso } from '@/lib/now';
 import { rateLimit, SHARE_EMAIL_RATE_LIMIT } from '@/middleware/rate-limit';
-import { ShareManager, ShareSummary, type ShareFlash } from '@/components/admin/share-drawer';
+import { ShareManager, ShareSummary, type ShareFlash, type ShareSurface } from '@/components/admin/share-drawer';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -43,7 +43,8 @@ function parseExpiry(raw: unknown): string | undefined {
  * page never navigates, so unsaved edits in the editor behind the drawer
  * survive. Expected failures (a too-short password, a bad email) come back as
  * a flash in that same fragment rather than a toast. A plain form post still
- * gets a 303 back to the editor.
+ * gets a 303 back to the page the drawer is on (`?surface=viewer` = the framed
+ * viewer, D60; otherwise the editor).
  */
 export const onRequestPost = factory.createHandlers(requireAuth(), rateLimit('share-panel', SHARE_EMAIL_RATE_LIMIT), async (c) => {
   const body = await c.req.parseBody({ all: true });
@@ -54,19 +55,31 @@ export const onRequestPost = factory.createHandlers(requireAuth(), rateLimit('sh
   const id = pathParam(c, 'id');
   const op = String(body.op ?? '');
   const isDatastar = c.req.header('Datastar-Request') === 'true';
+  // Which page the drawer is on (a closed set, never a free URL): the framed
+  // viewer (D60) has no rail summary to refresh and returns to the view.
+  const surface: ShareSurface = c.req.query('surface') === 'viewer' ? 'viewer' : 'editor';
 
   const settings = await getSettings(db);
   const baseUrl = resolveBaseUrl(c.env, settings, c.req.url);
 
   const respond = async (flash?: ShareFlash) => {
-    if (!isDatastar) return c.redirect(`/admin/c/${collection}/${id}`, 303);
+    if (!isDatastar) return c.redirect(`/admin/c/${collection}/${id}${surface === 'viewer' ? '/view' : ''}`, 303);
     const def = await getCollectionOrThrow(db, collection);
     const doc = await getDocument(db, principal, collection, id, now);
     const overview = await getShareOverview(db, principal, def, id, { secret: c.env.SESSION_SECRET, baseUrl }, now);
     return c.html(
       <>
-        <ShareManager slug={collection} id={id} def={def} doc={doc} overview={overview} settings={settings} flash={flash} />
-        <ShareSummary def={def} doc={doc} overview={overview} />
+        <ShareManager
+          slug={collection}
+          id={id}
+          def={def}
+          doc={doc}
+          overview={overview}
+          settings={settings}
+          flash={flash}
+          surface={surface}
+        />
+        {surface === 'editor' ? <ShareSummary def={def} doc={doc} overview={overview} /> : null}
       </>,
     );
   };

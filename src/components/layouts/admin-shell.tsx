@@ -12,8 +12,8 @@
  *
  * Theme: the toggle flips <html data-theme> and persists to localStorage
  * ('remill-theme'); tailwind.css resolves every token from `color-scheme` via
- * light-dark(), so no per-token class flipping is needed. The `theme` signal is
- * seeded from the resolved DOM theme on init so the icon/label stay correct.
+ * light-dark(), so no per-token class flipping is needed. The toggle itself is
+ * the shared `ThemeToggle` (ui/theme-toggle), which owns the `theme` signal.
  *
  * The layout owner (src/layouts.tsx) must render THEME_INIT_SNIPPET in <head>
  * (see its doc below) so a stored theme is applied before first paint.
@@ -36,8 +36,7 @@ import {
   Trash,
   Activity,
   Menu,
-  Sun,
-  Moon,
+  ThemeToggle,
   LogOut,
   ChevronDown,
   Store,
@@ -125,8 +124,7 @@ export function AdminShell({
   return (
     <div
       class="min-h-dvh bg-canvas text-ink"
-      data-signals="{navOpen: false, userMenuOpen: false, theme: 'light'}"
-      data-init="$theme = document.documentElement.getAttribute('data-theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')"
+      data-signals="{navOpen: false, userMenuOpen: false}"
       data-on:keydown__window="evt.key === 'Escape' && ($navOpen = false, $userMenuOpen = false)"
     >
       {/* Mobile drawer mechanics — scoped, robust, no Tailwind transform conflicts.
@@ -221,21 +219,7 @@ export function AdminShell({
 
           <div class="hidden flex-1 sm:block" />
 
-          {/* Theme toggle — flips <html data-theme> + persists; icon tracks $theme. */}
-          <button
-            type="button"
-            aria-label="Toggle color theme"
-            data-attr:aria-label="$theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
-            data-on:click="$theme = $theme === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', $theme); localStorage.setItem('remill-theme', $theme)"
-            class="flex size-9 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <span class="contents" data-show="$theme === 'dark'" style="display:none">
-              <Sun class="size-5" />
-            </span>
-            <span class="contents" data-show="$theme !== 'dark'">
-              <Moon class="size-5" />
-            </span>
-          </button>
+          <ThemeToggle />
 
           <div aria-hidden="true" class="mx-1 h-6 w-px bg-border" />
 

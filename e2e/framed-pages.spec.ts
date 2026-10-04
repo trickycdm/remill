@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
-import { openShare, openNewLink } from './helpers/share';
+import { openNewLink } from './helpers/share';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2) buckets
 // this file separately. See admin-content.spec.ts.
@@ -91,6 +91,9 @@ test.describe.serial('Framed pages — viewer shell, sandboxed document, share l
     // around the document.
     await expect(page.getByRole('heading', { level: 1, name: TITLE })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Edit', exact: true })).toHaveAttribute('href', new URL(editUrl).pathname);
+    await expect(page.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
+    // One revision so far: nothing to look back at.
+    await expect(page.getByRole('button', { name: 'Versions', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Admin sections')).toHaveCount(0);
 
     const iframe = page.locator('iframe');
@@ -146,14 +149,23 @@ test.describe.serial('Framed pages — viewer shell, sandboxed document, share l
     await expect(page.locator('#framed-title')).toHaveCount(0);
   });
 
-  test('a share link shows the same viewer to an anonymous reader — until it is revoked', async ({ page, browser }) => {
+  test('the owner shares from the viewer itself; the link shows the same viewer to an anonymous reader — until it is revoked', async ({ page, browser }) => {
     await loginAsAdmin(page);
-    await page.goto(editUrl);
-    const share = await openShare(page);
+    await page.goto(`${editUrl}/view`);
+    await page.getByRole('button', { name: 'Share', exact: true }).click();
+    const share = page.getByRole('dialog', { name: 'Share' });
+    await expect(share).toBeVisible();
+    // A framed page has no comment panel yet, so no "can comment" link is offered.
+    await expect(share.getByRole('radio', { name: /^Read and comment/ })).toHaveCount(0);
     const rows = share.locator('li[data-share-link]');
     await openNewLink(share);
     await share.getByRole('button', { name: 'Create link', exact: true }).click();
+    // The link appears in place: the viewer never navigated, the frame is intact.
     await expect(rows).toHaveCount(1);
+    expect(new URL(page.url()).pathname).toBe(`${new URL(editUrl).pathname}/view`);
+
+    const axe = await new AxeBuilder({ page }).withTags(WCAG).exclude('iframe').analyze();
+    expect(axe.violations, `axe on viewer share drawer: ${axe.violations.map((v) => v.id).join(',')}`).toEqual([]);
     shareUrl = await rows.first().locator('input[id^=share-link-url-]').inputValue();
 
     const context = await browser.newContext({
@@ -177,5 +189,43 @@ test.describe.serial('Framed pages — viewer shell, sandboxed document, share l
     expect((await reader.goto(liveSrc))!.status()).toBe(404);
     expect((await reader.goto(shareUrl))!.status()).toBe(404);
     await context.close();
+  });
+
+  test('versions: an edit adds a version the owner can view, download and restore from the viewer', async ({ page }) => {
+    await loginAsAdmin(page);
+    await page.goto(editUrl);
+    await page.getByLabel(/^page/i).fill(PAGE_HTML.replace('Quarterly metrics', 'Revised metrics'));
+    await page.getByLabel('Document actions').getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('#2', { exact: false }).first()).toBeVisible();
+
+    const view = `${new URL(editUrl).pathname}/view`;
+    await page.goto(view);
+    const frame = page.frameLocator('iframe');
+    await expect(frame.locator('#framed-title')).toHaveText('Revised metrics');
+
+    // Look back at version 1 without leaving the viewer.
+    await page.getByRole('button', { name: 'Versions', exact: true }).click();
+    const versions = page.getByRole('dialog', { name: 'Versions' });
+    await expect(versions.getByRole('listitem')).toHaveCount(2);
+    await versions.getByRole('link', { name: 'View version 1' }).click();
+    await page.waitForURL(`**${view}?rev=1`);
+    await expect(page.getByRole('status').filter({ hasText: 'Version 1 of 2' })).toBeVisible();
+    await expect(frame.locator('#framed-title')).toHaveText('Quarterly metrics');
+
+    // Download hands over that version's stored html as a file — never inline.
+    // (In-page fetch: `page.request` does not carry the session cookie.)
+    const download = await page.evaluate(async (url) => {
+      const res = await fetch(url);
+      return { disposition: res.headers.get('content-disposition'), body: await res.text() };
+    }, `${view.replace(/\/view$/, '/download')}?rev=1`);
+    expect(download.disposition).toMatch(/^attachment; filename="Framed-metrics-.*-v1\.html"$/);
+    expect(download.body).toBe(PAGE_HTML);
+
+    // Restore it: a NEW version (3) carrying the old content; history is kept.
+    await page.getByRole('status').getByRole('button', { name: 'Restore version 1' }).click();
+    await page.waitForURL(`**${view}`);
+    await expect(frame.locator('#framed-title')).toHaveText('Quarterly metrics');
+    await page.getByRole('button', { name: 'Versions', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Versions' }).getByRole('listitem')).toHaveCount(3);
   });
 });

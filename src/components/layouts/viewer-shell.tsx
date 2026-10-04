@@ -3,7 +3,9 @@
  * (D60): a slim remill-owned bar (home mark, the page title, its visibility,
  * the viewer's actions) and the author's document filling everything below it
  * in a sandboxed iframe. ONE shell for the admin view, a share link and the
- * public URL — what differs per surface is only the `actions` slot.
+ * public URL — what differs per surface is only what fills the slots: the
+ * `actions` in the bar, an optional `notice` strip under it, and `children`
+ * for the drawers those actions open.
  *
  * The iframe is the security boundary: `sandbox` WITHOUT `allow-same-origin`
  * puts the author's scripts in an opaque origin, so nothing in the document can
@@ -15,6 +17,8 @@
 
 import type { Visibility } from '@/lib/visibility';
 import { Wordmark } from '@/components/ui/wordmark';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { ToastHost } from '@/components/ui/toast';
 import { VisibilityStamp } from '@/components/admin/visibility-stamp';
 import { FRAME_SANDBOX } from '@/lib/frame/policy';
 
@@ -24,6 +28,8 @@ export function ViewerShell({
   home,
   visibility,
   actions,
+  notice,
+  children,
 }: {
   title: string;
   /** The ticketed content URL the iframe loads. */
@@ -34,6 +40,10 @@ export function ViewerShell({
    *  who should not learn it, e.g. a share-link reader). */
   visibility?: Visibility;
   actions?: unknown;
+  /** A status strip between the bar and the document (e.g. "an old version"). */
+  notice?: unknown;
+  /** Drawers and dialogs the actions open. */
+  children?: unknown;
 }) {
   return (
     <div class="flex h-dvh flex-col bg-canvas">
@@ -43,7 +53,8 @@ export function ViewerShell({
       >
         Skip to content
       </a>
-      <header class="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
+      {/* Wraps below `sm`: title on the first row, actions on the second. */}
+      <header class="flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-1.5">
         <a
           href={home.href}
           aria-label={home.label}
@@ -51,10 +62,16 @@ export function ViewerShell({
         >
           <Wordmark label="" class="gap-0" />
         </a>
-        <h1 class="min-w-0 truncate text-sm font-medium text-ink">{title}</h1>
-        <VisibilityStamp visibility={visibility} />
-        {actions ? <div class="ml-auto flex shrink-0 items-center gap-2">{actions}</div> : null}
+        <div class="flex min-w-0 flex-1 items-center gap-3">
+          <h1 class="min-w-0 truncate text-sm font-medium text-ink">{title}</h1>
+          <VisibilityStamp visibility={visibility} />
+        </div>
+        <div class="ml-auto flex shrink-0 items-center gap-1">
+          {actions}
+          <ThemeToggle />
+        </div>
       </header>
+      {notice}
       <main id="main-content" class="min-h-0 flex-1">
         <iframe
           src={frameSrc}
@@ -66,6 +83,9 @@ export function ViewerShell({
           class="block size-full border-0 bg-white"
         />
       </main>
+      {children}
+      {/* Surfaces `dsError` toasts from the drawers' Datastar posts. */}
+      <ToastHost />
     </div>
   );
 }

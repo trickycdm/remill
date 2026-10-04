@@ -997,6 +997,19 @@ export async function listRevisions(
   return dq.listRevisions(db, id, grant);
 }
 
+/** Revision history without the data (number, author, time), newest first —
+ *  the framed viewer's Versions list (D60). Read-gated like `listRevisions`. */
+export async function listRevisionMeta(
+  db: Database,
+  principal: Principal,
+  collectionSlug: string,
+  id: string,
+  now: string,
+) {
+  const grant = await authorize(db, principal, 'read', { collection: collectionSlug, documentId: id }, now);
+  return dq.listRevisionMeta(db, id, grant);
+}
+
 // ---------------------------------------------------------------------------
 // Write
 // ---------------------------------------------------------------------------
