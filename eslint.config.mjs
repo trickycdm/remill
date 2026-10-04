@@ -25,6 +25,8 @@ export default tseslint.config(
       'src/router.ts',
       'playwright-report/',
       'test-results/',
+      // Nested git worktrees carry their own build output; each lints itself.
+      '.claude/',
     ],
   },
 );

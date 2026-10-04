@@ -89,6 +89,13 @@ rendered public pages + share links.)
 > (`src/lib/anchor/`), the reading-page overlay (`src/components/review/`, `src/client/review.ts`,
 > CSS Custom Highlight API), and the agent loop — `get_<slug>` `render: 'review'`,
 > `comment_/comments_/reply_comment_/resolve_comment_<slug>`, `update_<slug>` `resolves`).
+> **D57 built 2026-09-27** (plan: [`plans/2026-09-27-visibility_controls_safe_public_enable/`](plans/2026-09-27-visibility_controls_safe_public_enable/)):
+> **visibility on every document** — admin labels show `effectiveVisibility` (Private on a
+> collection without public pages, whatever the inert stored value says); the editor's Visibility
+> card appears everywhere, and "Enable public pages & apply" (`enablePublicPages`) flips a
+> collection public while switching every other document to private in one batch;
+> `updateCollection` 409s any `publicRead` flip over non-private documents without
+> `onEnablePublic` (`private`|`keep`) — builder confirm step, REST query param, MCP arg.
 > **D58 built 2026-10-04** (plan: [`plans/2026-10-04-passkey_login/`](plans/2026-10-04-passkey_login/)):
 > **passkey login** — WebAuthn passkeys alongside passwords: add/rename/remove at `/admin/account`,
 > one-tap or autofill sign-in at `/admin/login` (`src/services/passkeys/`, tables `passkeys` +

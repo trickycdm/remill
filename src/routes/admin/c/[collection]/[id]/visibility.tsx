@@ -5,6 +5,7 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { setVisibility } from '@/services/documents';
+import { getCollectionOrThrow, enablePublicPages } from '@/services/collections';
 import type { Visibility } from '@/db/queries/documents';
 import { InputValidationError } from '@/lib/errors';
 import { nowIso } from '@/lib/now';
@@ -12,7 +13,8 @@ import { nowIso } from '@/lib/now';
 const factory = createFactory<{ Bindings: Env }>();
 
 /** POST /admin/c/:collection/:id/visibility — set public/unlisted/private
- *  (D50, native form → 303). A missing/malformed value is REJECTED — never
+ *  (D50, native form → 303). On a collection without public pages, a
+ *  non-private value enables them safely (D57). A missing/malformed value is REJECTED — never
  *  defaulted to 'public', which would silently make a private document
  *  public on a malformed POST. */
 export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => {
@@ -25,6 +27,15 @@ export const onRequestPost = factory.createHandlers(requireAuth(), async (c) => 
     ]);
   }
   const visibility = body.visibility as Visibility;
-  await setVisibility(getDb(c.env.DB), requirePrincipal(c), slug, id, visibility, nowIso());
+  const db = getDb(c.env.DB);
+  const def = await getCollectionOrThrow(db, slug);
+  // D57: Public/Unlisted on a collection without public pages means "Enable
+  // public pages & apply" — the collection flips and every OTHER document
+  // goes private in one batch. Private there is already the effective state.
+  if (!def.access?.publicRead && visibility !== 'private') {
+    await enablePublicPages(db, requirePrincipal(c), slug, { id, visibility }, nowIso());
+  } else {
+    await setVisibility(db, requirePrincipal(c), slug, id, visibility, nowIso());
+  }
   return c.redirect(`/admin/c/${slug}/${id}`, 303);
 });

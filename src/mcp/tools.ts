@@ -254,10 +254,16 @@ export async function buildToolsForPrincipal(
       name: 'update_collection',
       description:
         'Modify an existing content type. The definition replaces the stored one and follows the ' +
-        'create_collection contract (including `access`: publicRead/private, mutually exclusive).',
+        'create_collection contract (including `access`: publicRead/private, mutually exclusive). ' +
+        'Turning publicRead ON over existing documents requires `onEnablePublic` (D57): ' +
+        "'private' switches them all to private first (recommended), 'keep' publishes them as they are.",
       inputSchema: {
         type: 'object',
-        properties: { slug: { type: 'string' }, definition: { type: 'object' } },
+        properties: {
+          slug: { type: 'string' },
+          definition: { type: 'object' },
+          onEnablePublic: { type: 'string', enum: [...collectionsService.ON_ENABLE_PUBLIC] },
+        },
         required: ['slug', 'definition'],
       },
       handler: async (args) =>
@@ -267,6 +273,7 @@ export async function buildToolsForPrincipal(
           String(args.slug),
           args.definition as CollectionDefinition,
           now(),
+          { onEnablePublic: collectionsService.parseOnEnablePublic(args.onEnablePublic) },
         ),
     });
   }

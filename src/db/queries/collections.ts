@@ -8,13 +8,14 @@
  * authorize() in the collections service.
  */
 
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { Database } from '@/db/client';
-import { collections } from '@/db/schema';
+import { collections, documents } from '@/db/schema';
 import { documentFts } from '@/db/fts-table';
 import { eventInsert, type EventInput } from '@/db/queries/events';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 import type { Grant } from '@/access/grant';
+import type { Visibility } from '@/lib/visibility';
 
 type Row = typeof collections.$inferSelect;
 
@@ -79,6 +80,7 @@ export async function updateCollectionRow(
   now: string,
   _grant: Grant,
   event?: EventInput,
+  docVisibility: readonly DocVisibilityChange[] = [],
 ): Promise<void> {
   const update = db
     .update(collections)
@@ -94,8 +96,40 @@ export async function updateCollectionRow(
       updatedAt: now,
     })
     .where(eq(collections.slug, slug));
-  if (event) await db.batch([update, eventInsert(db, event)]);
-  else await update;
+  // D57: a publicRead flip carries its per-document visibility changes in the
+  // SAME batch, so the collection never goes public ahead of the backfill.
+  // Like setDocumentVisibility, `updatedAt` is deliberately untouched.
+  const docStmts = docVisibility.flatMap((d) => [
+    db.update(documents).set({ visibility: d.visibility }).where(eq(documents.id, d.id)),
+    eventInsert(db, d.event),
+  ]);
+  if (!event && docStmts.length === 0) {
+    await update;
+    return;
+  }
+  await db.batch([update, ...(event ? [eventInsert(db, event)] : []), ...docStmts]);
+}
+
+/** One document's visibility change riding a collection update (D57). */
+export interface DocVisibilityChange {
+  readonly id: string;
+  readonly visibility: Visibility;
+  readonly event: EventInput;
+}
+
+/** Ids of a collection's documents that are not `private` (D57) — the ones a
+ *  publicRead flip would expose (drafts included: they'd go public on publish).
+ *  Witness required (the caller authorized manage_schema). */
+export async function listNonPrivateDocumentIds(
+  db: Database,
+  collection: string,
+  _grant: Grant,
+): Promise<string[]> {
+  const rows = await db
+    .select({ id: documents.id })
+    .from(documents)
+    .where(and(eq(documents.collection, collection), ne(documents.visibility, 'private')));
+  return rows.map((r) => r.id);
 }
 
 export async function deleteCollectionRow(
