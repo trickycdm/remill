@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { openShare } from './helpers/share';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2) buckets
 // this file separately from the others.
@@ -81,10 +82,11 @@ test.describe.serial('Teams — join links, team grants, shared-with-me', () => 
 
     // Share card: pick the team subject (read is pre-checked) and grant, behind
     // the disclosure.
-    await page.locator('summary', { hasText: 'Add person or role' }).click();
-    await page.getByLabel('Grant to').selectOption({ label: TEAM });
-    await page.getByRole('button', { name: 'Grant access', exact: true }).click();
-    await expect(page.getByText('team', { exact: true }).first()).toBeVisible();
+    const share = await openShare(page);
+    await share.locator('summary', { hasText: 'Add person or role' }).click();
+    await share.getByLabel('Grant to').selectOption({ label: TEAM });
+    await share.getByRole('button', { name: 'Grant access', exact: true }).click();
+    await expect(share.getByText('team', { exact: true }).first()).toBeVisible();
 
     // The matrix shows the team grant with its resolved name.
     await page.goto('/admin/access/matrix');

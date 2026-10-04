@@ -9,22 +9,38 @@ import type { FC } from 'hono/jsx';
 import { resolveField } from '@/fields/registry';
 import { fieldLabel } from '@/lib/humanize';
 import type { CollectionDefinition, FieldDescriptor, ExpandedReference } from '@/fields/types';
-import type { DocumentRecord, ExpandedDocument } from '@/services/documents';
+import type { ExpandedDocument } from '@/services/documents';
 import type { SiteSettings } from '@/services/settings';
 import { formatDate } from '@/lib/format-date';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { titleOf } from '@/lib/def-helpers';
-import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, Checkbox, EmptyState, Stamp } from '@/components/ui';
+import { Table, TableHead, TableBody, TableRow, TableHeaderCell, TableCell, Button, Badge, Checkbox, EmptyState } from '@/components/ui';
+import { VisibilityStamp } from '@/components/admin/visibility-stamp';
 
-type EditProps = { field: FieldDescriptor; config: unknown; value: unknown; signal: string };
+type EditProps = {
+  field: FieldDescriptor;
+  config: unknown;
+  value: unknown;
+  signal: string;
+  expanded?: ExpandedReference | ExpandedReference[];
+};
 
-/** Render one field's edit widget with its resolved config + current value. */
-export function FieldEditor({ field, value }: { field: FieldDescriptor; value: unknown }) {
+/** Render one field's edit widget with its resolved config + current value
+ *  (and, for referencing fields, the read path's title expansion). */
+export function FieldEditor({
+  field,
+  value,
+  expanded,
+}: {
+  field: FieldDescriptor;
+  value: unknown;
+  expanded?: ExpandedReference | ExpandedReference[];
+}) {
   const { ft, config } = resolveField(field);
   const Edit = ft.EditComponent as unknown as FC<EditProps>;
   // Field keys are already lowercase snake_case, so they are safe Datastar signal
   // keys (HTML lowercases attribute keys — DATASTAR_PATTERNS.md).
-  return <Edit field={field} config={config} value={value} signal={field.key} />;
+  return <Edit field={field} config={config} value={value} signal={field.key} expanded={expanded} />;
 }
 
 /** Render one list cell using the field type's CellComponent (or a text fallback).
@@ -61,7 +77,7 @@ export function GeneratedForm({
   renderActions = true,
 }: {
   def: CollectionDefinition;
-  doc?: DocumentRecord;
+  doc?: ExpandedDocument;
   action: string;
   submitLabel: string;
   id?: string;
@@ -79,7 +95,7 @@ export function GeneratedForm({
       {doc ? <input type="hidden" name="_revision" value={String(doc.revision)} /> : null}
       <div class="flex flex-col gap-5">
         {def.fields.map((field) => (
-          <FieldEditor field={field} value={doc?.data[field.key]} />
+          <FieldEditor field={field} value={doc?.data[field.key]} expanded={doc?.relations?.[field.key]} />
         ))}
       </div>
       {renderActions ? (
@@ -184,20 +200,12 @@ export function GeneratedTable({
                   <Badge tone={doc.status === 'published' ? 'success' : 'neutral'}>{doc.status}</Badge>
                   {/* Visibility (D50): only meaningful on publicRead collections —
                       public is the unmarked default, so only flag the exceptions. */}
-                  {def.access?.publicRead && doc.visibility !== 'public' ? (
-                    <Stamp tone="event" class="text-[10px]">
-                      {doc.visibility}
-                    </Stamp>
-                  ) : null}
+                  {def.access?.publicRead ? <VisibilityStamp visibility={doc.visibility} /> : null}
                 </span>
               </TableCell>
             ) : showVisibilityCol ? (
               <TableCell>
-                {doc.visibility !== 'public' ? (
-                  <Stamp tone="event" class="text-[10px]">
-                    {doc.visibility}
-                  </Stamp>
-                ) : null}
+                <VisibilityStamp visibility={doc.visibility} />
               </TableCell>
             ) : null}
             <TableCell>

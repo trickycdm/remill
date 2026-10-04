@@ -33,6 +33,7 @@ import * as admin_c_collection_bulk from './routes/admin/c/[collection]/bulk';
 import * as admin_c_collection_export from './routes/admin/c/[collection]/export';
 import * as admin_c_collection_import from './routes/admin/c/[collection]/import';
 import * as admin_c_collection_new from './routes/admin/c/[collection]/new';
+import * as admin_c_collection_picker from './routes/admin/c/[collection]/picker';
 import * as admin_collections_slug_delete from './routes/admin/collections/[slug]/delete';
 import * as admin_media_id_alt from './routes/admin/media/[id]/alt';
 import * as admin_media_id_delete from './routes/admin/media/[id]/delete';
@@ -141,6 +142,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/c/:collection/import', ...admin_c_collection_import.onRequestPost);
 	app.get('/admin/c/:collection/new', ...admin_c_collection_new.onRequestGet);
 	app.post('/admin/c/:collection/new', ...admin_c_collection_new.onRequestPost);
+	app.get('/admin/c/:collection/picker', ...admin_c_collection_picker.onRequestGet);
 	app.get('/admin/c/:collection/:id', ...admin_c_collection_id_index.onRequestGet);
 	app.post('/admin/c/:collection/:id', ...admin_c_collection_id_index.onRequestPost);
 	app.post('/admin/collections/:slug/delete', ...admin_collections_slug_delete.onRequestPost);

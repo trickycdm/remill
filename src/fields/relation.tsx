@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod';
-import { Badge, Input } from '@/components/ui';
+import { Badge, Input, Search, X, INPUT_BASE, CONTROL_H, cx } from '@/components/ui';
 import { FieldShell, controlProps } from '@/fields/field-shell';
 import type { FieldType, FieldDescriptor } from '@/fields/types';
 
@@ -63,6 +63,38 @@ function splitIds(raw: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+/** One linked document: its title (the raw id when it could not be resolved)
+ *  linking to its editor, plus a remove control the picker island reveals. */
+function RelationChip({ id, title, collection }: { id: string; title: string | null; collection: string }) {
+  return (
+    <li
+      data-id={id}
+      class="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-surface py-1 pr-1 pl-2.5 text-sm"
+    >
+      <a
+        data-relation-title
+        href={`/admin/c/${collection}/${id}`}
+        target="_blank"
+        rel="noopener"
+        class={cx(
+          'truncate rounded-sm text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+          title === null && 'font-mono text-xs',
+        )}
+      >
+        {title ?? id}
+      </a>
+      <button
+        type="button"
+        data-relation-remove
+        aria-label={`Remove ${title ?? id}`}
+        class="hidden size-6 shrink-0 items-center justify-center rounded-sm text-ink-subtle transition-colors hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        <X class="size-3.5" />
+      </button>
+    </li>
+  );
+}
+
 export const relationField: FieldType<RelationConfig, string | string[]> = {
   key: 'relation',
   configSchema,
@@ -89,30 +121,63 @@ export const relationField: FieldType<RelationConfig, string | string[]> = {
     }
     return deduped;
   },
-  EditComponent: ({ field, config, value, signal }) => {
+  // Chips + a title search (the relation-picker island, src/client/). The text
+  // input stays in the DOM as the form-value carrier (DATASTAR_PATTERNS §g), so
+  // with no JS this is still a working id field — now with the titles shown.
+  EditComponent: ({ field, config, value, signal, expanded }) => {
     const multiple = config.multiple === true;
-    const display = Array.isArray(value) ? value.join(', ') : (value ?? '');
+    const ids = Array.isArray(value) ? value : value ? [value] : [];
+    const titles = new Map(
+      (expanded ? (Array.isArray(expanded) ? expanded : [expanded]) : []).map((r) => [r.id, r.title]),
+    );
     return (
-      <FieldShell
-        field={field}
-        signal={signal}
-        help={
-          multiple
-            ? `Comma-separated document ids from '${config.collection}'.`
-            : `A document id from '${config.collection}'.`
-        }
-      >
-        <div class="flex items-center gap-3">
+      <FieldShell field={field} signal={signal} help={`Links to documents in '${config.collection}'.`}>
+        <div
+          class="relative flex flex-col gap-2"
+          data-relation-picker
+          data-collection={config.collection}
+          data-multiple={multiple ? 'true' : undefined}
+        >
+          <ul data-relation-chips class="flex flex-wrap gap-2 empty:hidden">
+            {ids.map((id) => (
+              <RelationChip id={id} title={titles.get(id) ?? null} collection={config.collection} />
+            ))}
+          </ul>
+          {/* The island clones this for every pick, so chip markup lives in one place. */}
+          <template data-relation-chip-template>
+            <RelationChip id="" title={null} collection={config.collection} />
+          </template>
           <Input
             {...controlProps({ field, signal }, { placeholder: multiple ? 'doc_…, doc_…' : 'doc_…', required: false })}
             type="text"
-            value={display}
+            value={ids.join(', ')}
           />
+          {/* Hidden until the island mounts and takes over from the id input. */}
+          <div class="relative hidden" data-relation-search>
+            <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-subtle" />
+            <input
+              id={`${signal}-search`}
+              type="text"
+              role="combobox"
+              autocomplete="off"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls={`${signal}-results`}
+              placeholder={`Search ${config.collection} by title…`}
+              class={cx(INPUT_BASE, CONTROL_H.md, 'border-border-strong pl-9 focus-visible:outline-ring')}
+            />
+            <div
+              id={`${signal}-results`}
+              data-relation-results
+              class="absolute inset-x-0 top-full z-30 mt-1 hidden max-h-72 overflow-y-auto rounded-md border border-border bg-surface-raised p-1 shadow-lg"
+            />
+          </div>
+          <span data-relation-status role="status" aria-live="polite" class="sr-only" />
           <a
             href={`/admin/c/${config.collection}`}
             target="_blank"
             rel="noopener"
-            class="whitespace-nowrap text-sm text-accent-text hover:underline"
+            class="self-start rounded-sm text-[13px] text-accent-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             Browse {config.collection} ↗
           </a>

@@ -21,6 +21,7 @@ export function Drawer({
   footer,
   description,
   side = 'right',
+  size = 'md',
   class: cls,
 }: {
   id: string;
@@ -29,6 +30,11 @@ export function Drawer({
   footer?: unknown;
   description?: unknown;
   side?: 'right' | 'left';
+  /** Panel width: `md` for a form or detail view, `lg` for a panel that manages
+   *  a list (the editor's Share drawer). A prop rather than a `class` override —
+   *  two `max-w-*` utilities on one element resolve by stylesheet order, not by
+   *  which was written last. */
+  size?: 'md' | 'lg';
   class?: string;
 }): JSX.Element {
   const sideClass =
@@ -44,7 +50,7 @@ export function Drawer({
       closeLabel="Close panel"
       class={cls}
       classes={{
-        panel: `fixed inset-y-0 top-0 bottom-0 m-0 h-dvh max-h-dvh w-[calc(100vw-3rem)] max-w-md border-border bg-surface-raised p-0 text-ink shadow-lg ${sideClass}`,
+        panel: `fixed inset-y-0 top-0 bottom-0 m-0 h-dvh max-h-dvh w-[calc(100vw-3rem)] ${size === 'lg' ? 'max-w-2xl' : 'max-w-md'} border-border bg-surface-raised p-0 text-ink shadow-lg ${sideClass}`,
         body: 'flex h-full flex-col',
         header: 'flex items-start justify-between gap-4 border-b border-border px-5 py-4',
         title: 'font-display text-lg leading-snug font-semibold tracking-tight text-ink',

@@ -49,6 +49,49 @@ test.describe.serial('D38 — editor islands (CodeMirror + media picker)', () =>
     expect(axe.violations, `axe on editor: ${axe.violations.map((v) => v.id).join(',')}`).toEqual([]);
   });
 
+  test('the edit page has ONE scroller: no sideways overflow, no scrolling rail, an uncapped editor', async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto('/admin/c/posts');
+    await page.getByRole('link', { name: TITLE }).click();
+    await page.waitForURL(/\/admin\/c\/posts\/doc_/);
+
+    // A body far taller than the viewport — the case that used to trap the
+    // text in a capped inner scrollbar.
+    const editor = page.locator('[data-md-editor] .cm-content');
+    await editor.click();
+    await editor.fill(Array.from({ length: 160 }, (_, i) => `Line ${i + 1} of a long body.`).join('\n\n'));
+
+    const measure = () =>
+      page.evaluate(() => {
+        const de = document.documentElement;
+        const rail = document.querySelector('aside[aria-label="Document actions"]')!;
+        const cm = document.querySelector('.cm-scroller')!;
+        return {
+          sideways: de.scrollWidth - de.clientWidth,
+          railOverflowY: getComputedStyle(rail).overflowY,
+          railScrolls: rail.scrollHeight - rail.clientHeight,
+          editorScrolls: cm.scrollHeight - cm.clientHeight,
+        };
+      });
+
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const m = await measure();
+      // The hidden markdown carrier once made the page ~455px too wide.
+      expect(m.sideways, `sideways overflow at ${viewport.width}px`).toBeLessThanOrEqual(0);
+      expect(m.railOverflowY, `rail overflow-y at ${viewport.width}px`).toBe('visible');
+      expect(m.railScrolls, `rail inner scroll at ${viewport.width}px`).toBeLessThanOrEqual(1);
+      expect(m.editorScrolls, `editor inner scroll at ${viewport.width}px`).toBeLessThanOrEqual(1);
+      // Exactly one Save is offered at each width (rail card vs mobile bar).
+      await expect(page.getByRole('button', { name: /Save changes/i })).toHaveCount(1);
+    }
+  });
+
   test('media picker: browse, upload-and-use writes the id into the field', async ({ page }) => {
     await loginAsAdmin(page);
 

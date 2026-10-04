@@ -162,6 +162,10 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   `affirm | event | refuse` (the two pop tones render identically; the label
   carries the valence), `tilt` at most once per cluster and never in dense
   tables. Precedent: audit logs stamp only the denials; allows stay Badges.
+  **Visibility is the standing exception:** a non-public document is always marked
+  with `VisibilityStamp` (`src/components/admin/visibility-stamp.tsx` — list rows,
+  the edit header, the Visibility section), never a hand-rolled Badge or Stamp, so
+  the same fact reads the same everywhere. Public is the unmarked default.
 - **Datastar-friendly by construction.** Form controls (`Input`, `Select`,
   `Textarea`) pass any `data-*` / `aria-*` attribute straight through, so
   `<Input data-bind="title" />` and `<Select data-attr:disabled="$busy" />` work.
@@ -230,11 +234,20 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
 - **Breadcrumbs** (`ui/breadcrumb.tsx`) go in the PageHeader on depth-2+ pages
   (built from data already in scope); omit them at depth 1 — a one-item trail is noise.
 - **Action hierarchy on editor/detail pages.** Actions + metadata belong in one
-  sticky sidebar, not scattered top/bottom: exactly one primary (Save), a secondary
+  sidebar rail, not scattered top/bottom: exactly one primary (Save), a secondary
   (Publish), and an isolated destructive (Delete → `Dialog`, never native
   `confirm()`). The sidebar Save can drive the content form in the other column via
   `<button type="submit" form="editor-form">` association (no nested forms). Two
   competing working-ink primaries on one page is the smell to avoid.
+- **The editor page has ONE scroller — the page (D58).** The rail never gets its own
+  `overflow`/`max-height`, and the body editor is not height-capped: only the rail's
+  Save card is `sticky`, everything else flows with the page (below `lg`, a sticky
+  bottom `MobileSaveBar` carries Save instead). That only works while the rail stays
+  short, so **anything unbounded is summarised in the rail and managed elsewhere**:
+  share links → the Share `Drawer` (`size="lg"`), comments → the review overlay,
+  revision history → the revisions page. Rail sections are hairline-divided
+  (`RailSection`), not stacked cards; the Save card alone keeps a surface because it
+  floats while stuck. If a rail section can grow with data, cap it and link out.
 - **Spacing rhythm:** 4px base (Tailwind default scale); cards `gap`/padding in
   multiples of 4/5; page sections separated by `gap-6`+ and hairline rules.
 

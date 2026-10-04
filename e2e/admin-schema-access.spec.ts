@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { loginAsAdmin } from './helpers/auth';
+import { openShare } from './helpers/share';
 
 // Distinct client IP per spec file so the login rate-limiter (SEC-2: 10/min per
 // CF-Connecting-IP) buckets each file separately. See admin-content.spec.ts.
@@ -188,19 +189,20 @@ test.describe('Phase 4 — schema builder + access UI', () => {
     await page.getByRole('button', { name: /Create Posts/i }).click();
     await expect(page).toHaveURL(/\/admin\/c\/posts\/doc_/);
 
-    // The Share card (D51) is visible for a manager, split into "Links" and
-    // "People & roles" subsections.
-    await expect(page.getByText('People & roles', { exact: true })).toBeVisible();
+    // The Share drawer (D51) for a manager has "Links" and "People & roles".
+    const share = await openShare(page);
+    await expect(share.getByRole('heading', { name: /People & roles/ })).toBeVisible();
 
     // Grant read (checked by default) to the reader role, behind the disclosure.
-    await page.locator('summary', { hasText: 'Add person or role' }).click();
-    await page.getByLabel('Grant to').selectOption('role:reader');
-    await page.getByRole('button', { name: 'Grant access', exact: true }).click();
+    await share.locator('summary', { hasText: 'Add person or role' }).click();
+    await share.getByLabel('Grant to').selectOption('role:reader');
+    await share.getByRole('button', { name: 'Grant access', exact: true }).click();
 
-    // The grant now shows with a revoke control.
-    await expect(page.getByText('reader', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Revoke' }).click();
-    await expect(page.getByText('No one has item-level access.')).toBeVisible();
+    // The grant now shows, in place, with a revoke control — and the rail agrees.
+    await expect(share.getByText('reader', { exact: true })).toBeVisible();
+    await expect(page.locator('#share-summary')).toContainText('1 person or role with direct access');
+    await share.getByRole('button', { name: 'Revoke access for reader' }).click();
+    await expect(share.getByText(/^No one has direct access/)).toBeVisible();
   });
 
   test('invite a person with a password, then sign in as them', async ({ page, context }) => {
