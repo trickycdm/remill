@@ -239,7 +239,7 @@ Hono JSX only — plain functions returning JSX, no hooks/`this`/React, `class=`
   `confirm()`). The sidebar Save can drive the content form in the other column via
   `<button type="submit" form="editor-form">` association (no nested forms). Two
   competing working-ink primaries on one page is the smell to avoid.
-- **The editor page has ONE scroller — the page (D58).** The rail never gets its own
+- **The editor page has ONE scroller — the page (D59).** The rail never gets its own
   `overflow`/`max-height`, and the body editor is not height-capped: only the rail's
   Save card is `sticky`, everything else flows with the page (below `lg`, a sticky
   bottom `MobileSaveBar` carries Save instead). That only works while the rail stays

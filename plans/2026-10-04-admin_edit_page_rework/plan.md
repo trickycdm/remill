@@ -117,7 +117,7 @@ New `src/components/admin/share-drawer.tsx` (replaces the rail's `SharePanel` bo
 - Unit: relation `EditComponent` renders chips from `expanded`; `VisibilityStamp`.
 - Steering: `DESIGN_SYSTEM.md` (editor rule becomes "sticky Save card, page is the only scroller";
   visibility exceptions are always a Stamp), `DATASTAR_PATTERNS.md` §g (add the relation picker and
-  the "replace the carrier's class list" hiding rule), `docs/TECH_DECISIONS.md` (D58), and the
+  the "replace the carrier's class list" hiding rule), `docs/TECH_DECISIONS.md` (D59), and the
   CLAUDE.md build-status paragraph.
 
 ## Order of work

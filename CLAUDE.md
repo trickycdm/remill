@@ -96,7 +96,13 @@ rendered public pages + share links.)
 > collection public while switching every other document to private in one batch;
 > `updateCollection` 409s any `publicRead` flip over non-private documents without
 > `onEnablePublic` (`private`|`keep`) — builder confirm step, REST query param, MCP arg.
-> **D58 built 2026-10-04** (plan: [`plans/2026-10-04-admin_edit_page_rework/`](plans/2026-10-04-admin_edit_page_rework/)):
+> **D58 built 2026-10-04** (plan: [`plans/2026-10-04-passkey_login/`](plans/2026-10-04-passkey_login/)):
+> **passkey login** — WebAuthn passkeys alongside passwords: add/rename/remove at `/admin/account`,
+> one-tap or autofill sign-in at `/admin/login` (`src/services/passkeys/`, tables `passkeys` +
+> `webauthn_challenges`, `@simplewebauthn/server` for verification, the `src/client/passkey.ts`
+> island, `src/lib/relying-party.ts`). Same session as a password login; single-use challenges,
+> user verification required, current password re-checked to enrol.
+> **D59 built 2026-10-04** (plan: [`plans/2026-10-04-admin_edit_page_rework/`](plans/2026-10-04-admin_edit_page_rework/)):
 > **the edit page has one scroller** — the rail no longer scrolls on its own (sticky Save card
 > only, hairline `RailSection`s, `MobileSaveBar` below `lg`) and the markdown editor grows with the
 > page; **sharing is a drawer** (`share-drawer.tsx` — one "New link" form, one list of read-only
@@ -126,7 +132,8 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
 - **Drizzle ORM** + **Cloudflare D1** (SQLite) — for the **fixed** tables only; content is
   schema-as-data, so migrations stay rare.
 - **R2** — media originals, streamed with range support.
-- **hono-sessions** (encrypted cookie) + **scrypt** (`@noble/hashes`) for human auth; **bearer tokens**
+- **hono-sessions** (encrypted cookie) + **scrypt** (`@noble/hashes`) for human auth, plus
+  **passkeys** (WebAuthn via `@simplewebauthn/server`, D58); **bearer tokens**
   (hashed at rest, scope-masked) for machine auth (REST + MCP).
 - **MCP** — a direct streamable-HTTP JSON-RPC endpoint at `/mcp` (decision **D18**; not the
   `agents`-SDK `McpAgent`-on-a-Durable-Object once planned — that dep was removed).
@@ -198,7 +205,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `users.tsx`, custom roles, teams — a grant subject kind, D24 —
   at `/admin/access/teams`, the `matrix/` overview); item-grant sharing via
   the editor's Share drawer (`src/components/admin/share-drawer.tsx`, loaded by
-  `src/services/sharing/`, D58), the `/api/c/:collection/:id/grants` route, and the MCP
+  `src/services/sharing/`, D59), the `/api/c/:collection/:id/grants` route, and the MCP
   `share_<slug>` tools; the `share_link` action (D26) lets granted agents mint expiring anonymous
   links over MCP; public invite consumption at `src/routes/auth/set-password/[token].tsx`, team
   join links at `/auth/join/:token`, "Shared with me" at `/admin/shared`. Admin also surfaces activity
@@ -232,7 +239,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `layouts/public-shell.tsx` (read-only render), `share-bar.tsx` (reader share UI — copy-link +
   Web Share, D41), `backlinks.tsx` (relation backlinks list), `admin/graph-panel.tsx` (shared GraphPanel wiring the D45 island for both /admin dashboard hero and /admin/graph, with accessible fallback summary); **`src/client/`** browser islands:
   `init.ts` (global loader), `markdown-editor.ts` (CodeMirror 6, D38), `media-picker.ts` (dialog
-  picker, D38), `relation-picker.ts` (title search + chips for relation fields, D58), `share.ts` (reader share Web Share API, D41), `graph.ts` (3D canvas galaxy, D45).
+  picker, D38), `relation-picker.ts` (title search + chips for relation fields, D59), `share.ts` (reader share Web Share API, D41), `graph.ts` (3D canvas galaxy, D45).
 
 **Invariant (non-negotiable):** routes and Durable Objects never access D1 directly — all DB
 operations go through services → queries. Cron jobs also call services only. All authorization goes through

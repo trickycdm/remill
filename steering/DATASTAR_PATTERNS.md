@@ -209,7 +209,7 @@ things Datastar genuinely can't express:
 | Forms, toggles, tabs, partial swaps, redirects, save feedback | **Datastar** (`data-*`, `@post`/`@get`, SSE) |
 | Markdown editing | island — CodeMirror 6 (`src/client/markdown-editor.ts`, D38) |
 | Media browsing/upload in the editor | island — media picker (`src/client/media-picker.ts`, D38 — supersedes D12/Uppy) |
-| Picking related documents by title (combobox + chips) | island — relation picker (`src/client/relation-picker.ts`, D58) |
+| Picking related documents by title (combobox + chips) | island — relation picker (`src/client/relation-picker.ts`, D59) |
 | Slow server-rendered section behind a skeleton | island — lazy-fragment (below) |
 
 **Gotcha — `@get` on a load-fragment can loop into a full-page reload.** Using Datastar's
@@ -227,7 +227,7 @@ textarea. Hide the carrier with `sr-only` + `tabindex="-1"` + `aria-hidden` (NEV
 — a label click still forwards focus into the editor) — and **REPLACE its class list
 (`el.className = 'sr-only'`), never `classList.add('sr-only')`**: the control's own `w-full` outranks
 `sr-only`'s `width: 1px`, leaving an absolutely-positioned, viewport-wide invisible box that scrolls
-the whole page sideways (the D58 bug; keep the island wrapper `relative` too). Give the CM content an `aria-label`
+the whole page sideways (the D59 bug; keep the island wrapper `relative` too). Give the CM content an `aria-label`
 threaded via a `data-label` attribute. Theme maps `var(--color-*)` tokens directly — they are
 `light-dark()` values, so dark mode needs no JS branching. **Test impact:** the field now exposes
 TWO label-associated nodes; e2e must fill via `fillMarkdown` (e2e/helpers/editor.ts), never
@@ -249,7 +249,7 @@ server-rendered group that uses flex utilities (`hidden flex-wrap items-center g
 element falls back to `display:block` and every flex utility on it is silently inert (found live
 in the share bar: the revealed buttons lost their gap/alignment with no error anywhere).
 
-**Worked example 2b — the relation picker (combobox + fetched listbox, D58).** Same handoff as the
+**Worked example 2b — the relation picker (combobox + fetched listbox, D59).** Same handoff as the
 media picker, different shape: the `relation` widget server-renders the linked documents as titled
 chips, the id `<Input data-bind>` carrier, a chip `<template>`, and a hidden search box. The island
 (`src/client/relation-picker.ts`) hides the carrier, re-points the field's `<label for>` at the search
@@ -261,7 +261,7 @@ server-rendered `<template>`** for new chips so their markup lives in one place;
 request counter. **Test impact:** fill the search by label, then click the `option` — never `fill` a
 `doc_…` id into the label.
 
-**Worked example 2c — a panel that re-renders itself (the Share drawer, D58).** Every form in
+**Worked example 2c — a panel that re-renders itself (the Share drawer, D59).** Every form in
 `share-drawer.tsx` posts with `@post(…, {contentType: 'form'})` and the handler answers with ONE
 `text/html` response holding two top-level elements, `#share-manager` and `#share-summary`; Datastar
 morphs each by id (§d), so the drawer's list and the rail's counts update together and the page never
