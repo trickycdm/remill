@@ -8,7 +8,7 @@ import { getCollectionOrThrow } from '@/services/collections';
 import { listDocuments } from '@/services/documents';
 import { getSettings } from '@/services/settings';
 import { nowIso } from '@/lib/now';
-import { AdminShell } from '@/components/layouts/admin-shell';
+import { AdminShell, navKeyForCollection } from '@/components/layouts/admin-shell';
 import { PageHeader, Button } from '@/components/ui';
 import { GeneratedTable } from '@/components/admin/generated';
 
@@ -48,7 +48,7 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
         : null;
 
   return c.render(
-    <AdminShell user={user} current="content">
+    <AdminShell user={user} current={navKeyForCollection(slug)}>
       <PageHeader
         breadcrumb={[{ label: 'Content', href: '/admin/c' }, { label: def.name }]}
         title={def.name}

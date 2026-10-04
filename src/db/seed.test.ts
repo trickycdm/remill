@@ -156,3 +156,69 @@ describe('migration 0019 — frame render mode without losing documents (D60)', 
     ).toThrow(/FOREIGN KEY/);
   });
 });
+
+/**
+ * D62: the built-in `pages` collection reaches a fresh install through seed.sql
+ * and an EXISTING one through migration 0020 — two hand-mirrored copies of one
+ * row, so they are compared here.
+ */
+describe('migration 0020 — the built-in pages collection (D62)', () => {
+  const MIGRATIONS = join(import.meta.dirname, 'migrations');
+  const SEED = readFileSync(join(import.meta.dirname, 'seed.sql'), 'utf-8');
+  const run = (db: InstanceType<typeof Database>, file: string) => {
+    for (const stmt of readFileSync(join(MIGRATIONS, file), 'utf-8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) db.exec(stmt);
+    }
+  };
+  const files = readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+  const d62 = files.find((f) => f.startsWith('0020_'))!;
+  const migrated = (upTo?: string) => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    for (const f of files.filter((f) => !upTo || f < upTo)) run(db, f);
+    return db;
+  };
+  /** The seed as it stood before D62: everything but the pages insert. */
+  const seedWithoutPages = SEED.slice(0, SEED.indexOf("-- `pages` — collection, protected (D62)"));
+  const pagesRow = (db: InstanceType<typeof Database>) =>
+    db
+      .prepare(
+        "SELECT slug, name, shape, fields_json, workflow_json, access_json, protected, render_mode, template, bind_json FROM collections WHERE slug = 'pages'",
+      )
+      .get();
+
+  it('adds pages to an install that was seeded before it existed', () => {
+    const db = migrated(d62);
+    db.exec(seedWithoutPages);
+    expect(pagesRow(db)).toBeUndefined();
+    run(db, d62);
+    expect(pagesRow(db)).toMatchObject({ slug: 'pages', protected: 1, render_mode: 'frame' });
+  });
+
+  it('the migration row and the seed row are the same row', () => {
+    const viaMigration = migrated(d62);
+    viaMigration.exec(seedWithoutPages);
+    run(viaMigration, d62);
+    const viaSeed = migrated();
+    viaSeed.exec(SEED);
+    expect(pagesRow(viaMigration)).toEqual(pagesRow(viaSeed));
+  });
+
+  it('leaves a migrations-only database alone (the seed brings the row)', () => {
+    expect(pagesRow(migrated())).toBeUndefined();
+  });
+
+  it('never overwrites a collection someone already made at that slug', () => {
+    const db = migrated(d62);
+    db.exec(seedWithoutPages);
+    db.prepare(
+      "INSERT INTO collections (slug, name, shape, fields_json, created_at, updated_at) VALUES ('pages', 'My pages', 'collection', '[]', 'n', 'n')",
+    ).run();
+    run(db, d62);
+    db.exec(SEED);
+    expect(pagesRow(db)).toMatchObject({ name: 'My pages', protected: 0, render_mode: null });
+  });
+});
+

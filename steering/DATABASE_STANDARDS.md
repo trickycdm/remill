@@ -227,3 +227,11 @@ migration). Add `NOT NULL` to a populated column only with a `DEFAULT` in the sa
   `database_id` first** — a placeholder or stale id makes them fail with "database not found" even
   when the DB exists. For config-independent operations use `wrangler d1 list`, or move the config
   aside for the command. Full deploy-pipeline gotchas: `docs/DEPLOYMENT.md`.
+
+## Document size (D62)
+
+D1 refuses any row or bound value over 2,000,000 bytes, and a save writes the data twice (document
+row + revision). The documents service checks the stored JSON's BYTE length against
+`MAX_DOCUMENT_BYTES` (1.8 MB) on create and update and answers 413 `PAYLOAD_TOO_LARGE`. Field
+`maxLength`s count characters, so they do not replace this. Large binary content belongs in media.
+

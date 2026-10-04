@@ -149,7 +149,8 @@ export function parseCollectionForm(body: RawBody, existing?: CollectionDefiniti
           : undefined,
     access:
       visibility === 'public'
-        ? { publicRead: true }
+        ? // No control for `defaultVisibility` (D62) — carried over, like template.
+          { publicRead: true, ...(existing?.access?.defaultVisibility ? { defaultVisibility: existing.access.defaultVisibility } : {}) }
         : visibility === 'private'
           ? { private: true }
           : undefined,

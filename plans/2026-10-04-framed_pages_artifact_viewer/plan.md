@@ -143,7 +143,7 @@ Start with a 30-minute spike on how the bridge is built. Preferred: a Vite virtu
 - `src/db/seed.sql` and `0020_*.sql`: the same `INSERT OR IGNORE` row, `protected = 1`, `render_mode = 'frame'`, fields `title` (text, required, indexed), `html` (html, required), `description` (text), `tags` (tags, indexed). The migration is needed because tag deploys never run the seed (precedent: `0017_shocking_blindfold.sql`).
 - Reserve the slug `page` on create only, and add a duplicate-tool-name guard in `src/mcp/tools.ts`, so nothing collides with `publish_page`.
 - A document size guard (about 1.8 MB) in the documents service, so an oversized save fails with a clean 413 instead of a D1 error.
-- `src/routes/admin/pages/index.tsx` plus a nav entry (`admin-shell.tsx:59-100`): a list that opens the viewer, with a paste-HTML "New page". Follows the `/admin/media` precedent.
+- ~~`src/routes/admin/pages/index.tsx`: a bespoke list with a paste-HTML "New page", following the `/admin/media` precedent.~~ A nav entry (`admin-shell.tsx`) pointing at the generic `/admin/c/pages` list, whose rows open the viewer for any frame collection. The generic "New" form is the paste-HTML form.
 
 **Tests.** `seed.test.ts` (0020 on an existing install; a user's own `pages` row is preserved; seed and migration rows identical; row passes `validateDefinition`); documents test (born private; anonymous list and get denied); new e2e for the public opt-in; check `e2e/html-pages.spec.ts` does not collide with the new "Pages" nav entry.
 
@@ -195,3 +195,6 @@ Start with a 30-minute spike on how the bridge is built. Preferred: a Vite virtu
 
 ## Revision Log
 - 2026-10-04: initial plan.
+- 2026-10-04: phase 1, `?preview=1` on a frame collection renders the viewer directly rather than redirecting to the admin view; "open full screen" dropped because a 5-minute ticket URL is a poor standalone link.
+- 2026-10-04: phase 2, `CopyField` stays in `editor-sidebar` (moving it bought nothing).
+- 2026-10-04: phase 4, no bespoke `/admin/pages` screen; the generic list and form cover it once frame rows open the viewer.

@@ -90,3 +90,27 @@ VALUES (
   '2026-07-04T00:00:00Z',
   '2026-07-04T00:00:00Z'
 );
+
+-- ---------------------------------------------------------------------------
+-- `pages` — collection, protected (D62). Standalone HTML pages, published in
+-- one step (`publish_page`) and shown in the framed viewer (D60): the `html`
+-- field is the whole document. Private by default — `publicRead` is on only so
+-- a single page CAN be made public (document visibility, D50); every new page
+-- is born `private` (`defaultVisibility`). No publish lifecycle: a page is
+-- live for whoever may see it the moment it is saved.
+-- KEEP IN STEP with migration 0020, which ships the same row to existing
+-- installs (production deploys apply migrations but never re-run this seed).
+-- ---------------------------------------------------------------------------
+INSERT OR IGNORE INTO collections (slug, name, shape, fields_json, workflow_json, access_json, protected, render_mode, created_at, updated_at)
+VALUES (
+  'pages',
+  'Pages',
+  'collection',
+  '[{"key":"title","type":"text","required":true,"index":true,"label":"Title","admin":{"showInList":true}},{"key":"html","type":"html","required":true,"label":"HTML","admin":{"help":"The whole page: a complete HTML document. It is shown in a sandboxed frame, so it can carry its own styles and scripts."}},{"key":"description","type":"text","label":"Description","admin":{"showInList":true,"help":"One or two sentences on what this page is."}},{"key":"tags","type":"tags","index":true,"label":"Tags"}]',
+  '{"lifecycle":"none"}',
+  '{"publicRead":true,"defaultVisibility":"private"}',
+  1,
+  'frame',
+  '2026-10-04T00:00:00Z',
+  '2026-10-04T00:00:00Z'
+);

@@ -17,3 +17,7 @@
 | 2026-10-04 15:07 | phase 3 built | frame bridge + validated message protocol, review island split into DOM and frame adapters, `document` canonical profile, review panel as a viewer column, review links re-enabled for frame collections, owner "Comments" toggle on the admin view |
 | 2026-10-04 15:07 | lessons | Tailwind class adjacent to ${ in a template literal is not generated (zero-height iframe); sr-only labels in an unpositioned scroller stretch the page. Both recorded in steering/DESIGN_SYSTEM.md |
 | 2026-10-04 15:07 | verified | 833 unit tests, lint, type-check; e2e 107 passed, 1 failed (visibility-and-share-links:136, flaky on unmodified main too); new e2e/framed-review.spec.ts 4/4; screenshots checked (phone strip layout, wide dark column) |
+| 2026-10-04 15:14 | phase 3 shipped to PR | PR #55 (feat/frame-comments), stacked on #54 |
+| 2026-10-04 15:14 | phase 4 built | seeded + migrated `pages` collection (0020), access.defaultVisibility, `page` slug reserved on create, MAX_DOCUMENT_BYTES 413 guard, Pages nav item, frame list rows open the viewer |
+| 2026-10-04 15:14 | RE-PLAN | no bespoke /admin/pages screen: the generic list (rows now open the viewer for frame collections) plus the generic "New" form already cover it; a second screen would duplicate both |
+| 2026-10-04 15:14 | verified | 843 unit tests, lint, type-check; e2e 109 passed, 1 flaky (revision-diff, flaky on main); new Pages e2e (nav, private by default, public opt-in, anonymous viewer) |

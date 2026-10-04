@@ -433,6 +433,18 @@ export function PenNib(props: IconProps) {
   );
 }
 
+/** lucide app-window — the Pages nav item (a page in its own frame, D62). */
+export function AppWindow(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="M10 4v4" />
+      <path d="M2 8h20" />
+      <path d="M6 4v4" />
+    </Svg>
+  );
+}
+
 /** lucide link — the reader share bar's "Copy link". (`Icon` suffix: avoids
  *  reading as an anchor component; DatabaseIcon precedent.) */
 export function LinkIcon(props: IconProps) {

@@ -27,6 +27,7 @@ import {
   ToastHost,
   Dashboard,
   FileText,
+  AppWindow,
   Image,
   Inbox,
   Waypoints,
@@ -42,6 +43,7 @@ import {
   Store,
 } from '@/components/ui';
 import { Wordmark } from '@/components/auth-shell';
+import { PAGES_COLLECTION } from '@/config/constants';
 
 /**
  * No-flash theme init. A static, self-contained IIFE — the layout owner renders
@@ -58,6 +60,9 @@ export const THEME_INIT_SNIPPET =
 const NAV_ITEMS: readonly NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/admin', icon: Dashboard },
   { key: 'content', label: 'Content', href: '/admin/c', icon: FileText },
+  // The built-in Pages collection (D62) — an ordinary collection, surfaced
+  // here because publishing a standalone page is a first-class job.
+  { key: 'pages', label: 'Pages', href: `/admin/c/${PAGES_COLLECTION}`, icon: AppWindow },
   { key: 'graph', label: 'Graph', href: '/admin/graph', icon: Waypoints },
   { key: 'shared', label: 'Shared with me', href: '/admin/shared', icon: Inbox },
   { key: 'media', label: 'Media', href: '/admin/media', icon: Image },
@@ -81,6 +86,7 @@ const NAV_BY_ROLE: Record<string, readonly string[]> = {
   admin: [
     'dashboard',
     'content',
+    'pages',
     'graph',
     'shared',
     'media',
@@ -93,10 +99,17 @@ const NAV_BY_ROLE: Record<string, readonly string[]> = {
   ],
   // Trash shows for the roles that hold `delete` (the page itself scopes rows
   // to what the caller can actually act on; the system author role cannot delete).
-  editor: ['dashboard', 'content', 'graph', 'shared', 'media', 'trash'],
-  author: ['dashboard', 'content', 'graph', 'shared', 'media'],
-  reader: ['dashboard', 'content', 'graph', 'shared', 'media'],
+  editor: ['dashboard', 'content', 'pages', 'graph', 'shared', 'media', 'trash'],
+  author: ['dashboard', 'content', 'pages', 'graph', 'shared', 'media'],
+  reader: ['dashboard', 'content', 'pages', 'graph', 'shared', 'media'],
 };
+
+/** The nav item a collection's own screens highlight: its dedicated item when
+ *  it has one (Pages), else the general Content item. Derived from the nav
+ *  itself, so no route names a collection. */
+export function navKeyForCollection(slug: string): string {
+  return NAV_ITEMS.find((item) => item.href === `/admin/c/${slug}`)?.key ?? 'content';
+}
 
 function visibleNav(role: string): readonly NavItem[] {
   const allowed = NAV_BY_ROLE[role] ?? NAV_BY_ROLE.reader;

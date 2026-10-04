@@ -46,6 +46,11 @@ FieldType contract against all six surfaces before merging.
   stays load-bearing in the access layer (the `published` condition, publicRead sugar), which is
   exactly why lifecycle-none docs must be born published. Gate on `hasLifecycle(def)`
   (`src/lib/lifecycle.ts`) — never re-derive the rule. `none` + `draftPublish` is rejected on write.
+- **Default visibility (D62).** `access.defaultVisibility` (`public` | `unlisted` | `private`) is the
+  visibility a NEW document is born with on a `publicRead` collection; absent = `public`. It is
+  rejected without `publicRead` (there every document is private whatever is stored, D57). An
+  import's preserved visibility still wins. The collection builder has no control for it and
+  carries it over on save.
 - **Render mode (D27, D60).** `renderMode: 'shell' | 'raw' | 'frame'` picks the render for the
   collection: `shell` (default) wraps `document-view` in the public shell; `raw` serves the
   **first** `html` field's value verbatim as the whole page (`rawPageHtml(def, doc)`, bypassing the
@@ -218,7 +223,10 @@ migrations are a post-v1 feature with their own design.
 ## Built-in collections (dogfooding)
 
 `settings` (singleton) and `media` metadata ride the schema engine as seeded, **protected**
-collections (cannot be deleted; slugs reserved). If the engine can't express its own system needs,
+collections (cannot be deleted; slugs reserved). `pages` (D62) is the third: standalone HTML pages in the
+framed viewer, born private (`access.defaultVisibility`). A built-in collection ships in seed.sql
+AND a migration (production never re-runs the seed) — the same row, guarded on the seeded
+`settings` row and `INSERT OR IGNORE`; `seed.test.ts` compares the two copies. If the engine can't express its own system needs,
 the engine is not good enough — fix the engine, don't special-case.
 
 ## How to add a field type
