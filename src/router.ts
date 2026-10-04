@@ -11,6 +11,8 @@ import * as api_c_collection_id_comments_commentId from './routes/api/c/[collect
 import * as api_c_collection_id_share_links_grantId from './routes/api/c/[collection]/[id]/share-links/[grantId]';
 import * as s_token_review_comments_commentId_delete from './routes/s/[token]/review/comments/[commentId]/delete';
 import * as s_token_review_comments_commentId_replies from './routes/s/[token]/review/comments/[commentId]/replies';
+import * as admin_account_passkeys_id_delete from './routes/admin/account/passkeys/[id]/delete';
+import * as admin_account_passkeys_id_rename from './routes/admin/account/passkeys/[id]/rename';
 import * as admin_c_collection_id_delete from './routes/admin/c/[collection]/[id]/delete';
 import * as admin_c_collection_id_publish from './routes/admin/c/[collection]/[id]/publish';
 import * as admin_c_collection_id_restore from './routes/admin/c/[collection]/[id]/restore';
@@ -28,12 +30,15 @@ import * as api_c_collection_id_schedule from './routes/api/c/[collection]/[id]/
 import * as api_c_collection_id_share_links from './routes/api/c/[collection]/[id]/share-links';
 import * as api_c_collection_id_visibility from './routes/api/c/[collection]/[id]/visibility';
 import * as admin_access_principals_id from './routes/admin/access/principals/[id]';
+import * as admin_account_passkeys_options from './routes/admin/account/passkeys/options';
 import * as admin_c_collection_id_index from './routes/admin/c/[collection]/[id]';
 import * as admin_c_collection_bulk from './routes/admin/c/[collection]/bulk';
 import * as admin_c_collection_export from './routes/admin/c/[collection]/export';
 import * as admin_c_collection_import from './routes/admin/c/[collection]/import';
 import * as admin_c_collection_new from './routes/admin/c/[collection]/new';
 import * as admin_collections_slug_delete from './routes/admin/collections/[slug]/delete';
+import * as admin_login_passkey_options from './routes/admin/login/passkey/options';
+import * as admin_login_passkey_verify from './routes/admin/login/passkey/verify';
 import * as admin_media_id_alt from './routes/admin/media/[id]/alt';
 import * as admin_media_id_delete from './routes/admin/media/[id]/delete';
 import * as api_c_collection_id_index from './routes/api/c/[collection]/[id]';
@@ -52,6 +57,7 @@ import * as admin_access_roles_index from './routes/admin/access/roles';
 import * as admin_access_teams_index from './routes/admin/access/teams';
 import * as admin_access_tokens from './routes/admin/access/tokens';
 import * as admin_access_users from './routes/admin/access/users';
+import * as admin_account_passkeys_index from './routes/admin/account/passkeys';
 import * as admin_account_password from './routes/admin/account/password';
 import * as admin_account_profile from './routes/admin/account/profile';
 import * as admin_c_collection_index from './routes/admin/c/[collection]';
@@ -114,6 +120,8 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.delete('/api/c/:collection/:id/share-links/:grantId', ...api_c_collection_id_share_links_grantId.onRequestDelete);
 	app.post('/s/:token/review/comments/:commentId/delete', ...s_token_review_comments_commentId_delete.onRequestPost);
 	app.post('/s/:token/review/comments/:commentId/replies', ...s_token_review_comments_commentId_replies.onRequestPost);
+	app.post('/admin/account/passkeys/:id/delete', ...admin_account_passkeys_id_delete.onRequestPost);
+	app.post('/admin/account/passkeys/:id/rename', ...admin_account_passkeys_id_rename.onRequestPost);
 	app.post('/admin/c/:collection/:id/delete', ...admin_c_collection_id_delete.onRequestPost);
 	app.post('/admin/c/:collection/:id/publish', ...admin_c_collection_id_publish.onRequestPost);
 	app.post('/admin/c/:collection/:id/restore', ...admin_c_collection_id_restore.onRequestPost);
@@ -135,6 +143,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/api/c/:collection/:id/share-links', ...api_c_collection_id_share_links.onRequestPost);
 	app.post('/api/c/:collection/:id/visibility', ...api_c_collection_id_visibility.onRequestPost);
 	app.get('/admin/access/principals/:id', ...admin_access_principals_id.onRequestGet);
+	app.post('/admin/account/passkeys/options', ...admin_account_passkeys_options.onRequestPost);
 	app.post('/admin/c/:collection/bulk', ...admin_c_collection_bulk.onRequestPost);
 	app.get('/admin/c/:collection/export', ...admin_c_collection_export.onRequestGet);
 	app.get('/admin/c/:collection/import', ...admin_c_collection_import.onRequestGet);
@@ -144,6 +153,8 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.get('/admin/c/:collection/:id', ...admin_c_collection_id_index.onRequestGet);
 	app.post('/admin/c/:collection/:id', ...admin_c_collection_id_index.onRequestPost);
 	app.post('/admin/collections/:slug/delete', ...admin_collections_slug_delete.onRequestPost);
+	app.post('/admin/login/passkey/options', ...admin_login_passkey_options.onRequestPost);
+	app.post('/admin/login/passkey/verify', ...admin_login_passkey_verify.onRequestPost);
 	app.post('/admin/media/:id/alt', ...admin_media_id_alt.onRequestPost);
 	app.post('/admin/media/:id/delete', ...admin_media_id_delete.onRequestPost);
 	app.get('/api/c/:collection/export', ...api_c_collection_export.onRequestGet);
@@ -167,6 +178,7 @@ export const loadRoutes = <T extends Env>(app: Hono<T>) => {
 	app.post('/admin/access/teams', ...admin_access_teams_index.onRequestPost);
 	app.post('/admin/access/tokens', ...admin_access_tokens.onRequestPost);
 	app.post('/admin/access/users', ...admin_access_users.onRequestPost);
+	app.post('/admin/account/passkeys', ...admin_account_passkeys_index.onRequestPost);
 	app.post('/admin/account/password', ...admin_account_password.onRequestPost);
 	app.post('/admin/account/profile', ...admin_account_profile.onRequestPost);
 	app.get('/admin/c/:collection', ...admin_c_collection_index.onRequestGet);

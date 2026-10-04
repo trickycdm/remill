@@ -1,21 +1,16 @@
 import { createFactory } from 'hono/factory';
+import { Script } from 'vite-ssr-components/hono';
 import type { Env } from '@/types';
 import { getDb } from '@/db/client';
 import { authenticateUser } from '@/services/auth';
 import { setSessionUser, getSessionUser } from '@/lib/auth';
 import { dsRedirect } from '@/lib/datastar-response';
+import { safeRedirect } from '@/lib/safe-redirect';
 import { rateLimit, LOGIN_RATE_LIMIT } from '@/middleware/rate-limit';
 import { AuthShell } from '@/components/auth-shell';
 import { Button, FormField, Input } from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
-
-/** Only allow same-origin relative redirects (no protocol-relative or absolute). */
-function safeRedirect(target: string | undefined): string {
-  if (!target) return '/admin';
-  if (!target.startsWith('/') || target.startsWith('//')) return '/admin';
-  return target;
-}
 
 // ---------------------------------------------------------------------------
 // GET /admin/login — render the login form (or bounce if already signed in)
@@ -37,7 +32,7 @@ export const onRequestGet = factory.createHandlers((c) => {
             name="email"
             type="email"
             required
-            autocomplete="email"
+            autocomplete="username webauthn"
             placeholder="you@example.com"
           />
         </FormField>
@@ -57,6 +52,20 @@ export const onRequestGet = factory.createHandlers((c) => {
           Sign in
         </Button>
       </form>
+      {/* Passkey sign-in (D58). Hidden until the island confirms the browser
+          supports it; the email box above also offers saved passkeys in autofill. */}
+      <div data-passkey-login data-passkey-redirect={redirect} class="mt-5 hidden flex-col gap-3">
+        <div class="flex items-center gap-3 text-xs text-ink-subtle" aria-hidden="true">
+          <span class="h-px flex-1 bg-border" />
+          or
+          <span class="h-px flex-1 bg-border" />
+        </div>
+        <Button type="button" variant="secondary" data-passkey-signin>
+          Use a passkey
+        </Button>
+        <div data-passkey-status role="alert" class="text-sm font-medium text-danger empty:hidden" />
+      </div>
+      <Script src="/src/client/passkey.ts" />
     </AuthShell>,
   );
 });

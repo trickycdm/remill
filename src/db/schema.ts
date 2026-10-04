@@ -633,3 +633,44 @@ export const oauthDeviceCodes = sqliteTable(
     uniqueIndex('oauth_device_user_unique').on(t.userCodeHash),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Passkeys (D58) — WebAuthn credentials a human signs in with, alongside the
+// password. Only the PUBLIC key is stored; the private key never leaves the
+// person's authenticator. `credential_id` is what the browser presents at
+// sign-in, so it is the unique lookup key.
+// ---------------------------------------------------------------------------
+
+export const passkeys = sqliteTable(
+  'passkeys',
+  {
+    id: text('id').primaryKey(), // pky_…
+    principalId: text('principal_id')
+      .notNull()
+      .references(() => principals.id, { onDelete: 'cascade' }),
+    credentialId: text('credential_id').notNull(), // base64url
+    publicKey: text('public_key').notNull(), // base64url COSE public key
+    counter: integer('counter').notNull().default(0), // signature counter (often 0 for synced passkeys)
+    transportsJson: text('transports_json'), // JSON string[] hint for the browser
+    deviceType: text('device_type').notNull(), // 'singleDevice' | 'multiDevice'
+    backedUp: integer('backed_up').notNull().default(0), // 0/1 — synced to a passkey provider
+    name: text('name').notNull(),
+    createdAt: text('created_at').notNull(),
+    lastUsedAt: text('last_used_at'),
+  },
+  (t) => [
+    uniqueIndex('passkeys_credential_unique').on(t.credentialId),
+    index('passkeys_principal_idx').on(t.principalId),
+  ],
+);
+
+// Single-use, expiring WebAuthn challenges. The row is DELETED on consume (one
+// atomic statement), so a captured response can never be replayed. The challenge
+// is public random data, so it is stored as-is and is the primary key.
+export const webauthnChallenges = sqliteTable('webauthn_challenges', {
+  challenge: text('challenge').primaryKey(), // base64url
+  purpose: text('purpose').notNull(), // 'register' | 'authenticate'  (CHECK added in migration)
+  principalId: text('principal_id').references(() => principals.id, { onDelete: 'cascade' }), // set for 'register'
+  expiresAt: text('expires_at').notNull(), // 5 minutes
+  createdAt: text('created_at').notNull(),
+});
