@@ -127,6 +127,13 @@
       "when": 1790174968069,
       "tag": "0017_shocking_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1791093755103,
+      "tag": "0018_same_colonel_america",
+      "breakpoints": true
     }
   ]
 }

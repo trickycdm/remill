@@ -4,7 +4,7 @@
  * leak upward (steering/DATABASE_STANDARDS.md).
  */
 
-import { eq } from 'drizzle-orm';
+import { eq, type SQL } from 'drizzle-orm';
 import type { Database } from '@/db/client';
 import { users, principals } from '@/db/schema';
 
@@ -19,7 +19,15 @@ export interface UserRecord {
 
 /** Look up a user by email (case-insensitive), joined to its principal, or null. */
 export async function getUserByEmail(db: Database, email: string): Promise<UserRecord | null> {
-  const normalized = email.trim().toLowerCase();
+  return selectUser(db, eq(users.email, email.trim().toLowerCase()));
+}
+
+/** Look up a user by its principal id, joined to its principal, or null. */
+export async function getUserByPrincipalId(db: Database, principalId: string): Promise<UserRecord | null> {
+  return selectUser(db, eq(users.principalId, principalId));
+}
+
+async function selectUser(db: Database, where: SQL): Promise<UserRecord | null> {
   const rows = await db
     .select({
       principalId: users.principalId,
@@ -30,7 +38,7 @@ export async function getUserByEmail(db: Database, email: string): Promise<UserR
     })
     .from(users)
     .innerJoin(principals, eq(principals.id, users.principalId))
-    .where(eq(users.email, normalized))
+    .where(where)
     .limit(1);
 
   const row = rows[0];

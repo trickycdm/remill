@@ -135,6 +135,31 @@ onto the record — any field an attacker named got written. remill's fix, from 
   wrong. Enforce a minimum length, then re-hash. A change email/password path is scoped to the session
   principal only. Note the stateless-cookie limitation: a password change cannot revoke sessions already
   minted on other devices (documented in `services/account`; server-side revocation is post-v1).
+- **Passkeys (D58) sit alongside the password, never instead of it** (`src/services/passkeys/`). Only
+  the public key is stored. The rules:
+  - **Challenges are single-use and expiring** (`webauthn_challenges`, 5 minutes) and are consumed by
+    ONE atomic `DELETE … RETURNING` before the response is trusted — never find-then-mark. A
+    `register` challenge is bound to the principal it was issued to and cannot be used to sign in, or
+    vice versa.
+  - **User verification is required** (biometric/PIN) for both ceremonies — a passkey stands in for
+    the password outright.
+  - **Adding a passkey re-checks the current password.** A stateless session cannot be revoked, so
+    it must not be able to mint a permanent credential on its own. That check is rate-limited like a
+    login, but keyed per PERSON (`passkey-register`) — the caller already holds a session, so a
+    per-IP bucket would not slow password guessing.
+  - **Known gap — passkeys survive a password change or reset.** Changing the password (or an
+    admin re-invite) does not remove existing passkeys, so a passkey added by someone who knew the
+    old password keeps working until the owner removes it on the account page. Not yet decided:
+    remove them automatically on reset, or offer it on change.
+  - **The relying party is `BASE_URL`, else the request origin** (`src/lib/relying-party.ts`) — never
+    the admin-editable `settings.siteUrl`. Passkeys are bound to that hostname.
+  - **Sign-in failures are indistinguishable** (one generic message, HTTP 403 — a 401 to a POST with
+    a body is a network error under the fetch auth-retry rule); the options request names no
+    account. Disabled principals are refused, as for passwords.
+  - **Verification is `@simplewebauthn/server`'s job** — do not hand-roll CBOR/COSE/signature checks.
+  - The passkey JSON endpoints are `fetch` calls, so each makes the explicit `Origin` check §8
+    requires (`src/lib/passkey-http.ts`). Options and verify use separate named rate-limit buckets,
+    so login page views (which request options for autofill) cannot use up sign-in attempts.
 
 - **Password-protected share links (D51):** a `link` grant's optional password follows the same
   scrypt-hash-never-plaintext discipline as account passwords (`item_grants.password_hash`,

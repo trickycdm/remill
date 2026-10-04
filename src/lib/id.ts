@@ -31,6 +31,7 @@ export const ID_PREFIX = {
   oauthDevice: 'odc', // oauth_device_codes rows (D48)
   comment: 'cmt', // comments rows — roots and replies (D55)
   reviewer: 'rvw', // review_reviewers rows (D55)
+  passkey: 'pky', // passkeys rows — WebAuthn credentials (D58)
 } as const;
 
 type Entity = keyof typeof ID_PREFIX;
