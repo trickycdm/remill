@@ -16,7 +16,7 @@ import {
 } from '@/services/documents';
 import { getSettings } from '@/services/settings';
 import { resolveBaseUrl } from '@/lib/base-url';
-import { publicUrlOf, effectiveVisibility } from '@/lib/def-helpers';
+import { readingPageOf, effectiveVisibility } from '@/lib/def-helpers';
 import { hasLifecycle } from '@/lib/lifecycle';
 import { getShareOverview, canSeeSharing } from '@/services/sharing';
 import { canAuthorize } from '@/access';
@@ -83,18 +83,19 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const rawTitle = titleField ? doc.data[titleField.key] : undefined;
   const docTitle = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle : `Edit ${def.name}`;
 
-  // Header action: publicRead collections get exactly one — "View live ↗" once
-  // published and not private, else "Preview ↗" (D49: works for drafts AND
-  // published, through the session principal). publicUrlOf already resolves the
-  // unlisted/private doc_ id URL, so this single href works for every
-  // visibility (D50). Non-publicRead collections fall back to the internal View.
-  const publicHref = def.access?.publicRead ? publicUrlOf(def, doc, '') : undefined;
-  const isLive = doc.status === 'published' && (doc.visibility ?? 'public') !== 'private';
-  const headerAction = publicHref
+  // Header action: a collection with a reading page gets exactly one — "View
+  // live ↗" once an anonymous reader can open it, else "Preview ↗" (D49: the
+  // session principal; covers drafts, private documents, and templated
+  // non-publicRead collections). `readingPageOf` resolves the D50-aware URL.
+  // Collections with no reading page fall back to the internal View.
+  const readingPage = readingPageOf(def, doc);
+  const headerAction = readingPage
     ? {
-        href: isLive ? publicHref : `${publicHref}?preview=1`,
-        label: isLive ? 'View live ↗' : 'Preview ↗',
-        ariaLabel: isLive ? 'View the live public page (opens in new tab)' : 'Preview public page (opens in new tab)',
+        href: readingPage.href,
+        label: readingPage.live ? 'View live ↗' : 'Preview ↗',
+        ariaLabel: readingPage.live
+          ? 'View the live public page (opens in new tab)'
+          : 'Preview public page (opens in new tab)',
       }
     : { href: `/admin/c/${slug}/${id}/view`, label: 'View', ariaLabel: undefined };
 
@@ -143,8 +144,8 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
             href={headerAction.href}
             variant="secondary"
             size="sm"
-            target={publicHref ? '_blank' : undefined}
-            rel={publicHref ? 'noopener' : undefined}
+            target={readingPage ? '_blank' : undefined}
+            rel={readingPage ? 'noopener' : undefined}
             aria-label={headerAction.ariaLabel}
           >
             {headerAction.label}

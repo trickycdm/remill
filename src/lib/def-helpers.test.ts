@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { titleFieldOf, titleOf, publicUrlOf } from '@/lib/def-helpers';
+import { titleFieldOf, titleOf, publicUrlOf, readingPageOf } from '@/lib/def-helpers';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
 
 const def = (
@@ -76,5 +76,39 @@ describe('publicUrlOf — visibility (D50) forces the doc_ id URL, never the gue
     expect(
       publicUrlOf(slugDef, { id: 'doc_x', data: { slug: 'my-post' }, visibility: 'private' }, 'https://e.com'),
     ).toBe('https://e.com/c/doc_x');
+  });
+});
+
+describe('readingPageOf — the admin link to a document\'s styled reading page', () => {
+  const fields = [{ key: 'title', type: 'text' }];
+  const publicDef = { ...def(fields), access: { publicRead: true } };
+  const privateTemplated = { ...def(fields), access: { private: true }, template: 'article' };
+
+  it('is live for a published public document on a publicRead collection', () => {
+    expect(readingPageOf(publicDef, { id: 'doc_x', data: {}, status: 'published' })).toEqual({
+      href: '/c/doc_x',
+      live: true,
+    });
+  });
+
+  it('previews a draft or a private document on a publicRead collection', () => {
+    expect(readingPageOf(publicDef, { id: 'doc_x', data: {}, status: 'draft' })).toEqual({
+      href: '/c/doc_x?preview=1',
+      live: false,
+    });
+    expect(
+      readingPageOf(publicDef, { id: 'doc_x', data: {}, status: 'published', visibility: 'private' }),
+    ).toEqual({ href: '/c/doc_x?preview=1', live: false });
+  });
+
+  it('always previews on a templated non-publicRead collection, even when published', () => {
+    expect(readingPageOf(privateTemplated, { id: 'doc_x', data: {}, status: 'published' })).toEqual({
+      href: '/c/doc_x?preview=1',
+      live: false,
+    });
+  });
+
+  it('is undefined for a non-publicRead collection with no template', () => {
+    expect(readingPageOf(def(fields), { id: 'doc_x', data: {}, status: 'published' })).toBeUndefined();
   });
 });
