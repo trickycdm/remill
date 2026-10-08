@@ -13,16 +13,14 @@
  * model still applies to who may write an html field.
  */
 
-/** Library CDNs a framed page may load scripts, styles and fonts from. Exact
- *  hosts only — never wildcards. */
-export const FRAME_CDN_HOSTS = [
-  'https://cdnjs.cloudflare.com',
-  'https://cdn.jsdelivr.net',
-  'https://unpkg.com',
-] as const;
+import { PAGE_CDN_HOSTS, PAGE_FONT_STYLE_HOST, PAGE_FONT_FILE_HOST } from '@/lib/inline/policy';
 
-export const FRAME_FONT_STYLE_HOST = 'https://fonts.googleapis.com';
-export const FRAME_FONT_FILE_HOST = 'https://fonts.gstatic.com';
+/** Library CDNs a framed page may load scripts, styles and fonts from — the
+ *  same hosts an inline page (D63) may use. */
+export const FRAME_CDN_HOSTS = PAGE_CDN_HOSTS;
+
+export const FRAME_FONT_STYLE_HOST = PAGE_FONT_STYLE_HOST;
+export const FRAME_FONT_FILE_HOST = PAGE_FONT_FILE_HOST;
 
 /**
  * Sandbox tokens — the SAME list goes on the iframe attribute and in the

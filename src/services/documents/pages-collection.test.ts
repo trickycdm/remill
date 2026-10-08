@@ -30,11 +30,11 @@ describe('the seeded pages collection (D62)', () => {
     });
   });
 
-  it('is a valid, protected, frame-mode definition', async () => {
+  it('is a valid, protected, inline-mode definition (D63)', async () => {
     const def = await collectionsService.getCollectionOrThrow(db, PAGES_COLLECTION);
     expect(def).toMatchObject({
       protected: true,
-      renderMode: 'frame',
+      renderMode: 'inline',
       workflow: { lifecycle: 'none' },
       access: { publicRead: true, defaultVisibility: 'private' },
     });

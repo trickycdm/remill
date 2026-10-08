@@ -27,6 +27,8 @@ import { reviewerRequest, reviewerPanel } from '@/lib/review-http';
 import { ViewerShell } from '@/components/layouts/viewer-shell';
 import { framePageHtml, pageFieldOf } from '@/lib/frame/document';
 import { mintFrameSrc } from '@/services/frame';
+import { inlinePageHtml, prepareInlineDocument } from '@/lib/inline/document';
+import { usePagePolicy } from '@/middleware/security-headers';
 
 const factory = createFactory<{ Bindings: Env }>();
 
@@ -142,6 +144,28 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     // Raw mode (D27): the html field IS the page (JSON arm stays first above).
     const raw = rawPageHtml(def, doc);
     if (raw !== null) return c.html(raw);
+    // Inline mode (D63): the page renders in the viewer shell, in place. A
+    // review link adds the review panel beside it. `bare`: a capability URL
+    // advertises nothing but its title.
+    const inlineHtml = inlinePageHtml(def, doc.data);
+    if (inlineHtml !== null) {
+      usePagePolicy(c);
+      c.header('Cache-Control', 'private, no-store');
+      const title = titleOf(def, doc);
+      const field = pageFieldOf(def) ?? '';
+      const panel = isReviewLink(grant) ? await reviewerPanel(await reviewerRequest(c)) : null;
+      return c.render(
+        <ViewerShell
+          title={title}
+          inline={{ page: prepareInlineDocument(inlineHtml), field }}
+          home={{ href: '/', label: `${settings.siteName?.trim() || 'remill'} home` }}
+          review={panel ? { panel, field } : undefined}
+        >
+          {panel ? <Script src="/src/client/review.ts" /> : null}
+        </ViewerShell>,
+        { title, bare: true, noindex: true },
+      );
+    }
     // Frame mode (D60): the page renders in the viewer shell's sandboxed
     // iframe. The ticket names THIS link as the viewer, so the content read
     // re-checks the grant — and is only ever minted past the password gate

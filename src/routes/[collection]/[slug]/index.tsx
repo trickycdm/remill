@@ -27,6 +27,9 @@ import { principalPanel } from '@/lib/review-http';
 import { ViewerShell } from '@/components/layouts/viewer-shell';
 import { framePageHtml } from '@/lib/frame/document';
 import { mintFrameSrc } from '@/services/frame';
+import { inlinePageHtml, prepareInlineDocument } from '@/lib/inline/document';
+import { pageFieldOf } from '@/lib/page-field';
+import { usePagePolicy } from '@/middleware/security-headers';
 import { Button } from '@/components/ui';
 
 const factory = createFactory<{ Bindings: Env }>();
@@ -83,8 +86,10 @@ export const onRequestGet = factory.createHandlers(async (c) => {
     // security headers middleware still applies.
     const raw = rawPageHtml(def, doc);
     if (raw !== null) return c.html(raw);
-    const framed = framePageHtml(def, doc.data) !== null;
-    const backlinks = framed ? [] : await getBacklinks(db, principal, collection, doc.id, now);
+    const inlineHtml = inlinePageHtml(def, doc.data);
+    const framed = inlineHtml === null && framePageHtml(def, doc.data) !== null;
+    const backlinks =
+      framed || inlineHtml !== null ? [] : await getBacklinks(db, principal, collection, doc.id, now);
 
     // Per-page head (D36): full title composed HERE (the layout does no DB
     // reads); canonical is the slug-or-id public URL; og:image resolves from
@@ -113,6 +118,59 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       indexable,
       template: def.template,
     });
+
+    // Inline mode (D63): the page renders IN the viewer shell — the document's
+    // own head (title, OG, canonical) on the shell, its body in place. In
+    // preview, `?review=1` docks the principal's review panel beside it.
+    if (inlineHtml !== null) {
+      usePagePolicy(c);
+      c.header('Cache-Control', 'no-store');
+      const field = pageFieldOf(def) ?? '';
+      const reviewing = preview && c.req.query('review') != null;
+      let panel: unknown = null;
+      if (reviewing) {
+        try {
+          panel = await principalPanel(db, principal, collection, doc.id, now);
+        } catch (e) {
+          if (!(e instanceof ForbiddenError)) throw e;
+        }
+      }
+      const canReview =
+        preview &&
+        (panel !== null ||
+          (!reviewing && (await canAuthorize(db, principal, 'comment', { collection, documentId: doc.id }, now))));
+      const here = `${requestUrl.pathname}?preview=1`;
+      return c.render(
+        <ViewerShell
+          title={titleOf(def, doc)}
+          inline={{ page: prepareInlineDocument(inlineHtml), field }}
+          home={
+            preview
+              ? { href: `/admin/c/${collection}`, label: `Back to ${def.name}` }
+              : { href: '/', label: `${settings.siteName?.trim() || 'remill'} home` }
+          }
+          visibility={preview ? effectiveVisibility(def, doc) : undefined}
+          actions={
+            preview ? (
+              <>
+                {canReview ? (
+                  <Button href={panel ? here : `${here}&review=1`} variant="ghost" size="sm">
+                    {panel ? 'Hide comments' : 'Comments'}
+                  </Button>
+                ) : null}
+                <Button href={`/admin/c/${collection}/${doc.id}`} variant="secondary" size="sm">
+                  Edit
+                </Button>
+              </>
+            ) : undefined
+          }
+          review={panel ? { panel, field } : undefined}
+        >
+          {panel ? <Script src="/src/client/review.ts" /> : null}
+        </ViewerShell>,
+        head,
+      );
+    }
 
     // Frame mode (D60): the page renders in the viewer shell's sandboxed
     // iframe, with the document's own head (title, OG, canonical) on the shell.

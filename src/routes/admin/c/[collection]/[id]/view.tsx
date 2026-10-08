@@ -5,7 +5,7 @@ import { getDb } from '@/db/client';
 import { requirePrincipal } from '@/lib/principal';
 import { pathParam } from '@/lib/http';
 import { getCollectionOrThrow } from '@/services/collections';
-import { getDocument, getBacklinks, listRevisionMeta } from '@/services/documents';
+import { getDocument, getBacklinks, listRevisionMeta, getRevisionData } from '@/services/documents';
 import { nowIso } from '@/lib/now';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { PageHeader, Button } from '@/components/ui';
@@ -17,6 +17,8 @@ import { Script } from 'vite-ssr-components/hono';
 import { principalPanel } from '@/lib/review-http';
 import { ForbiddenError } from '@/lib/errors';
 import { mintFrameSrc } from '@/services/frame';
+import { inlinePageHtml, prepareInlineDocument } from '@/lib/inline/document';
+import { usePagePolicy } from '@/middleware/security-headers';
 import { canAuthorize } from '@/access';
 import { getSettings } from '@/services/settings';
 import { getShareOverview, canSeeSharing } from '@/services/sharing';
@@ -28,8 +30,8 @@ const factory = createFactory<{ Bindings: Env }>();
 
 /** GET /admin/c/:collection/:id/view — the read-only detail view (C2): the same
  *  DocumentView the public page renders, on the admin surface (admin-routed
- *  links, drafts visible to those who may read them). A frame-mode collection
- *  (D60) gets the viewer shell instead. */
+ *  links, drafts visible to those who may read them). A frame- or inline-mode
+ *  collection (D60/D63) gets the viewer shell instead. */
 export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const user = getUser(c);
   const db = getDb(c.env.DB);
@@ -41,11 +43,12 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
   const def = await getCollectionOrThrow(db, slug);
   const doc = await getDocument(db, principal, slug, id, now);
 
-  // Frame mode (D60): the page renders in the viewer shell's sandboxed iframe,
-  // never inlined into the admin DOM — the author's scripts must not run on
-  // the admin origin. The bar carries what this principal may do: share, look
-  // through versions, download, edit.
-  if (framePageHtml(def, doc.data) !== null) {
+  // Page modes: the viewer shell, its bar carrying what this principal may do
+  // — share, look through versions, download, edit. Inline (D63) renders the
+  // page in place, scripts and all, on the admin origin (the trusted single
+  // author, D25); frame (D60) keeps it in a sandboxed iframe.
+  const inline = def.renderMode === 'inline' && inlinePageHtml(def, doc.data) !== null;
+  if (inline || framePageHtml(def, doc.data) !== null) {
     const title = titleOf(def, doc);
     const resource = { collection: slug, documentId: id };
     const canUpdate = await canAuthorize(db, principal, 'update', resource, now);
@@ -59,8 +62,9 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
       now,
     );
 
-    // `?rev=N` frames a past revision — only for someone who may update (the
-    // frame read enforces the same gate). Anything else shows the current one.
+    // `?rev=N` shows a past revision — only for someone who may update (the
+    // revision read and the frame read enforce the same gate). Anything else
+    // shows the current one.
     const asked = Number(c.req.query('rev') ?? 0);
     const viewing = canUpdate && Number.isInteger(asked) && asked > 0 && asked < doc.revision ? asked : doc.revision;
     const past = viewing !== doc.revision;
@@ -83,10 +87,19 @@ export const onRequestGet = factory.createHandlers(requireAuth(), async (c) => {
     const canReview =
       !past && field && (panel !== null || (await canAuthorize(db, principal, 'comment', resource, now)));
 
+    // A past revision whose page field was empty shows the current page.
+    const inlineHtml = inline
+      ? ((past ? inlinePageHtml(def, await getRevisionData(db, principal, slug, id, viewing, now)) : null) ??
+        inlinePageHtml(def, doc.data))
+      : null;
+    if (inlineHtml !== null) usePagePolicy(c);
+
     return c.render(
       <ViewerShell
         title={title}
-        frameSrc={await mintFrameSrc(c.env.SESSION_SECRET, principal, doc.id, now, past ? viewing : 0)}
+        {...(inlineHtml !== null
+          ? { inline: { page: prepareInlineDocument(inlineHtml), field: field ?? '' } }
+          : { frameSrc: await mintFrameSrc(c.env.SESSION_SECRET, principal, doc.id, now, past ? viewing : 0) })}
         home={{ href: `/admin/c/${slug}`, label: `Back to ${def.name}` }}
         visibility={effectiveVisibility(def, doc)}
         actions={

@@ -148,6 +148,13 @@
       "when": 1791110000000,
       "tag": "0020_pages_collection",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1791120000000,
+      "tag": "0021_inline_render_mode",
+      "breakpoints": true
     }
   ]
 }

@@ -51,15 +51,22 @@ FieldType contract against all six surfaces before merging.
   rejected without `publicRead` (there every document is private whatever is stored, D57). An
   import's preserved visibility still wins. The collection builder has no control for it and
   carries it over on save.
-- **Render mode (D27, D60).** `renderMode: 'shell' | 'raw' | 'frame'` picks the render for the
+- **Render mode (D27, D60, D63).** `renderMode: 'shell' | 'raw' | 'frame' | 'inline'` picks the render for the
   collection: `shell` (default) wraps `document-view` in the public shell; `raw` serves the
   **first** `html` field's value verbatim as the whole page (`rawPageHtml(def, doc)`, bypassing the
   layout) on `/:collection/:slug` and `/s/:token` alike; `frame` shows that same field in a
   sandboxed iframe inside `ViewerShell` (`framePageHtml(def, data)` + `mintFrameSrc`) on those two
-  routes AND on the admin view, so the author's scripts never run on remill's origin. Validated on
-  write — `raw` and `frame` require at least one `html` field — and an empty value falls back to
-  shell rendering. Prefer `frame` for anything an agent writes or anyone comments on; keep `raw`
-  for public sites that must be indexed as their own page. The column's CHECK lists the modes: a
+  routes AND on the admin view, so the author's scripts never run on remill's origin; `inline`
+  (D63) shows it IN `ViewerShell` on the same three surfaces (`inlinePageHtml(def, data)` +
+  `prepareInlineDocument` → `InlinePage`): document tags dropped, `<style>`s scoped to the
+  `.rm-page` wrapper (`body`/`html`/`:root` rewritten to `:scope`), scripts run on remill's
+  origin, comments work directly. Validated on write — every non-shell mode requires at least one
+  `html` field — and an empty value falls back to shell rendering. `inline` is the default for
+  pages a trusted author (or their agents) writes; `frame` for writers you would not hand the
+  viewer's session; keep `raw` for public sites that must be indexed as their own page. Inline
+  rendering is faithful but not isolated: font-family names are document-global (a page's Google
+  Font and remill's self-hosted face of the same name both apply), `100vh` is the whole window
+  (the bar included), and a `position: fixed` element at `top: 0` sits over the sticky bar. The column's CHECK lists the modes: a
   new mode is a column-swap migration (0019 is the precedent), **never a rebuild of `collections`**
   — dropping it would cascade away every document.
 - **Render template (D41).** Beside `renderMode`, an optional `template` key selects a purpose-built
@@ -181,7 +188,7 @@ Rules:
   ],
   "workflow": { "draftPublish": true },     // declarative behaviors, not code hooks
   "access": { "publicRead": true },         // publicRead XOR private (D46) — anon read vs hide-from-discovery
-  "renderMode": "shell"                     // 'shell' (default) | 'raw' | 'frame' — see render mode (D27, D60)
+  "renderMode": "shell"                     // 'shell' (default) | 'raw' | 'frame' | 'inline' — see render mode (D27, D60, D63)
 }
 ```
 
@@ -224,7 +231,7 @@ migrations are a post-v1 feature with their own design.
 
 `settings` (singleton) and `media` metadata ride the schema engine as seeded, **protected**
 collections (cannot be deleted; slugs reserved). `pages` (D62) is the third: standalone HTML pages in the
-framed viewer, born private (`access.defaultVisibility`). A built-in collection ships in seed.sql
+viewer, rendered inline (D63, migration 0021), born private (`access.defaultVisibility`). A built-in collection ships in seed.sql
 AND a migration (production never re-runs the seed) — the same row, guarded on the seeded
 `settings` row and `INSERT OR IGNORE`; `seed.test.ts` compares the two copies. If the engine can't express its own system needs,
 the engine is not good enough — fix the engine, don't special-case.

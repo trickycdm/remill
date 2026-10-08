@@ -186,10 +186,11 @@ export function GeneratedTable({
                 {i === 0 ? (
                   // The first column is wrapped in the row link — skip expansion
                   // there (a relation cell would nest <a> inside <a>).
-                  // A framed page (D60) opens in its viewer — the page itself,
-                  // with Edit one click away — not on a form of html source.
+                  // A page document (frame D60 / inline D63) opens in its
+                  // viewer — the page itself, with Edit one click away — not
+                  // on a form of html source.
                   <a
-                    href={`/admin/c/${def.slug}/${doc.id}${def.renderMode === 'frame' ? '/view' : ''}`}
+                    href={`/admin/c/${def.slug}/${doc.id}${def.renderMode === 'frame' || def.renderMode === 'inline' ? '/view' : ''}`}
                     class="font-medium text-accent-text hover:underline"
                   >
                     <FieldCell field={f} value={doc.data[f.key]} />
