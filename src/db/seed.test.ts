@@ -174,6 +174,7 @@ describe('migration 0020 — the built-in pages collection (D62)', () => {
     .filter((f) => f.endsWith('.sql'))
     .sort();
   const d62 = files.find((f) => f.startsWith('0020_'))!;
+  const d63 = files.find((f) => f.startsWith('0021_'))!;
   const migrated = (upTo?: string) => {
     const db = new Database(':memory:');
     db.pragma('foreign_keys = ON');
@@ -197,10 +198,11 @@ describe('migration 0020 — the built-in pages collection (D62)', () => {
     expect(pagesRow(db)).toMatchObject({ slug: 'pages', protected: 1, render_mode: 'frame' });
   });
 
-  it('the migration row and the seed row are the same row', () => {
+  it('the migration row and the seed row are the same row (0020 then 0021, D63)', () => {
     const viaMigration = migrated(d62);
     viaMigration.exec(seedWithoutPages);
     run(viaMigration, d62);
+    run(viaMigration, d63);
     const viaSeed = migrated();
     viaSeed.exec(SEED);
     expect(pagesRow(viaMigration)).toEqual(pagesRow(viaSeed));
@@ -222,3 +224,71 @@ describe('migration 0020 — the built-in pages collection (D62)', () => {
   });
 });
 
+/**
+ * D63: migration 0021 widens the CHECK again (the same column swap as 0019)
+ * and moves the BUILT-IN pages collection from frame to inline — and nothing
+ * else.
+ */
+describe('migration 0021 — inline render mode (D63)', () => {
+  const MIGRATIONS = join(import.meta.dirname, 'migrations');
+  const SEED = readFileSync(join(import.meta.dirname, 'seed.sql'), 'utf-8');
+  const run = (db: InstanceType<typeof Database>, file: string) => {
+    for (const stmt of readFileSync(join(MIGRATIONS, file), 'utf-8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) db.exec(stmt);
+    }
+  };
+  const files = readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+  const d63 = files.find((f) => f.startsWith('0021_'))!;
+  const beforeD63 = () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    for (const f of files.filter((f) => f < d63)) run(db, f);
+    return db;
+  };
+  const now = '2026-10-08T00:00:00Z';
+
+  it('moves the built-in pages collection to inline, keeping its documents', () => {
+    const db = beforeD63();
+    db.exec(SEED.replace("  'inline',\n", "  'frame',\n"));
+    db.prepare(
+      "INSERT INTO documents (id, collection, data_json, status, created_at, updated_at) VALUES ('doc_p1', 'pages', '{}', 'published', ?, ?)",
+    ).run(now, now);
+    expect(db.prepare("SELECT render_mode FROM collections WHERE slug = 'pages'").get()).toEqual({ render_mode: 'frame' });
+    run(db, d63);
+    const row = db.prepare("SELECT render_mode, fields_json FROM collections WHERE slug = 'pages'").get() as {
+      render_mode: string;
+      fields_json: string;
+    };
+    expect(row.render_mode).toBe('inline');
+    expect(row.fields_json).toContain('shown in place inside the viewer');
+    expect(row.fields_json).not.toContain('sandboxed frame');
+    expect(db.prepare('SELECT id FROM documents').all()).toEqual([{ id: 'doc_p1' }]);
+  });
+
+  it("leaves other collections' modes alone, and a user's own pages collection", () => {
+    const db = beforeD63();
+    const collection = db.prepare(
+      "INSERT INTO collections (slug, name, shape, fields_json, render_mode, created_at, updated_at) VALUES (?, ?, 'collection', '[]', ?, ?, ?)",
+    );
+    collection.run('pages', 'My pages', 'frame', now, now);
+    collection.run('reports', 'Reports', 'raw', now, now);
+    run(db, d63);
+    expect(db.prepare('SELECT slug, render_mode FROM collections ORDER BY slug').all()).toEqual([
+      { slug: 'pages', render_mode: 'frame' },
+      { slug: 'reports', render_mode: 'raw' },
+    ]);
+  });
+
+  it("admits 'inline' and still rejects an unknown mode", () => {
+    const db = beforeD63();
+    db.prepare(
+      "INSERT INTO collections (slug, name, shape, fields_json, created_at, updated_at) VALUES ('notes', 'Notes', 'collection', '[]', ?, ?)",
+    ).run(now, now);
+    run(db, d63);
+    db.prepare("UPDATE collections SET render_mode = 'inline' WHERE slug = 'notes'").run();
+    expect(db.prepare("SELECT render_mode FROM collections WHERE slug = 'notes'").get()).toEqual({ render_mode: 'inline' });
+    expect(() => db.prepare("UPDATE collections SET render_mode = 'bogus' WHERE slug = 'notes'").run()).toThrow(/CHECK/);
+  });
+});

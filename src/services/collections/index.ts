@@ -32,6 +32,7 @@ import type { ErrorDetails } from '@/lib/errors';
 
 const SLUG_RE = /^[a-z][a-z0-9-]*$/;
 const KEY_RE = /^[a-z][a-z0-9_]*$/;
+const RENDER_MODES: ReadonlySet<unknown> = new Set(['shell', 'raw', 'frame', 'inline']);
 
 // SEC-6: `access` and `workflow` are persisted verbatim, so they MUST be validated
 // before they reach the database. Both are CLOSED shapes. `access` carries ONLY the
@@ -194,10 +195,10 @@ export function validateDefinition(input: CollectionDefinition): CollectionDefin
     }
   }
   if (input.renderMode !== undefined) {
-    if (input.renderMode !== 'shell' && input.renderMode !== 'raw' && input.renderMode !== 'frame') {
-      issues.push({ path: 'renderMode', message: "renderMode must be 'shell', 'raw' or 'frame'." });
+    if (!RENDER_MODES.has(input.renderMode)) {
+      issues.push({ path: 'renderMode', message: "renderMode must be 'shell', 'raw', 'frame' or 'inline'." });
     } else if (input.renderMode !== 'shell' && !(input.fields ?? []).some((f) => f.type === 'html')) {
-      // In raw and frame mode the FIRST html field IS the page (D27/D60) —
+      // In raw, frame and inline mode the FIRST html field IS the page (D27/D60/D63) —
       // without one there is nothing to render.
       issues.push({
         path: 'renderMode',

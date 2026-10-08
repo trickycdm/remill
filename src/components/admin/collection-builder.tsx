@@ -174,7 +174,7 @@ function carriedBind(
 /** The render-mode select's value → the definition's `renderMode` (shell is the
  *  default, stored as absent). */
 function renderModeOf(value: string): CollectionDefinition['renderMode'] {
-  return value === 'raw' || value === 'frame' ? value : undefined;
+  return value === 'raw' || value === 'frame' || value === 'inline' ? value : undefined;
 }
 
 /** The builder's 3-way lifecycle value for an existing definition. */
@@ -554,11 +554,14 @@ export function CollectionBuilder({
           <FormField
             fieldId="col-render-mode"
             label="Public rendering"
-            description="Branded page renders inside the site shell. Framed page shows the first html field in a sandboxed frame with remill's viewer around it. Raw HTML serves that field as a standalone document."
+            description="Branded page renders inside the site shell. Inline page shows the first html field in place, with remill's viewer and comments around it; its scripts run on this site. Framed page shows it in a sandboxed frame instead. Raw HTML serves that field as a standalone document."
           >
             <Select id="col-render-mode" name="render_mode">
               <option value="shell" selected={(def?.renderMode ?? 'shell') === 'shell'}>
                 Branded page (shell)
+              </option>
+              <option value="inline" selected={def?.renderMode === 'inline'}>
+                Inline page
               </option>
               <option value="frame" selected={def?.renderMode === 'frame'}>
                 Framed page

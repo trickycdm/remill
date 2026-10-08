@@ -154,7 +154,8 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   never ride a URL) or `application/json` (the same object as the MCP `publish_page` tool,
   `share` included). `If-Match` / `expectedRevision` on PUT (D54). Response
   `{id, url, title, revision, visibility, share, warnings}`; `warnings` come from
-  `analyzeFramedHtml`, which reads the same allowlists as the frame CSP. Both routes and the tool
+  `analyzePageHtml` (inline mode, D63 — the page policy's allowlists) or `analyzeFramedHtml`
+  (frame mode — the frame CSP's), whichever mode the collection is in. Both routes and the tool
   call `publishPage` (services/pages), which itself only composes `createDocument` /
   `updateDocument` / `mintApiShareLink` — it must never grow a rule of its own.
 - **Visibility (D50)**: `POST /api/c/:collection/:id/visibility` with body `{visibility: 'public' |

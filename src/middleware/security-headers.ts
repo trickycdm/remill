@@ -7,6 +7,11 @@
  *  - PUBLIC surfaces (/, /:collection/:slug, /s/:token) get the same strict
  *    policy by default, widening `script-src` to the CDN allowlist ONLY while
  *    the admin-settable `allowCdnScripts` setting is on.
+ *  - An INLINE PAGE (D63 — any route that renders an inline-mode document,
+ *    public or admin) gets the page policy: the site policy plus the
+ *    resources an inline page may load (`@/lib/inline/policy`). The route
+ *    opts in with `usePagePolicy(c)`; the headers are applied after the
+ *    handler runs, so the choice can depend on what it rendered.
  *  - The FRAME surface (/frame/:ticket, D60) gets its own policy from
  *    `@/lib/frame/policy`: the author's document is sandboxed into an opaque
  *    origin and may be framed by remill's own shell — the ONE response family
@@ -31,6 +36,20 @@ import type { Env } from '@/types';
 import { getDb } from '@/db/client';
 import { getSettings } from '@/services/settings';
 import { frameResponseHeaders } from '@/lib/frame/policy';
+import { PAGE_CSP_SOURCES } from '@/lib/inline/policy';
+import type { Context } from 'hono';
+
+declare module 'hono' {
+  interface ContextVariableMap {
+    /** Set by a route that rendered an inline page (D63). */
+    pagePolicy?: boolean;
+  }
+}
+
+/** Mark this response as an inline page (D63): it gets the page policy. */
+export function usePagePolicy(c: Context): void {
+  c.set('pagePolicy', true);
+}
 
 /** The framed-content prefix (D60). Checked BEFORE the protected/public split. */
 export const FRAME_PREFIX = '/frame/';
@@ -40,14 +59,23 @@ const PROTECTED_PREFIXES = ['/admin', '/api', '/mcp', '/auth', '/media', '/oauth
 /** Exact hosts only — never wildcards. Documented in the settings help copy. */
 export const CDN_SCRIPT_HOSTS = ['https://cdn.jsdelivr.net', 'https://unpkg.com'] as const;
 
-function policy(extraScriptSrc: readonly string[] = []) {
+interface ExtraSources {
+  readonly scriptSrc?: readonly string[];
+  readonly styleSrc?: readonly string[];
+  readonly fontSrc?: readonly string[];
+  readonly imgSrc?: readonly string[];
+  readonly mediaSrc?: readonly string[];
+}
+
+function policy(extra: ExtraSources = {}) {
   return secureHeaders({
     contentSecurityPolicy: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", ...extraScriptSrc],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:'],
-      fontSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", ...(extra.scriptSrc ?? [])],
+      styleSrc: ["'self'", "'unsafe-inline'", ...(extra.styleSrc ?? [])],
+      imgSrc: ["'self'", 'data:', ...(extra.imgSrc ?? [])],
+      fontSrc: ["'self'", ...(extra.fontSrc ?? [])],
+      ...(extra.mediaSrc ? { mediaSrc: [...extra.mediaSrc] } : {}),
       connectSrc: ["'self'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
@@ -66,7 +94,9 @@ function policy(extraScriptSrc: readonly string[] = []) {
 }
 
 const strict = policy();
-const publicCdn = policy(CDN_SCRIPT_HOSTS);
+const publicCdn = policy({ scriptSrc: CDN_SCRIPT_HOSTS });
+const page = policy(PAGE_CSP_SOURCES);
+const noop = async () => {};
 
 /** The frame policy: set on the way out so it also covers the refusal document.
  *  Keyed to the REQUEST origin — never the admin-editable site URL. */
@@ -77,15 +107,19 @@ const frame: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
   }
 };
 
-/** One dispatcher for every route: the frame policy on framed content; strict
- *  on protected prefixes; on public paths, one settings PK read decides strict
- *  vs CDN-widened. */
+/** One dispatcher for every route: the frame policy on framed content; the
+ *  page policy on an inline page; strict on protected prefixes; on public
+ *  paths, one settings PK read decides strict vs CDN-widened. Each policy
+ *  sets its headers on the way out, so it runs after the handler (with a
+ *  no-op `next`) and the handler's `usePagePolicy` can choose it. */
 export function securityHeaders(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
     const p = c.req.path;
     if (p.startsWith(FRAME_PREFIX)) return frame(c, next);
-    if (PROTECTED_PREFIXES.some((x) => p === x || p.startsWith(`${x}/`))) return strict(c, next);
-    const settings = await getSettings(getDb(c.env.DB));
-    return (settings.allowCdnScripts ? publicCdn : strict)(c, next);
+    const isProtected = PROTECTED_PREFIXES.some((x) => p === x || p.startsWith(`${x}/`));
+    const settings = isProtected ? null : await getSettings(getDb(c.env.DB));
+    await next();
+    const chosen = c.get('pagePolicy') ? page : settings?.allowCdnScripts ? publicCdn : strict;
+    await chosen(c, noop);
   };
 }

@@ -23,7 +23,7 @@ import {
 } from '@/services/access';
 import { InputValidationError } from '@/lib/errors';
 import { mintApiShareLink } from '@/services/sharing';
-import { publishPage } from '@/services/pages';
+import { publishPage, isPageMode } from '@/services/pages';
 import { PAGES_COLLECTION } from '@/config/constants';
 import {
   listCollections,
@@ -214,9 +214,10 @@ export async function buildToolsForPrincipal(
         'Optional `access` sets visibility: {publicRead: true} lets anyone read published documents; ' +
         '{private: true} hides the collection from discovery (list_collections, the REST API index, ' +
         'OpenAPI) for principals without read access. The two are mutually exclusive. ' +
-        "Optional `renderMode` picks how a collection with an `html` field is shown: 'frame' renders the " +
-        "first html field as a full page inside remill's viewer, in a sandboxed frame (use this for " +
-        "standalone HTML pages); 'raw' serves it as the bare page; 'shell' (default) inlines it.",
+        "Optional `renderMode` picks how a collection with an `html` field is shown: 'inline' renders the " +
+        "first html field as a full page inside remill's viewer, with comments (use this for standalone " +
+        "HTML pages; its scripts run on this site); 'frame' does the same in a sandboxed frame; 'raw' serves " +
+        "it as the bare page; 'shell' (default) inlines it in the branded page.",
       inputSchema: {
         type: 'object',
         properties: { definition: { type: 'object' } },
@@ -325,12 +326,12 @@ export async function buildToolsForPrincipal(
   }
 
   // Pages (D62): publish a standalone HTML page in ONE call — the built-in
-  // `pages` collection in the framed viewer. Static sugar over create/update +
+  // `pages` collection in the viewer (inline D63, or framed D60). Static sugar over create/update +
   // share_link for that collection (services/pages); registered BEFORE the
   // generated tools so a pre-existing collection whose tools collide by name
   // (slug `page` → `publish_page`) can never shadow it.
   const pagesDef = collections.find(
-    (d) => d.slug === PAGES_COLLECTION && d.renderMode === 'frame' && d.fields.some((f) => f.type === 'html'),
+    (d) => d.slug === PAGES_COLLECTION && isPageMode(d.renderMode) && d.fields.some((f) => f.type === 'html'),
   );
   if (
     pagesDef &&
@@ -341,14 +342,20 @@ export async function buildToolsForPrincipal(
       description:
         'Publish a standalone HTML page and get its URL — the way to share a report, chart, dashboard or any ' +
         'self-contained document. Pass the COMPLETE HTML document (doctype, head, body, your own CSS and JS inline). ' +
-        'It renders in a sandboxed frame inside a viewer with sharing, comments and version history. ' +
-        'In the frame: inline scripts and styles run; scripts/styles may also load from cdnjs.cloudflare.com, ' +
-        'cdn.jsdelivr.net and unpkg.com (and /vendor/chart.umd.js on this site); Google Fonts and https images load; ' +
-        'network calls (fetch/XHR) and localStorage/cookies do NOT work — embed the data in the page. ' +
+        (pagesDef.renderMode === 'inline'
+          ? 'It renders inside a viewer with sharing, comments and version history. ' +
+            "Your <style> applies only to your page (body/html/:root rules target the page). Inline scripts run; " +
+            'scripts/styles may also load from cdnjs.cloudflare.com, cdn.jsdelivr.net and unpkg.com (and ' +
+            '/vendor/chart.umd.js on this site); Google Fonts and https images load; network calls to other sites ' +
+            'do NOT work — embed the data in the page. '
+          : 'It renders in a sandboxed frame inside a viewer with sharing, comments and version history. ' +
+            'In the frame: inline scripts and styles run; scripts/styles may also load from cdnjs.cloudflare.com, ' +
+            'cdn.jsdelivr.net and unpkg.com (and /vendor/chart.umd.js on this site); Google Fonts and https images load; ' +
+            'network calls (fetch/XHR) and localStorage/cookies do NOT work — embed the data in the page. ') +
         'Pages are private: `url` opens for signed-in people who can read it. To hand it to anyone else, pass `share` ' +
         'for a link in the same call (add `share.review` to let them comment). ' +
         'To revise a page, call again with its `id` — the URL and links stay the same and the old version is kept. ' +
-        'The result lists `warnings` for anything in the page the frame will block.',
+        'The result lists `warnings` for anything in the page that will not work.',
       inputSchema: {
         type: 'object',
         properties: {

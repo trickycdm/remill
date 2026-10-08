@@ -163,14 +163,15 @@ describe('publishPage (D62)', () => {
     ).rejects.toBeInstanceOf(InputValidationError);
   });
 
-  it('reports what the frame will block, without refusing the page', async () => {
+  it('reports what the page will block, without refusing the page', async () => {
     const out = await publishPage(
       db,
       agent,
       {
         html: page(
           'W',
-          '<script src="https://example.com/a.js"></script><script>fetch("/api")</script>',
+          // Same-origin fetch is fine inline (D63); another site's is not.
+          '<script src="https://example.com/a.js"></script><script>fetch("/api");fetch("https://example.com/x")</script>',
         ),
       },
       CTX,

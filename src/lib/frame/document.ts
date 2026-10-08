@@ -13,12 +13,9 @@
 import { Parser } from 'htmlparser2';
 import bridge from 'virtual:frame-bridge';
 import type { CollectionDefinition } from '@/fields/types';
+import { pageFieldOf } from '@/lib/page-field';
 
-/** The collection's page field — the first `html` field, in `raw` and `frame`
- *  mode alike (D27). */
-export function pageFieldOf(def: CollectionDefinition): string | undefined {
-  return def.fields.find((f) => f.type === 'html')?.key;
-}
+export { pageFieldOf };
 
 /** The framed page's html, or null when the collection isn't frame-mode or the
  *  value is empty — callers fall back to the shell render so a page is never

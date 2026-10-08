@@ -2,7 +2,7 @@
  * Pages (D62) — publish a standalone HTML page in one call. Sugar over the
  * documents service for the built-in `pages` collection: it fills the title
  * from the document itself, optionally mints a share (or review) link in the
- * same call, and reports what the framed viewer will refuse to load. It adds
+ * same call, and reports what the page will refuse to load. It adds
  * NO rule of its own — authorization, validation, revisions and the size
  * limit are `createDocument` / `updateDocument` / `mintApiShareLink`, exactly
  * as `create_pages` and `share_link_pages` would apply them.
@@ -17,7 +17,8 @@ import { getCollection } from '@/services/collections';
 import { createDocument, updateDocument, parseExpectedRevision } from '@/services/documents';
 import { mintApiShareLink, type ApiShareLink } from '@/services/sharing';
 import { analyzeFramedHtml } from '@/lib/frame/analyze';
-import { pageFieldOf } from '@/lib/frame/document';
+import { analyzePageHtml } from '@/lib/inline/analyze';
+import { pageFieldOf } from '@/lib/page-field';
 import { titleFieldOf } from '@/lib/def-helpers';
 import { InputValidationError, NotFoundError } from '@/lib/errors';
 import type { CollectionDefinition } from '@/fields/types';
@@ -46,15 +47,21 @@ export interface PublishedPage {
   readonly revision: number;
   readonly visibility: string;
   readonly share: (Omit<ApiShareLink, 'token'> & { readonly url: string }) | null;
-  /** What the framed viewer will refuse to load or run. Advisory. */
+  /** What the page will refuse to load or run. Advisory. */
   readonly warnings: readonly string[];
 }
 
 /** The built-in pages collection, or null when this install has repurposed or
- *  removed it (a user's own `pages` collection that isn't a framed page). */
+ *  removed it (a user's own `pages` collection that isn't a page-mode one —
+ *  inline, D63, or framed, D60). */
 export async function getPagesCollection(db: Database): Promise<CollectionDefinition | null> {
   const def = await getCollection(db, PAGES_COLLECTION);
-  return def && def.renderMode === 'frame' && pageFieldOf(def) && titleFieldOf(def) ? def : null;
+  return def && isPageMode(def.renderMode) && pageFieldOf(def) && titleFieldOf(def) ? def : null;
+}
+
+/** The render modes in which the page field IS a page the viewer shows. */
+export function isPageMode(mode: CollectionDefinition['renderMode']): boolean {
+  return mode === 'inline' || mode === 'frame';
 }
 
 const optionalText = (v: unknown): string | undefined =>
@@ -81,7 +88,7 @@ export async function publishPage(
   if (input.id !== undefined && typeof input.id !== 'string') {
     throw new InputValidationError([{ path: 'id', message: 'id must be a page id.' }]);
   }
-  const report = analyzeFramedHtml(input.html);
+  const report = def.renderMode === 'inline' ? analyzePageHtml(input.html) : analyzeFramedHtml(input.html);
   const title = optionalText(input.title);
 
   // Only what the caller sent (and the collection declares): an update is a

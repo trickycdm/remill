@@ -80,8 +80,11 @@ export interface CollectionDefinition {
    *  shell so a published page is never blank. 'frame' (D60) = the same first
    *  `html` field, shown in a sandboxed iframe inside the viewer shell — on the
    *  public, share-link AND admin surfaces — so the author's scripts never run
-   *  on remill's own origin. */
-  readonly renderMode?: 'shell' | 'raw' | 'frame';
+   *  on remill's own origin. 'inline' (D63) = the same first `html` field,
+   *  rendered IN PLACE inside the viewer shell (no iframe): styles scoped to
+   *  the page, scripts run on remill's origin as the viewer — the trusted
+   *  single-author model (D25). */
+  readonly renderMode?: 'shell' | 'raw' | 'frame' | 'inline';
   /** Selects a reading TEMPLATE from the registry (src/templates/) for the public
    *  page — the code side of the render surface (templates are code; this key is
    *  data). Absent ⇒ the generic DocumentView shell; `renderMode: 'raw'` still

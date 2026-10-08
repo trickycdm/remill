@@ -111,6 +111,13 @@ rendered public pages + share links.)
 > picked by title** (chips + search — `src/client/relation-picker.ts`,
 > `GET /admin/c/:collection/picker`, `expanded` on `FieldEditProps`); and `VisibilityStamp` is the
 > one non-public marker across list, header and rail.
+> **D63 built 2026-10-08** (plan: [`plans/2026-10-08-inline_pages_without_iframe/`](plans/2026-10-08-inline_pages_without_iframe/)):
+> **inline pages** — `renderMode: 'inline'` renders a collection's `html` document IN the viewer
+> shell, no iframe (`src/lib/inline/`: `prepareInlineDocument`, `scopeCss` → `@scope (.rm-page)`,
+> the preflight-undo base sheet; `InlinePage` with `data-ignore`), so scripts see a normal window
+> and comments use the same-page overlay. The built-in `pages` collection moved to it (migration
+> 0021). Trusted single author by design: page scripts run as the viewer, admin included. Inline
+> pages get the page CSP via `usePagePolicy(c)` (CDNs, Google Fonts, https images).
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -153,8 +160,8 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   Any HTTP client ─▶ /api/**     JSON REST (bearer tokens)
   AI agents ───────▶ /mcp        MCP server (streamable-HTTP JSON-RPC, D18)
   Media consumers ─▶ /media/:id  R2 streaming (range requests)
-  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41; or the viewer shell around a sandboxed frame, D60), unlisted via /:c/doc_… (D50) + /:c index pages (D42) + /s/:token share links (anonymous, optionally password-locked, D51; `?preview=1` + session = draft preview, D49)
-                     /api/pages  ·  MCP publish_page   Publish a standalone HTML page in one call (D62) → the built-in `pages` collection, shown in the framed viewer
+  Public ──────────▶ /:c/:slug   Rendered pages (template or shell or raw HTML, D27/D41; or the viewer shell around the page — inline, D63, or a sandboxed frame, D60), unlisted via /:c/doc_… (D50) + /:c index pages (D42) + /s/:token share links (anonymous, optionally password-locked, D51; `?preview=1` + session = draft preview, D49)
+                     /api/pages  ·  MCP publish_page   Publish a standalone HTML page in one call (D62) → the built-in `pages` collection, shown inline in the viewer (D63)
                      /frame/:ticket   Framed-page CONTENT (D60): the author's html for the viewer shell's sandboxed iframe — cookieless, ticketed, own CSP
                      / · /rss.xml · /sitemap.xml · /robots.txt   Discovery pack (D35, anonymous gated reads)
   Cron triggers ────▶ scheduled() → src/jobs/ → Services (D29: purges · D32: publish drain as the system actor)
@@ -183,9 +190,11 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   inside mutation batches via eventInsert, D33).
 - **Fields** `src/fields/` — the FieldType registry; one module per type, including `relation.tsx`
   (graph edges and backlinks) and `html.tsx` (D25 trusted raw HTML; powers `renderMode: 'raw'`
-  pages, D27, and `renderMode: 'frame'` pages, D60 — the sandboxed viewer: `src/lib/frame/` holds
-  the policy, ticket and document preparation, `src/services/frame/` the ticketed read,
-  `ViewerShell` the chrome). The most important interface in the codebase (SCHEMA_ENGINE.md).
+  pages, D27, `renderMode: 'inline'` pages, D63 — rendered in place: `src/lib/inline/` holds the
+  document preparation, CSS scoping and page policy, `InlinePage` the wrapper — and
+  `renderMode: 'frame'` pages, D60 — the sandboxed viewer: `src/lib/frame/` holds the policy,
+  ticket and document preparation, `src/services/frame/` the ticketed read; `ViewerShell` is the
+  chrome for both). The most important interface in the codebase (SCHEMA_ENGINE.md).
 - **Templates** `src/templates/` — the render-template registry (the code side of the public
   reading surface); a collection selects a template by name via its `template` key (D41) and can
   pin slots explicitly via `bind` ({title/hero/lead}→field key — the escape hatch convention falls

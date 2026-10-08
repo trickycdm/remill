@@ -1,8 +1,14 @@
 /**
- * ViewerShell — the full-viewport frame around a `renderMode: 'frame'` document
- * (D60): a slim remill-owned bar (home mark, the page title, its visibility,
- * the viewer's actions) and the author's document filling everything below it
- * in a sandboxed iframe. ONE shell for the admin view, a share link and the
+ * ViewerShell — the shell around a page document: a slim remill-owned bar
+ * (home mark, the page title, its visibility, the viewer's actions) and the
+ * author's document below it. Two layouts:
+ *
+ *  - `inline` (D63): the prepared document renders in this page, inside the
+ *    `.rm-page` wrapper (`InlinePage`), and the document scrolls as the page —
+ *    its scripts see a normal window. Review docks like any reading page
+ *    (`body.rm-reviewing`).
+ *  - `frameSrc` (D60): the document fills everything below the bar in a
+ *    sandboxed iframe. ONE shell for the admin view, a share link and the
  * public URL — what differs per surface is only what fills the slots: the
  * `actions` in the bar, an optional `notice` strip under it, the `review`
  * panel beside the frame, and `children` for the drawers those actions open.
@@ -22,10 +28,13 @@ import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { ToastHost } from '@/components/ui/toast';
 import { VisibilityStamp } from '@/components/admin/visibility-stamp';
 import { FRAME_SANDBOX } from '@/lib/frame/policy';
+import type { InlineDocument } from '@/lib/inline/document';
+import { InlinePage } from '@/components/inline-page';
 
 export function ViewerShell({
   title,
   frameSrc,
+  inline,
   home,
   visibility,
   actions,
@@ -34,8 +43,10 @@ export function ViewerShell({
   children,
 }: {
   title: string;
-  /** The ticketed content URL the iframe loads. */
-  frameSrc: string;
+  /** The ticketed content URL the iframe loads (frame mode). */
+  frameSrc?: string;
+  /** The prepared document to render in place (inline mode). */
+  inline?: { readonly page: InlineDocument; readonly field: string };
   /** Where the mark links: the admin for a signed-in owner, the site otherwise. */
   home: { readonly href: string; readonly label: string };
   /** Stamped beside the title when the page is not public (omit for viewers
@@ -51,8 +62,8 @@ export function ViewerShell({
   /** Drawers and dialogs the actions open. */
   children?: unknown;
 }) {
-  return (
-    <div class="flex h-dvh flex-col bg-canvas">
+  const bar = (
+    <>
       <a
         href="#main-content"
         class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-surface-raised focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-ink focus:shadow-md focus:outline-2 focus:outline-offset-2 focus:outline-ring"
@@ -60,7 +71,13 @@ export function ViewerShell({
         Skip to content
       </a>
       {/* Wraps below `sm`: title on the first row, actions on the second. */}
-      <header class="flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-1.5">
+      <header
+        class={cx(
+          'flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-1.5',
+          // Inline: the document scrolls as the page, so the bar sticks.
+          inline && 'sticky top-0 z-30 bg-canvas',
+        )}
+      >
         <a
           href={home.href}
           aria-label={home.label}
@@ -78,6 +95,30 @@ export function ViewerShell({
         </div>
       </header>
       {notice}
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div class="min-h-dvh bg-canvas">
+        {bar}
+        {/* White, not a theme token: this is the DOCUMENT's canvas, and a page
+            that sets no background expects the browser default in both themes.
+            Reviewing, the panel docks beside the page on wide screens and
+            follows it on narrow ones (body.rm-reviewing, set by the island). */}
+        <main id="main-content" class="bg-white">
+          <InlinePage page={inline.page} field={inline.field} />
+          {review?.panel}
+        </main>
+        {children}
+        <ToastHost />
+      </div>
+    );
+  }
+
+  return (
+    <div class="flex h-dvh flex-col bg-canvas">
+      {bar}
       {/* Reviewing: the panel is a column beside the frame on wide screens and
           a strip under it on narrow ones — never an overlay on the document. */}
       <main id="main-content" class={cx('flex min-h-0 flex-1 flex-col lg:flex-row', review && 'rm-viewer-review')}>

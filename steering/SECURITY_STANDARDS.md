@@ -219,6 +219,16 @@ onto the record — any field an attacker named got written. remill's fix, from 
   permission only** (field-level access remains reserved, v1) — the field is writable over
   REST/MCP **by design**, so scope html-bearing collections to trusted roles. Do not add a third
   exception without a decision-log entry.
+- **Inline mode (D63) runs the author's page ON remill's origin, as the viewer.** remill is
+  single-tenant and its one author is trusted (D25), so the built-in `pages` collection renders
+  its html IN the viewer shell: scripts run with the viewer's session — including on the admin
+  view, and including pages an agent published. That is the accepted trade, not an oversight.
+  What still holds: the page is rendered through `prepareInlineDocument` (`src/lib/inline/`) into
+  the `.rm-page` wrapper, which carries `data-ignore` — **never drop it**: Datastar evaluates
+  `data-*` expressions as code (`'unsafe-eval'`), and the wrapper is what keeps a page's markup
+  from becoming Datastar expressions. Its `<style>`s are scoped to the wrapper (`scopeCss`) so a
+  page cannot restyle remill's own controls. Use frame mode instead for any collection whose
+  writers you would not hand the viewer's session.
 - **Frame mode (D60) is how an `html` page should be shown whenever its author is not fully
   trusted with the viewer's session** — an agent, or anyone when an admin will open the page. In
   `renderMode: 'frame'` the html never reaches a remill-origin DOM: it is served from
@@ -256,6 +266,14 @@ onto the record — any field an attacker named got written. remill's fix, from 
   covers the theme-init snippet and the `data-signals` bootstrap. Datastar is **vendored same-origin
   (`'self'`), not loaded from a CDN.** `style-src 'self' 'unsafe-inline'` covers Tailwind; media serving
   uses `img-src 'self' data:` (publicRead assets are additionally designed for cross-origin embedding).
+- **Inline pages get the page policy (D63).** A route that renders an inline page calls
+  `usePagePolicy(c)`; the dispatcher applies its headers AFTER the handler (every policy sets
+  headers on the way out), so the choice can follow what was rendered — on public AND admin paths.
+  The page policy is the site policy plus `PAGE_CSP_SOURCES` (`src/lib/inline/policy.ts`): the
+  library CDNs for scripts/styles/fonts, Google Fonts, any-https/`blob:` images and `data:`/`blob:`
+  media. `connect-src 'self'`, `frame-ancestors 'none'` and `X-Frame-Options: DENY` are unchanged.
+  Change what an inline page may load in that one module — `pageAllows` (the publish-time
+  warnings) reads the same lists.
 - **Framed content has its own policy (D60).** `/frame/:ticket` is dispatched BEFORE the
   protected/public split and answers with `frameResponseHeaders()` (`src/lib/frame/policy.ts`):
   the frame CSP (exact-host allowlists, `connect-src 'none'`, `frame-ancestors 'self'`, and a

@@ -89,14 +89,17 @@ export function canonicalFromHtml(html: string, profile: 'field' | 'document' = 
 }
 
 /** The canonical text of every annotatable field on a document, keyed by field
- *  key. Empty fields are omitted. A frame-mode collection's page field (its
- *  first `html` field, D60) is read as a whole document. */
+ *  key. Empty fields are omitted. A frame- or inline-mode collection's page
+ *  field (its first `html` field, D60/D63) is read as a whole document. */
 export function canonicalDocument(
   def: CollectionDefinition,
   data: Record<string, unknown>,
 ): Map<string, CanonicalField> {
   const out = new Map<string, CanonicalField>();
-  const pageField = def.renderMode === 'frame' ? def.fields.find((f) => f.type === 'html')?.key : undefined;
+  const pageField =
+    def.renderMode === 'frame' || def.renderMode === 'inline'
+      ? def.fields.find((f) => f.type === 'html')?.key
+      : undefined;
   for (const field of def.fields) {
     if (!ANNOTATABLE_FIELD_TYPES.has(field.type)) continue;
     const raw = data[field.key];
