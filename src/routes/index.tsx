@@ -55,7 +55,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
       <EverySurface />
       <UseCases />
       <TrustBento />
-      <AgentQuickstart baseUrl={baseUrl} />
+      <AgentQuickstart />
       <PublishedIndex sections={sections} settings={settings} signedIn={signedIn} />
       <RunYourOwnMill />
     </MarketingShell>,

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { connectSnippets, mcpJsonConfig, CLIENT_TO_SNIPPET } from '@/lib/connect-snippets';
+import {
+  connectSnippets,
+  mcpJsonConfig,
+  urlConnectSnippets,
+  MILL_URL_PLACEHOLDER,
+  CLIENT_TO_SNIPPET,
+} from '@/lib/connect-snippets';
 
 const BASE = 'https://remill.me';
 const TOKEN = 'rmk_test123';
@@ -57,3 +63,32 @@ describe('connect snippets (D48)', () => {
     }
   });
 });
+
+describe('URL-only connect snippets (homepage quickstart)', () => {
+  const snippets = urlConnectSnippets(MILL_URL_PLACEHOLDER);
+  const byKey = Object.fromEntries(snippets.map((s) => [s.key, s]));
+
+  it('covers the major clients, each pointing at the placeholder mill with no token', () => {
+    expect(snippets.map((s) => s.key)).toEqual(['claude', 'chatgpt', 'gemini', 'copilot', 'cursor', 'claude-code']);
+    for (const s of snippets) {
+      expect(s.code, s.key).toContain(`${MILL_URL_PLACEHOLDER}/mcp`);
+      expect(s.code, s.key).not.toMatch(/Bearer|token/i);
+      expect(s.deepLink, s.key).toBeUndefined();
+    }
+  });
+
+  it('app-UI clients get numbered steps and the bare URL to paste', () => {
+    for (const key of ['claude', 'chatgpt']) {
+      expect(byKey[key].steps?.length, key).toBeGreaterThan(1);
+      expect(byKey[key].code).toBe(`${MILL_URL_PLACEHOLDER}/mcp`);
+    }
+  });
+
+  it('config-shaped snippets stay valid JSON', () => {
+    const cursor = JSON.parse(byKey.cursor.code) as { mcpServers: { remill: { url: string } } };
+    expect(cursor.mcpServers.remill.url).toBe(`${MILL_URL_PLACEHOLDER}/mcp`);
+    const vscode = /^code --add-mcp '(.*)'$/.exec(byKey.copilot.code)![1];
+    expect(JSON.parse(vscode)).toEqual({ name: 'remill', type: 'http', url: `${MILL_URL_PLACEHOLDER}/mcp` });
+  });
+});
+

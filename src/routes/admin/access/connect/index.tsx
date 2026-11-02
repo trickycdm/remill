@@ -11,7 +11,7 @@ import { resolveBaseUrl } from '@/lib/base-url';
 import { rateLimit, TOKEN_RATE_LIMIT } from '@/middleware/rate-limit';
 import { InputValidationError } from '@/lib/errors';
 import { jsonForScript } from '@/lib/json-for-script';
-import { CLIENT_TO_SNIPPET } from '@/lib/connect-snippets';
+import { CLIENT_TO_SNIPPET, connectSnippets } from '@/lib/connect-snippets';
 import type { Action } from '@/access';
 import { AdminShell } from '@/components/layouts/admin-shell';
 import { ConnectCards, SecretReveal } from '@/components/connect-cards';
@@ -310,7 +310,17 @@ export const onRequestPost = factory.createHandlers(
           note="This is the only time it will be shown; only its hash is stored."
           value={token}
         />
-        <ConnectCards baseUrl={baseUrl} token={token} initial={initial} />
+        <ConnectCards
+          snippets={connectSnippets(baseUrl, token)}
+          initial={initial}
+          note={
+            <>
+              Using claude.ai or ChatGPT connectors? No token needed — paste{' '}
+              <code class="font-mono">{baseUrl}/mcp</code> into the client and approve the
+              connection in your browser.
+            </>
+          }
+        />
         <p class="text-sm">
           <a href="/admin/access" class="text-accent-text hover:underline">
             ← Back to Access

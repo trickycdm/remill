@@ -24,7 +24,10 @@ describe('homepage (marketing)', () => {
     expect(html).toContain('Content that works for humans, apps, and agents.');
     expect(html).toContain('Nothing published yet');
     expect(html).toContain('id="connect"');
-    expect(html).toContain('https://example.org/mcp');
+    // remill is self-hosted: the connect steps name a placeholder mill, never
+    // the origin serving the page (a visitor connects THEIR mill).
+    expect(html).toContain('https://&lt;your-mill&gt;/mcp');
+    expect(html).not.toContain('https://example.org/mcp');
   });
 
   it('names the customer and the conversion: who strip, jobs, run-your-own, dogfood, footer depth', async () => {
@@ -85,8 +88,13 @@ describe('homepage (marketing)', () => {
     expect(html).toContain('Denied');
     // The quickstart is the coupon strip (three steps, one ticket) — D48 leads
     // with the URL-only OAuth connect.
-    expect(html).toContain('Connect by URL');
+    expect(html).toContain('Run your own mill');
+    expect(html).toContain('Pick your client');
     expect(html).toContain('Put it to work');
+    // A button per client, each with its connect steps.
+    for (const client of ['Claude', 'ChatGPT', 'Gemini CLI', 'Copilot', 'Cursor', 'Claude Code', 'Other']) {
+      expect(html).toContain(`>${client}</span>`);
+    }
   });
 
   it('emits the discovery head props (canonical, og, feed, favicon)', async () => {

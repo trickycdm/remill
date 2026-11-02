@@ -47,7 +47,13 @@ import {
   ShieldCheck,
 } from '@/components/ui/icon';
 import { formatDate } from '@/lib/format-date';
-import { mcpJsonConfig } from '@/lib/connect-snippets';
+import {
+  MILL_URL_PLACEHOLDER,
+  mcpJsonConfig,
+  urlConnectSnippets,
+  type ConnectSnippet,
+} from '@/lib/connect-snippets';
+import { ConnectCards } from '@/components/connect-cards';
 import type { SiteSettings } from '@/services/settings';
 import type { CollectionDefinition } from '@/fields/types';
 import type { DiscoveryDoc } from '@/services/discovery';
@@ -686,10 +692,6 @@ export function RunYourOwnMill() {
   );
 }
 
-// Scrollable code panels are keyboard-operable regions (WCAG 2.1.1, mirrors Table).
-const CODE_BLOCK =
-  'overflow-x-auto rounded-lg border border-border bg-surface-raised p-4 font-mono text-[13px] leading-relaxed text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-
 /** The tools a connected agent gets for an example collection — shown as
  *  chips, not another code block. */
 const EXAMPLE_TOOLS = [
@@ -703,7 +705,7 @@ const EXAMPLE_TOOLS = [
 /** One coupon of the quickstart strip: pop numeral, display heading, body. */
 function Coupon({ n, title, children }: { n: string; title: string; children?: unknown }) {
   return (
-    <li class="relative flex flex-col gap-2 border-b-[1.5px] border-dashed border-border-strong p-6 last:border-b-0 sm:border-r-[1.5px] sm:border-b-0 sm:last:border-r-0">
+    <li class="relative flex min-w-0 flex-col gap-3 border-b-[1.5px] border-dashed border-border-strong p-6 last:border-b-0 lg:border-r-[1.5px] lg:border-b-0 lg:last:border-r-0">
       <span aria-hidden="true" class="text-pop-text absolute top-4 right-5 font-mono text-lg font-bold">
         {n}
       </span>
@@ -713,16 +715,29 @@ function Coupon({ n, title, children }: { n: string; title: string; children?: u
   );
 }
 
-/**
- * Coupon-strip quickstart on the ink-washed band: three perforated coupons
- * in one ticket (dashed rules = the perforation), ONE code artifact (the MCP
- * client config, with a copy button), and the generated tools shown as chips
- * instead of a curl dump. Conversion target.
- */
-export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
-  // Shared builder (D48) — the wizard's .mcp.json card renders the same shape.
-  const mcpConfig = mcpJsonConfig(baseUrl, '<token>');
+/** The quickstart's client buttons: URL-only OAuth steps per client, plus the
+ *  fixed-token config for anything else — all on the placeholder origin. */
+const QUICKSTART_SNIPPETS: readonly ConnectSnippet[] = [
+  ...urlConnectSnippets(MILL_URL_PLACEHOLDER),
+  {
+    key: 'token',
+    label: 'Other',
+    intro:
+      "Any other MCP client: mint a token in your mill's connect wizard (Access → Connect an agent) " +
+      "and drop it into this config. It's plain streamable HTTP, so no SDK is required.",
+    code: mcpJsonConfig(MILL_URL_PLACEHOLDER, '<token>'),
+  },
+];
 
+/**
+ * Coupon-strip quickstart on the ink-washed band: three perforated coupons in
+ * one ticket (dashed rules = the perforation). Step one is deploying your own
+ * mill — remill is self-hosted, so every instruction uses the
+ * `https://<your-mill>` placeholder, never the origin serving this page. Step
+ * two is a button per client with its connect steps; step three shows the
+ * generated tools as chips. Conversion target.
+ */
+export function AgentQuickstart() {
   return (
     <section id="connect" aria-labelledby="home-connect" class="rm-perf scroll-mt-20">
       <div class="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-20 sm:py-24">
@@ -734,44 +749,32 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
             Connect an agent
           </h2>
         </div>
-        <ol class="border-accent/60 grid overflow-hidden rounded-xl border-[1.5px] bg-surface sm:grid-cols-[1fr_1.7fr_1fr]">
-          <Coupon n="1" title="Connect by URL">
+        <ol class="border-accent/60 grid overflow-hidden rounded-xl border-[1.5px] bg-surface lg:grid-cols-[1fr_2.4fr_1fr]">
+          <Coupon n="1" title="Run your own mill">
             <p class="text-sm leading-relaxed text-ink-muted">
-              Paste <code class="font-mono text-xs">{baseUrl || 'https://your.remill'}/mcp</code>{' '}
-              into any MCP client and approve it in your browser. remill speaks OAuth, so
-              claude.ai, ChatGPT, and Claude Code connect with the URL alone.
+              remill is self-hosted: you deploy your own mill to your own Cloudflare account, and
+              your agents connect to that. Wherever the steps show{' '}
+              <code class="font-mono text-xs text-ink">{MILL_URL_PLACEHOLDER}</code>, use your
+              mill's address.
             </p>
+            <a href="#run" class={`${LINK} text-sm`}>
+              How to run your own
+            </a>
           </Coupon>
-          <Coupon n="2" title="Or configure it by hand">
+          <Coupon n="2" title="Pick your client">
             <p class="text-sm leading-relaxed text-ink-muted">
-              Prefer a fixed token? Mint one in the admin's connect wizard and drop it into this
-              config. It's plain streamable HTTP, so no SDK is required.
+              remill speaks OAuth, so most clients connect with the URL alone and you approve them
+              in your browser.
             </p>
-            <div class="relative" data-signals="{copied: false}">
-              <pre
-                id="mcp-config-src"
-                tabindex={0}
-                role="region"
-                aria-label="MCP client configuration"
-                class={CODE_BLOCK}
-              >
-                <code>{mcpConfig}</code>
-              </pre>
-              <button
-                type="button"
-                class="absolute top-2 right-2 rounded-md border border-border bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted shadow-xs transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                data-on:click="navigator.clipboard.writeText(document.getElementById('mcp-config-src').textContent); $copied = true; setTimeout(() => $copied = false, 1600)"
-              >
-                <span data-show="!$copied">Copy</span>
-                <span data-show="$copied" style="display:none">
-                  Copied
-                </span>
-              </button>
-            </div>
+            <ConnectCards
+              id="home-connect"
+              snippets={QUICKSTART_SNIPPETS}
+              legend="Connect instructions for your client"
+            />
           </Coupon>
           <Coupon n="3" title="Put it to work">
             <p class="text-sm leading-relaxed text-ink-muted">
-              Every collection the token can see becomes a set of tools, gated by its grants:
+              Every collection the agent can see becomes a set of tools, gated by its grants:
             </p>
             <ul aria-label="Generated MCP tools" class="flex flex-wrap gap-2">
               {EXAMPLE_TOOLS.map((t) => (
@@ -782,10 +785,6 @@ export function AgentQuickstart({ baseUrl }: { baseUrl: string }) {
             </ul>
           </Coupon>
         </ol>
-        <p class="text-sm leading-relaxed text-ink-muted">
-          These steps work on any mill you have an account on. remill.me is the author's own, so
-          to connect yours, deploy your own mill first.
-        </p>
       </div>
     </section>
   );

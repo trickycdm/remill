@@ -10,7 +10,7 @@
  */
 
 import { jsonForScript } from '@/lib/json-for-script';
-import { connectSnippets, type ConnectSnippet } from '@/lib/connect-snippets';
+import type { ConnectSnippet } from '@/lib/connect-snippets';
 import { Button } from '@/components/ui';
 
 function CopyButton({ sourceId, signal, label }: { sourceId: string; signal: string; label: string }) {
@@ -69,17 +69,34 @@ export function SecretReveal({
   );
 }
 
-function SnippetPanel({ snippet, visible }: { snippet: ConnectSnippet; visible: boolean }) {
-  const codeId = `connect-snip-${snippet.key}`;
-  const copied = `snipCopied${snippet.key.replace(/[^a-zA-Z0-9]/g, '')}`;
+function SnippetPanel({
+  snippet,
+  id,
+  tabSignal,
+  visible,
+}: {
+  snippet: ConnectSnippet;
+  id: string;
+  tabSignal: string;
+  visible: boolean;
+}) {
+  const codeId = `${id}-snip-${snippet.key}`;
+  const copied = `${tabSignal}Copied${snippet.key.replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
     <div
-      data-show={`$connectTab === '${snippet.key}'`}
+      data-show={`$${tabSignal} === '${snippet.key}'`}
       style={visible ? undefined : 'display:none'}
       class="flex flex-col gap-3 rounded-md border border-border bg-surface p-4"
       data-signals={jsonForScript({ [copied]: false })}
     >
       <p class="text-sm text-ink-muted">{snippet.intro}</p>
+      {snippet.steps ? (
+        <ol class="flex list-decimal flex-col gap-1 pl-5 text-sm text-ink">
+          {snippet.steps.map((step) => (
+            <li>{step}</li>
+          ))}
+        </ol>
+      ) : null}
       {snippet.deepLink ? (
         <div>
           <Button href={snippet.deepLink.href} variant="primary" size="sm">
@@ -110,35 +127,41 @@ function SnippetPanel({ snippet, visible }: { snippet: ConnectSnippet; visible: 
 
 /**
  * Tabbed per-client setup cards. Tabs are a visually-segmented radio group
- * (natively keyboard-accessible) bound to the `connectTab` signal; panels
+ * (natively keyboard-accessible) bound to a per-instance tab signal; panels
  * toggle via `data-show`. `initial` picks the fronted card (the wizard maps
- * the client select onto it).
+ * the client select onto it). `id` namespaces the signals, radio group and
+ * code ids, so the token cards (admin wizard) and the URL-only cards (public
+ * homepage) are one component.
  */
 export function ConnectCards({
-  baseUrl,
-  token,
+  snippets,
   initial,
+  id = 'connect',
+  legend = 'Setup instructions for your client',
+  note,
 }: {
-  baseUrl: string;
-  token: string;
-  initial: string;
+  snippets: readonly ConnectSnippet[];
+  initial?: string;
+  id?: string;
+  legend?: string;
+  note?: unknown;
 }) {
-  const snippets = connectSnippets(baseUrl, token);
-  const initialKey = snippets.some((s) => s.key === initial) ? initial : snippets[0].key;
+  const tabSignal = `${id.replace(/[^a-zA-Z0-9]/g, '')}Tab`;
+  const initialKey = snippets.some((s) => s.key === initial) ? initial! : snippets[0].key;
   return (
-    <div class="flex flex-col gap-3" data-signals={jsonForScript({ connectTab: initialKey })}>
+    <div class="flex flex-col gap-3" data-signals={jsonForScript({ [tabSignal]: initialKey })}>
       <fieldset>
-        <legend class="sr-only">Setup instructions for your client</legend>
+        <legend class="sr-only">{legend}</legend>
         <div class="inline-flex flex-wrap gap-1 rounded-md border border-border bg-canvas p-1">
           {snippets.map((s) => (
             <label class="cursor-pointer">
               <input
                 type="radio"
-                name="connect-tab"
+                name={`${id}-tab`}
                 value={s.key}
                 class="peer sr-only"
                 checked={s.key === initialKey}
-                data-bind="connectTab"
+                data-bind={tabSignal}
               />
               <span class="inline-flex h-8 items-center rounded px-3 text-sm font-medium text-ink-muted peer-checked:bg-surface peer-checked:text-ink peer-checked:shadow-xs peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring">
                 {s.label}
@@ -148,13 +171,9 @@ export function ConnectCards({
         </div>
       </fieldset>
       {snippets.map((s) => (
-        <SnippetPanel snippet={s} visible={s.key === initialKey} />
+        <SnippetPanel snippet={s} id={id} tabSignal={tabSignal} visible={s.key === initialKey} />
       ))}
-      <p class="text-xs text-ink-subtle">
-        Using claude.ai or ChatGPT connectors? No token needed — paste{' '}
-        <code class="font-mono">{baseUrl}/mcp</code> into the client and approve the connection in
-        your browser.
-      </p>
+      {note ? <p class="text-xs text-ink-subtle">{note}</p> : null}
     </div>
   );
 }
