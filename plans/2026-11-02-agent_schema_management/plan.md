@@ -1,6 +1,6 @@
 # Agent schema management — let connected agents create collections (D64)
 
-**Status:** in progress · 2026-11-02
+**Status:** shipped in v1.19.0 · 2026-11-02
 
 ## Problem
 
