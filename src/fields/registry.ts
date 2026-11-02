@@ -92,6 +92,57 @@ export function resolveField(field: FieldDescriptor): {
   return { ft, config, valueSchema };
 }
 
+/** A Zod schema as an embeddable JSON Schema fragment (no top-level `$schema`). */
+export function embeddedJsonSchema(schema: ZodType): JSONSchema {
+  const json = z.toJSONSchema(schema) as JSONSchema;
+  delete json.$schema;
+  return json;
+}
+
+/**
+ * The JSON Schema of ONE field descriptor in a collection definition — a
+ * `oneOf` with a branch per registered type, each carrying that type's own
+ * `config` schema and summary (D64). Generated from the registry, so a new
+ * field type documents itself to agents with no extra wiring. Guidance for
+ * schema authors; `validateDefinition` stays the authority.
+ */
+export function fieldDescriptorJsonSchema(): JSONSchema {
+  return {
+    oneOf: [...REGISTRY.values()].map((ft) => {
+      const config = embeddedJsonSchema(ft.configSchema);
+      const configRequired = Array.isArray(config.required) && config.required.length > 0;
+      return {
+        type: 'object',
+        description: `${ft.key}: ${ft.summary}`,
+        properties: {
+          key: { type: 'string', pattern: '^[a-z][a-z0-9_]*$', description: 'snake_case, unique in the collection.' },
+          type: { const: ft.key },
+          label: { type: 'string' },
+          required: { type: 'boolean' },
+          ...(isIndexable(ft.key)
+            ? {
+                index: { type: 'boolean', description: 'Promote for filtering, sorting and backlinks.' },
+                unique: { type: 'boolean', description: 'Enforced on save; needs index:true.' },
+              }
+            : {}),
+          config,
+          admin: {
+            type: 'object',
+            properties: {
+              showInList: { type: 'boolean' },
+              help: { type: 'string' },
+              placeholder: { type: 'string' },
+            },
+            additionalProperties: false,
+          },
+        },
+        required: configRequired ? ['key', 'type', 'config'] : ['key', 'type'],
+        additionalProperties: false,
+      };
+    }),
+  };
+}
+
 /**
  * The machine surface (5 REST/OpenAPI + 6 MCP). Uses the field type's explicit
  * jsonSchema when provided, else derives it from valueSchema via Zod 4.

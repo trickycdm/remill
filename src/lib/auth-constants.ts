@@ -10,10 +10,11 @@
  * created at runtime — this union is just the built-in set every install starts
  * with. `anonymous` is the role of the unauthenticated principal.
  */
-export type SystemRole = 'admin' | 'editor' | 'author' | 'reader' | 'anonymous';
+export type SystemRole = 'admin' | 'builder' | 'editor' | 'author' | 'reader' | 'anonymous';
 
 export const SYSTEM_ROLES: readonly SystemRole[] = [
   'admin',
+  'builder',
   'editor',
   'author',
   'reader',

@@ -118,6 +118,12 @@ rendered public pages + share links.)
 > and comments use the same-page overlay. The built-in `pages` collection moved to it (migration
 > 0021). Trusted single author by design: page scripts run as the viewer, admin included. Inline
 > pages get the page CSP via `usePagePolicy(c)` (CDNs, Google Fonts, https images).
+> **D64 built 2026-11-02** (plan: [`plans/2026-11-02-agent_schema_management/`](plans/2026-11-02-agent_schema_management/)):
+> **agents can create collections** — a `builder` system role (editor + `manage_schema`, no
+> `manage_access`; migration 0022) offered on the OAuth consent screen, which never offers admin;
+> `create_collection`/`update_collection` take a generated definition JSON Schema (field-type
+> branches from the registry, each type now carrying a one-line `summary`); their results — and
+> `install_pack`'s — list `newTools` plus a reconnect note; `createCollection` forces `protected: false`.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.

@@ -27,6 +27,7 @@ function valueSchema(cfg: NumberConfig, field: FieldDescriptor) {
 
 export const numberField: FieldType<NumberConfig, number> = {
   key: 'number',
+  summary: 'A number. config: min, max, integer.',
   configSchema,
   valueSchema,
   toIndex: (v) => v ?? null,

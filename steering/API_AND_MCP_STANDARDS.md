@@ -225,7 +225,14 @@ tokens** as REST.
     agent refused `FORBIDDEN`. Denials name what would admit the call (e.g. thread reads say
     "requires 'comment' or 'update'").
   - Schema management: `list_collections`, `create_collection`, `update_collection`
-    (require `manage_schema`).
+    (require `manage_schema` — held by `admin` and `builder`, D64). The `definition` input is a
+    GENERATED JSON Schema (`collectionDefinitionJsonSchema()` in the collections service, field
+    branches from `fieldDescriptorJsonSchema()` in the registry — each field type's `configSchema`
+    + its one-line `summary`), never a hand-written or opaque `object`; `validateDefinition` stays
+    the authority for cross-field rules. `create_collection` and `install_pack` results carry
+    `newTools` (the names this change added, diffed against the pre-call tool build) and a
+    reconnect `note`: there is no push channel for `tools/list_changed`, so clients holding a
+    cached tool list must be told.
   - Packs/templates (D42): `list_templates` + `list_packs` (ungated discovery — registry metadata
     is code; `installed` reveals nothing `list_collections` doesn't) and `install_pack`
     (`manage_schema`; `{pack, slug?}` — slug renames a single-collection pack's scaffold). REST

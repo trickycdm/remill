@@ -97,6 +97,7 @@ function RelationChip({ id, title, collection }: { id: string; title: string | n
 
 export const relationField: FieldType<RelationConfig, string | string[]> = {
   key: 'relation',
+  summary: 'Reference(s) to documents in another collection (config.collection, multiple for many). Set index:true for backlinks and filtering.',
   configSchema,
   valueSchema,
   toIndex: (v) => (Array.isArray(v) ? (v.length ? v : null) : (v ?? null)),

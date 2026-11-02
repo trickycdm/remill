@@ -47,6 +47,7 @@ function splitTags(raw: string): string[] {
 
 export const tagsField: FieldType<TagsConfig, string[]> = {
   key: 'tags',
+  summary: 'A list of free-form string tags. config: maxTags.',
   configSchema,
   valueSchema,
   toIndex: (v) => (Array.isArray(v) && v.length ? v.join(', ') : null),

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestD1 } from '@/test/d1';
 import { getDb, type Database } from '@/db/client';
+import { sql } from 'drizzle-orm';
 import * as svc from '@/services/collections';
 import type { Principal } from '@/access';
 import { seedRoles, makePrincipal } from '@/test/access';
@@ -375,10 +376,18 @@ describe('collections service — definition validation', () => {
   });
 
   it('protects seeded collections from deletion', async () => {
-    await svc.createCollection(db, admin, { ...valid, protected: true }, NOW);
+    await svc.createCollection(db, admin, valid, NOW);
+    // Only the seed marks a collection protected — it bypasses the service.
+    await db.run(sql`UPDATE collections SET protected = 1 WHERE slug = 'articles'`);
     await expect(svc.deleteCollection(db, admin, 'articles', NOW)).rejects.toBeInstanceOf(
       ForbiddenError,
     );
+  });
+
+  it('never creates a protected collection on request (D64)', async () => {
+    const def = await svc.createCollection(db, admin, { ...valid, protected: true }, NOW);
+    expect(def.protected).toBe(false);
+    await expect(svc.deleteCollection(db, admin, 'articles', NOW)).resolves.not.toThrow();
   });
 });
 

@@ -292,3 +292,50 @@ describe('migration 0021 — inline render mode (D63)', () => {
     expect(() => db.prepare("UPDATE collections SET render_mode = 'bogus' WHERE slug = 'notes'").run()).toThrow(/CHECK/);
   });
 });
+
+/**
+ * D64: the `builder` role reaches EXISTING installs only through migration
+ * 0022 (prod never re-runs seed.sql). Simulate an install that predates it:
+ * every earlier migration, then the seed as it stood (no builder lines), then
+ * 0022 — the rows must match SYSTEM_ROLES exactly.
+ */
+describe('migration 0022 — builder role for existing installs (D64)', () => {
+  const MIGRATIONS = join(import.meta.dirname, 'migrations');
+  const run = (db: InstanceType<typeof Database>, file: string) => {
+    for (const stmt of readFileSync(join(MIGRATIONS, file), 'utf-8').split('--> statement-breakpoint')) {
+      if (stmt.trim()) db.exec(stmt);
+    }
+  };
+  const files = readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+  const d64 = files.find((f) => f.startsWith('0022_'))!;
+  const seedSql = readFileSync(join(import.meta.dirname, 'seed.sql'), 'utf-8');
+  const builderRows = (db: InstanceType<typeof Database>) =>
+    db.prepare("SELECT action, condition FROM role_permissions WHERE role = 'builder' ORDER BY action").all();
+  const expected = SYSTEM_ROLES.find((r) => r.slug === 'builder')!
+    .permissions.map((p) => ({ action: p.action, condition: p.condition ?? null }))
+    .sort((a, b) => a.action.localeCompare(b.action));
+
+  it('adds the role and its permissions when the system roles already exist', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    for (const f of files.filter((f) => f < d64)) run(db, f);
+    db.exec(seedSql.split('\n').filter((l) => !l.includes("'builder'")).join('\n'));
+    expect(builderRows(db)).toEqual([]);
+    run(db, d64);
+    expect(db.prepare("SELECT name, system FROM roles WHERE slug = 'builder'").get()).toEqual({ name: 'Builder', system: 1 });
+    expect(builderRows(db)).toEqual(expected);
+    db.exec(seedSql); // CI re-seeds after migrating: must stay idempotent
+    expect(builderRows(db)).toEqual(expected);
+  });
+
+  it('is a no-op on a fresh database (seed.sql adds the role after)', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    for (const f of files) run(db, f);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM roles WHERE slug = 'builder'").get()).toEqual({ n: 0 });
+    db.exec(seedSql);
+    expect(builderRows(db)).toEqual(expected);
+  });
+});

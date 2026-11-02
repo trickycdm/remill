@@ -8,6 +8,7 @@ import * as access from '@/services/access';
 import { recentAudit } from '@/db/queries/audit';
 import type { Principal } from '@/access';
 import type { CollectionDefinition } from '@/fields/types';
+import { listFieldTypeKeys } from '@/fields/registry';
 
 const NOW = '2026-07-04T12:00:00Z';
 
@@ -100,6 +101,59 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     // An admin (schema rights) sees create_collection.
     // (admin has no token here; verify via editor lacking it and the tool existing for manage_schema)
     expect(editor).not.toContain('create_collection'); // editor lacks manage_schema
+  });
+
+  it('D64: a builder agent manages schema; the definition schema and result guide it', async () => {
+    const builderToken = await tokenFor('builder-bot', 'builder');
+    const list = await mcp(builderToken, 'tools/list');
+    const names = toolNames(list);
+    expect(names).toEqual(expect.arrayContaining(['create_collection', 'update_collection', 'install_pack']));
+    expect(names).not.toContain('list_teams'); // no manage_access
+
+    // The definition input is a real schema: one oneOf branch per field type,
+    // each with that type's config (select's options are required).
+    type Branch = { properties: { type: { const: string } }; required: string[] };
+    type DefSchema = {
+      required: string[];
+      properties: { fields: { items: { oneOf: Branch[] } }; template: { enum: string[] } };
+    };
+    type ToolRow = { name: string; inputSchema: { properties: { definition: DefSchema } } };
+    const create = (list.body.result.tools as ToolRow[]).find((t) => t.name === 'create_collection')!;
+    const def = create.inputSchema.properties.definition;
+    expect(def.required).toEqual(['slug', 'name', 'shape', 'fields']);
+    const branches = def.properties.fields.items.oneOf;
+    expect(branches.map((b) => b.properties.type.const).sort()).toEqual(listFieldTypeKeys().sort());
+    const select = branches.find((b) => b.properties.type.const === 'select')!;
+    expect(select.required).toContain('config');
+    expect(def.properties.template.enum).toContain('article');
+
+    // The result names the tools the new collection brought (and only those).
+    const created = await mcp(builderToken, 'tools/call', {
+      name: 'create_collection',
+      arguments: {
+        definition: {
+          slug: 'reading-list',
+          name: 'Reading list',
+          shape: 'collection',
+          fields: [
+            { key: 'title', type: 'text', required: true },
+            { key: 'state', type: 'select', config: { options: [{ value: 'todo', label: 'To read' }] } },
+          ],
+        },
+      },
+    });
+    expect(created.body.result.isError).toBeFalsy();
+    const payload = JSON.parse(created.body.result.content[0].text);
+    expect(payload.slug).toBe('reading-list');
+    expect(payload.newTools).toEqual(expect.arrayContaining(['create_reading-list', 'list_reading-list']));
+    expect(payload.newTools).not.toContain('create_posts');
+    expect(payload.note).toMatch(/reconnect/);
+
+    // install_pack reports the same way.
+    const installed = await mcp(builderToken, 'tools/call', { name: 'install_pack', arguments: { pack: 'blog' } });
+    const pack = JSON.parse(installed.body.result.content[0].text);
+    expect(pack.collections.map((c: { slug: string }) => c.slug)).toEqual(['articles']);
+    expect(pack.newTools).toContain('create_articles');
   });
 
   it('an agent can create a collection and documents through generated tools', async () => {

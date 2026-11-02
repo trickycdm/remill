@@ -43,6 +43,7 @@ function toPlainText(md: string): string {
 
 export const markdownField: FieldType<MarkdownConfig, string> = {
   key: 'markdown',
+  summary: 'Long-form Markdown body. config: maxLength.',
   configSchema,
   valueSchema,
   // A searchable plain-text lead-in (value_text). Not the full document.

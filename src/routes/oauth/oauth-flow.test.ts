@@ -215,6 +215,26 @@ describe('OAuth 2.1 flow — integration through the Hono app', () => {
     expect(names).not.toContain('install_pack'); // no manage_schema
   });
 
+  it('④b D64: an OAuth agent consented as Builder can define collections, not manage access', async () => {
+    const clientId = await registerClient();
+    const consent = await req(authorizeUrl(clientId, await pkceChallengeFromVerifier(VERIFIER)), {
+      headers: { Cookie: cookie },
+    });
+    const page = await consent.text();
+    expect(page).toContain('value="builder"'); // offered on the consent screen
+    expect(page).not.toContain('value="admin"');
+
+    const { body } = await fullConnect('builder');
+    const mcp = await req('/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${body.access_token}` },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+    const names = ((await mcp.json()) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(['create_collection', 'update_collection', 'install_pack', 'create_posts']));
+    expect(names).not.toContain('list_teams'); // manage_access stays admin-only
+  });
+
   it('⑤ token endpoint errors are raw OAuth JSON', async () => {
     const bad = await req('/oauth/token', form({ grant_type: 'password' }));
     expect(bad.status).toBe(400);

@@ -203,33 +203,45 @@ export async function buildToolsForPrincipal(
     handler: async () => collectionsService.listPackStatuses(db, principal),
   });
   if (couldDo(perms, principal, 'manage_schema', '*', false)) {
+    // D64: a new collection's tools exist server-side at once, but a client
+    // lists tools at connect time and remill has no channel to push
+    // `tools/list_changed` — so say exactly which tools appeared and where they
+    // will show up. Diffed against THIS build's tool list (the pre-change state).
+    const newToolsSince = async () => {
+      const before = new Set(tools.map((t) => t.name));
+      const after = await buildToolsForPrincipal(db, principal, now, baseUrl, ctx);
+      return {
+        newTools: after.map((t) => t.name).filter((n) => !before.has(n)),
+        note:
+          'These tools exist now. If your client does not list them yet, refresh its tool list or reconnect ' +
+          'to the remill MCP server to use them.',
+      };
+    };
+    const definitionSchema = collectionsService.collectionDefinitionJsonSchema();
     tools.push({
       name: 'create_collection',
       description:
-        'Define a new content type. The body is a collection definition (slug, name, shape, fields[]). ' +
-        'Field keys are lowercase snake_case (^[a-z][a-z0-9_]*$). A slug field is indexed by default so it ' +
-        'serves the pretty public URL; set index:true on any relation field you want backlinks or filtering on. ' +
-        'Optional `template` selects a designed public reading page (see list_templates) and `bind` pins its ' +
-        'title/hero/lead slots to specific fields; for a ready-made shape, prefer install_pack. ' +
-        'Optional `access` sets visibility: {publicRead: true} lets anyone read published documents; ' +
-        '{private: true} hides the collection from discovery (list_collections, the REST API index, ' +
-        'OpenAPI) for principals without read access. The two are mutually exclusive. ' +
-        "Optional `renderMode` picks how a collection with an `html` field is shown: 'inline' renders the " +
-        "first html field as a full page inside remill's viewer, with comments (use this for standalone " +
-        "HTML pages; its scripts run on this site); 'frame' does the same in a sandboxed frame; 'raw' serves " +
-        "it as the bare page; 'shell' (default) inlines it in the branded page.",
+        'Define a new content type — a collection to group documents — then fill it with the generated ' +
+        'create_<slug>/list_<slug>/… tools (the result lists them). `definition` is {slug, name, shape, ' +
+        'fields[]}; its schema documents every field type and its `config`: text, slug, markdown, html, ' +
+        'number, boolean, datetime, select, tags, json, media, relation. For a ready-made shape (blog, docs, ' +
+        'prompts, …) prefer install_pack. Omit `access` for an ordinary internal collection; ' +
+        '{publicRead: true} publishes documents to anyone, {private: true} hides the collection from ' +
+        'principals without read access.',
       inputSchema: {
         type: 'object',
-        properties: { definition: { type: 'object' } },
+        properties: { definition: definitionSchema },
         required: ['definition'],
       },
-      handler: async (args) =>
-        collectionsService.createCollection(
+      handler: async (args) => {
+        const def = await collectionsService.createCollection(
           db,
           principal,
           args.definition as CollectionDefinition,
           now(),
-        ),
+        );
+        return { ...def, ...(await newToolsSince()) };
+      },
     });
     tools.push({
       name: 'install_pack',
@@ -243,27 +255,29 @@ export async function buildToolsForPrincipal(
         properties: { pack: { type: 'string' }, slug: { type: 'string' } },
         required: ['pack'],
       },
-      handler: async (args) =>
-        collectionsService.installPack(
+      handler: async (args) => {
+        const installed = await collectionsService.installPack(
           db,
           principal,
           String(args.pack),
           now(),
           args.slug !== undefined ? { slug: String(args.slug) } : undefined,
-        ),
+        );
+        return { collections: installed, ...(await newToolsSince()) };
+      },
     });
     tools.push({
       name: 'update_collection',
       description:
-        'Modify an existing content type. The definition replaces the stored one and follows the ' +
-        'create_collection contract (including `access`: publicRead/private, mutually exclusive). ' +
+        'Modify an existing content type. The definition REPLACES the stored one (send every field you ' +
+        'want to keep — read it first with list_collections) and follows the create_collection schema. ' +
         'Turning publicRead ON over existing documents requires `onEnablePublic` (D57): ' +
         "'private' switches them all to private first (recommended), 'keep' publishes them as they are.",
       inputSchema: {
         type: 'object',
         properties: {
           slug: { type: 'string' },
-          definition: { type: 'object' },
+          definition: definitionSchema,
           onEnablePublic: { type: 'string', enum: [...collectionsService.ON_ENABLE_PUBLIC] },
         },
         required: ['slug', 'definition'],

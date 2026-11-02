@@ -50,6 +50,7 @@ function valueSchema(_cfg: DatetimeConfig, field: FieldDescriptor) {
 
 export const datetimeField: FieldType<DatetimeConfig, string> = {
   key: 'datetime',
+  summary: 'An ISO 8601 date-time string.',
   configSchema,
   valueSchema,
   toIndex: (v) => v ?? null,

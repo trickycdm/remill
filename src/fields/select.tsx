@@ -36,6 +36,7 @@ function valueSchema(
 
 export const selectField: FieldType<SelectConfig, SelectValue> = {
   key: 'select',
+  summary: 'One value from config.options [{value,label}] (several with multiple:true).',
   configSchema,
   valueSchema,
   toIndex: (v) => {

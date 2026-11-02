@@ -66,6 +66,7 @@ function valueSchema(_cfg: JsonConfig, field: FieldDescriptor) {
 
 export const jsonField: FieldType<JsonConfig, unknown> = {
   key: 'json',
+  summary: 'Any JSON value — structured data with no better-fitting type.',
   configSchema,
   valueSchema,
   // No toIndex: json is not meaningfully sortable/filterable.

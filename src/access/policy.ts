@@ -34,21 +34,31 @@ const ALL_ACTIONS: readonly Action[] = [
   'manage_access',
 ];
 
+const EDITOR_ACTIONS: readonly Action[] = ['read', 'create', 'update', 'delete', 'publish', 'share_link', 'comment'];
+
+const everywhere = (actions: readonly Action[]): PermissionSpec[] =>
+  actions.map((action) => ({ collection: '*', action }));
+
 export const SYSTEM_ROLES: readonly RoleSpec[] = [
   {
     slug: 'admin',
     name: 'Administrator',
     description: 'Full control over content, schema, and access.',
-    permissions: ALL_ACTIONS.map((action) => ({ collection: '*', action })),
+    permissions: everywhere(ALL_ACTIONS),
+  },
+  // D64: editor + schema. The role an OAuth-connected agent can be given (the
+  // consent screen never offers admin) so it can define its own collections.
+  {
+    slug: 'builder',
+    name: 'Builder',
+    description: 'Everything an editor can do, plus create and change collections. No access management.',
+    permissions: everywhere([...EDITOR_ACTIONS, 'manage_schema']),
   },
   {
     slug: 'editor',
     name: 'Editor',
     description: 'Create, edit, publish, and delete any content. No schema or access management.',
-    permissions: (['read', 'create', 'update', 'delete', 'publish', 'share_link', 'comment'] as Action[]).map((action) => ({
-      collection: '*',
-      action,
-    })),
+    permissions: everywhere(EDITOR_ACTIONS),
   },
   {
     slug: 'author',

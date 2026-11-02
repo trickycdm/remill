@@ -28,6 +28,7 @@ function valueSchema(_cfg: MediaConfig, field: FieldDescriptor) {
 
 export const mediaField: FieldType<MediaConfig, string> = {
   key: 'media',
+  summary: 'An uploaded media item (a med_… id from upload_media). config.kinds limits image/audio/video/document.',
   configSchema,
   valueSchema,
   toIndex: (v) => v ?? null,

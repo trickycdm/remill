@@ -77,7 +77,8 @@ const NAV_ITEMS: readonly NavItem[] = [
 /**
  * Which nav items a coarse role may see — the UI-hiding half of permission-aware
  * navigation (server-side authorize() is the real enforcement). Managing schema
- * (Collections), access (Access), and instance Settings are admin-only; anyone who
+ * (Collections, Marketplace) is admin + builder; access (Access) and instance
+ * Settings are admin-only; anyone who
  * can read sees Content/Media/Dashboard. Unknown/custom roles fall back to the
  * reader set. (Per-user Account settings live off the top-bar menu, not the nav.)
  */
@@ -96,6 +97,18 @@ const NAV_BY_ROLE: Record<string, readonly string[]> = {
     'access',
     'activity',
     'settings',
+  ],
+  // D64: editor + schema — Collections and Marketplace, but never Access/Settings.
+  builder: [
+    'dashboard',
+    'content',
+    'pages',
+    'graph',
+    'shared',
+    'media',
+    'trash',
+    'collections',
+    'marketplace',
   ],
   // Trash shows for the roles that hold `delete` (the page itself scopes rows
   // to what the caller can actually act on; the system author role cannot delete).

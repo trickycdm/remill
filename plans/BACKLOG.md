@@ -55,6 +55,13 @@ ideas stay here until promoted. Brainstormed 2026-07-17.
   `public, immutable` with no auth check (MEDIA_STANDARDS.md), so an image embedded in a
   password-locked (D51) or private (D50) document is still reachable by anyone who has its
   (unguessable) media id. Gating media by the documents that reference it is a separate project.
+- **Push `notifications/tools/list_changed` after schema changes (D64 follow-up).** The MCP
+  endpoint answers every POST with plain JSON, so after `create_collection`/`install_pack` the
+  client keeps its cached tool list and the result can only tell the agent to reconnect. The
+  streamable-HTTP spec lets a server answer a POST as `text/event-stream` and send notifications
+  before the response; doing that for schema-changing calls (and advertising
+  `tools.listChanged: true`) would surface the new tools in place. Verify Claude Code / Desktop /
+  claude.ai actually refetch on it first.
 - **Builder form drops `template` + `bind` on save** — `parseCollectionForm`
   (`src/components/admin/collection-builder.tsx`) rebuilds the whole definition from the
   posted fields and never reads `template`/`bind`, so `updateCollectionRow` overwrites

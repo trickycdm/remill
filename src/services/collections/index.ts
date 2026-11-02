@@ -12,7 +12,14 @@
 import { z } from 'zod';
 import type { Database } from '@/db/client';
 import type { CollectionDefinition, FieldDescriptor } from '@/fields/types';
-import { requireFieldType, isIndexable, isMultiValued } from '@/fields/registry';
+import {
+  requireFieldType,
+  isIndexable,
+  isMultiValued,
+  embeddedJsonSchema,
+  fieldDescriptorJsonSchema,
+} from '@/fields/registry';
+import type { JSONSchema } from '@/fields/types';
 import * as q from '@/db/queries/collections';
 import * as dq from '@/db/queries/documents';
 import type { Grant } from '@/access/grant';
@@ -32,7 +39,7 @@ import type { ErrorDetails } from '@/lib/errors';
 
 const SLUG_RE = /^[a-z][a-z0-9-]*$/;
 const KEY_RE = /^[a-z][a-z0-9_]*$/;
-const RENDER_MODES: ReadonlySet<unknown> = new Set(['shell', 'raw', 'frame', 'inline']);
+const RENDER_MODES: ReadonlySet<string> = new Set(['shell', 'raw', 'frame', 'inline']);
 
 // SEC-6: `access` and `workflow` are persisted verbatim, so they MUST be validated
 // before they reach the database. Both are CLOSED shapes. `access` carries ONLY the
@@ -62,6 +69,73 @@ const BIND_SCHEMA = z.strictObject({
   lead: z.string().optional(),
 });
 const BIND_SLOT_TYPES = { title: ['text'], hero: ['media'], lead: ['text'] } as const;
+
+/**
+ * The JSON Schema of a whole collection definition — the `definition` input of
+ * the MCP create/update_collection tools (D64), so an agent learns the field
+ * types and their `config` from the tool itself instead of by trial and error.
+ * Generated from the same Zod schemas and registries validateDefinition uses;
+ * cross-field rules (bind targets, renderMode needing an html field, …) stay in
+ * validateDefinition, which remains the authority.
+ */
+export function collectionDefinitionJsonSchema(): JSONSchema {
+  return {
+    type: 'object',
+    required: ['slug', 'name', 'shape', 'fields'],
+    additionalProperties: false,
+    properties: {
+      slug: {
+        type: 'string',
+        pattern: SLUG_RE.source,
+        description:
+          'Lowercase a-z0-9- (e.g. "reading-list"). Names the URL and the generated tools ' +
+          `(create_<slug>, list_<slug>, …). Reserved: ${[...RESERVED_COLLECTION_SLUGS, ...TOOL_RESERVED_COLLECTION_SLUGS].join(', ')}.`,
+      },
+      name: { type: 'string', minLength: 1, description: 'Display name, e.g. "Reading list".' },
+      shape: {
+        enum: ['collection', 'singleton'],
+        description: "'collection' holds many documents; 'singleton' exactly one (settings-like).",
+      },
+      fields: {
+        type: 'array',
+        minItems: 1,
+        description:
+          'The document fields. The first text field is the title unless bind.title says otherwise. ' +
+          `Reserved keys: ${RESERVED_FIELD_KEYS.join(', ')}.`,
+        items: fieldDescriptorJsonSchema(),
+      },
+      workflow: {
+        ...embeddedJsonSchema(WORKFLOW_SCHEMA),
+        description:
+          "draftPublish: documents start as drafts and need publishing. lifecycle 'none': record-like data, " +
+          'born published with no status. Not both.',
+      },
+      access: {
+        ...embeddedJsonSchema(ACCESS_SCHEMA),
+        description:
+          'publicRead: anyone can read published documents. private: hidden from discovery for principals ' +
+          'without read access. Not both. defaultVisibility needs publicRead. Omit for an ordinary internal collection.',
+      },
+      renderMode: {
+        enum: [...RENDER_MODES],
+        description:
+          "How a collection with an html field renders: 'inline' (full page in the viewer, with comments), " +
+          "'frame' (sandboxed), 'raw' (bare page), 'shell' (default, inside the branded page).",
+      },
+      template: { enum: [...TEMPLATE_KEYS], description: 'A designed public reading page (see list_templates).' },
+      bind: {
+        ...embeddedJsonSchema(BIND_SCHEMA),
+        description: 'Pin template slots to field keys: title/lead → a text field, hero → a media field.',
+      },
+      // Accepted so a definition read from list_collections round-trips into
+      // update_collection unchanged; updateCollection keeps the stored value.
+      protected: {
+        type: 'boolean',
+        description: 'Built-in collections that cannot be deleted. Leave as read; kept as stored on update.',
+      },
+    },
+  };
+}
 
 export const listCollections = q.listCollections;
 export const getCollection = q.getCollection;
@@ -271,7 +345,9 @@ export async function createCollection(
   now: string,
 ): Promise<CollectionDefinition> {
   const grant = await authorize(db, principal, 'manage_schema', { collection: input.slug }, now);
-  const def = validateDefinition(input);
+  // `protected` marks the built-in, seed-created collections; no caller may mint
+  // a new undeletable one (D64 — schema rights now reach OAuth agents).
+  const def = validateDefinition({ ...input, protected: false });
   // Reserved on CREATE only (an install that already has such a collection
   // must still be able to edit it): the slug would generate collection tools
   // that shadow a static MCP tool of the same name.

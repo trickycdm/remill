@@ -34,6 +34,7 @@ function valueSchema(cfg: TextConfig, field: FieldDescriptor) {
 
 export const textField: FieldType<TextConfig, string> = {
   key: 'text',
+  summary: 'Single-line plain text — titles, names, short strings. config: minLength, maxLength.',
   configSchema,
   valueSchema,
   toIndex: (v) => v ?? null,

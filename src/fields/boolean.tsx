@@ -20,6 +20,7 @@ function valueSchema(_cfg: BooleanConfig, field: FieldDescriptor) {
 
 export const booleanField: FieldType<BooleanConfig, boolean> = {
   key: 'boolean',
+  summary: 'A true/false flag.',
   configSchema,
   valueSchema,
   toIndex: (v) => (v === undefined ? null : v ? 1 : 0),

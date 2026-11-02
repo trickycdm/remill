@@ -43,6 +43,7 @@ function valueSchema(_cfg: SlugConfig, field: FieldDescriptor) {
 
 export const slugField: FieldType<SlugConfig, string> = {
   key: 'slug',
+  summary: 'URL slug, derived from the text field named by config.from when left blank. Indexed by default; add unique:true for one-per-collection.',
   configSchema,
   valueSchema,
   toIndex: (v) => v ?? null,

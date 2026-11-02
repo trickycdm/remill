@@ -20,6 +20,7 @@
 -- ---------------------------------------------------------------------------
 INSERT OR IGNORE INTO roles (slug, name, description, system, created_at) VALUES
   ('admin',     'Administrator', 'Full control over content, schema, and access.', 1, '2026-07-04T00:00:00Z'),
+  ('builder',   'Builder',       'Everything an editor can do, plus create and change collections. No access management.', 1, '2026-11-02T00:00:00Z'),
   ('editor',    'Editor',        'Create, edit, publish, and delete any content. No schema or access management.', 1, '2026-07-04T00:00:00Z'),
   ('author',    'Author',        'Create content and edit their own drafts. Cannot publish or delete.', 1, '2026-07-04T00:00:00Z'),
   ('reader',    'Reader',        'Read published content only.', 1, '2026-07-04T00:00:00Z'),
@@ -35,6 +36,14 @@ INSERT OR IGNORE INTO role_permissions (id, role, collection, action, condition)
   ('rlp_admin_access',  'admin', '*', 'manage_access',  NULL),
   ('rlp_admin_sharelink','admin', '*', 'share_link',     NULL),
   ('rlp_admin_comment', 'admin', '*', 'comment',        NULL),
+  ('rlp_builder_read', 'builder', '*', 'read', NULL),
+  ('rlp_builder_create', 'builder', '*', 'create', NULL),
+  ('rlp_builder_update', 'builder', '*', 'update', NULL),
+  ('rlp_builder_delete', 'builder', '*', 'delete', NULL),
+  ('rlp_builder_publish', 'builder', '*', 'publish', NULL),
+  ('rlp_builder_sharelink', 'builder', '*', 'share_link', NULL),
+  ('rlp_builder_comment', 'builder', '*', 'comment', NULL),
+  ('rlp_builder_schema', 'builder', '*', 'manage_schema', NULL),
   ('rlp_editor_read',   'editor', '*', 'read',    NULL),
   ('rlp_editor_create', 'editor', '*', 'create',  NULL),
   ('rlp_editor_update', 'editor', '*', 'update',  NULL),

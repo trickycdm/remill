@@ -51,6 +51,7 @@ function toPlainText(html: string): string {
 
 export const htmlField: FieldType<HtmlConfig, string> = {
   key: 'html',
+  summary: 'Trusted raw HTML, rendered verbatim — the page body for renderMode raw/frame/inline.',
   configSchema,
   valueSchema,
   // A searchable plain-text lead-in (value_text). Not the full document.

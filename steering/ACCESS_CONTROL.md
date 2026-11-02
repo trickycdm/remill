@@ -38,8 +38,13 @@
 ## The model: two additive layers, default deny, no negative rules
 
 1. **Roles** — data-defined (like collections), so least-privilege custom roles can be created at
-   runtime from admin UI or MCP. Seeded system roles: `admin`, `editor`, `author`, `reader`,
-   `anonymous`. A role holds permission rows `(collection | *, action, condition?)`.
+   runtime from admin UI or MCP. Seeded system roles: `admin`, `builder`, `editor`, `author`,
+   `reader`, `anonymous`. `builder` (D64) is `editor` + `manage_schema`, never `manage_access` —
+   the strongest role the OAuth consent screen offers (it never offers `admin`), so a URL-connected
+   agent can define its own collections. A new system role ships in THREE places the drift guard
+   checks: `SYSTEM_ROLES` (policy.ts), `seed.sql`, and a migration for existing installs (prod never
+   re-runs the seed) — plus `SystemRole` in `auth-constants.ts` and `NAV_BY_ROLE` for the session.
+   A role holds permission rows `(collection | *, action, condition?)`.
    - **Closed action vocabulary**: `read, create, update, delete, publish, share_link, comment,
      manage_schema, manage_access`. `share_link` (D26) is the narrow right to mint an anonymous,
      expiring share link for a document — read-only, or (D61) a review link when the minter also

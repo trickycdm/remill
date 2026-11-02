@@ -186,6 +186,10 @@ export interface FieldType<Config = unknown, Value = unknown> {
 
   /** (config) validates the per-field options in fields_json. */
   readonly configSchema: ZodType<Config>;
+  /** One line telling a schema author (often an agent) what this type is for
+   *  and which `config` keys matter — surfaced in the generated collection-
+   *  definition JSON Schema (D64). */
+  readonly summary: string;
 
   /** (2) validation — the single validator all surfaces run. Returns a schema
    *  whose output is `Value` (or `undefined` for an optional field), so the
