@@ -1,5 +1,5 @@
 /**
- * MCP parity tools (D29/D34): delete_<slug>, revisions_<slug>, restore_<slug>,
+ * MCP parity tools (D29/D34): delete_document, list_revisions, restore_revision,
  * upload_media. Drives the real /mcp endpoint via app.request with a fake R2
  * bucket, proving visibility intersects permissions and handlers ride the same
  * services as admin/REST.
@@ -87,32 +87,36 @@ describe('MCP parity — delete/revisions/restore/upload (D29/D34)', () => {
   it('tool visibility: editors get the parity tools, readers do not', async () => {
     const editorTools = (await mcp(editorToken, 'tools/list')).result!.tools!.map((t) => t.name);
     expect(editorTools).toEqual(
-      expect.arrayContaining(['delete_posts', 'revisions_posts', 'restore_posts', 'upload_media']),
+      expect.arrayContaining(['delete_document', 'list_revisions', 'restore_revision', 'upload_media']),
     );
     const readerTools = (await mcp(readerToken, 'tools/list')).result!.tools!.map((t) => t.name);
-    expect(readerTools).toContain('revisions_posts'); // read-gated
-    for (const hidden of ['delete_posts', 'restore_posts', 'upload_media']) {
+    expect(readerTools).toContain('list_revisions'); // read-gated
+    for (const hidden of ['delete_document', 'restore_revision', 'upload_media']) {
       expect(readerTools).not.toContain(hidden);
     }
   });
 
-  it('delete_<slug> moves to trash (recoverable), attributed to the agent', async () => {
-    const created = await call(editorToken, 'create_posts', { title: 'Agent-deleted' });
-    const del = await call(editorToken, 'delete_posts', { id: created.payload.id });
+  it('delete_document moves to trash (recoverable), attributed to the agent', async () => {
+    const created = await call(editorToken, 'create_document', { collection: 'posts', data: { title: 'Agent-deleted' } });
+    const del = await call(editorToken, 'delete_document', { collection: 'posts', id: created.payload.id });
     expect(del.isError).toBe(false);
     expect(del.payload).toMatchObject({ deleted: true, recoverableDays: 30 });
     const trash = await listTrash(db, admin, {}, NOW);
     expect(trash.rows.map((r) => r.documentId)).toEqual([created.payload.id]);
   });
 
-  it('revisions_<slug> + restore_<slug> round-trip over MCP', async () => {
-    const created = await call(editorToken, 'create_posts', { title: 'v1' });
-    await call(editorToken, 'update_posts', { id: created.payload.id, title: 'v2' });
+  it('list_revisions + restore_revision round-trip over MCP', async () => {
+    const created = await call(editorToken, 'create_document', { collection: 'posts', data: { title: 'v1' } });
+    await call(editorToken, 'update_document', {
+      collection: 'posts',
+      id: created.payload.id,
+      data: { title: 'v2' },
+    });
 
-    const revs = await call(editorToken, 'revisions_posts', { id: created.payload.id });
+    const revs = await call(editorToken, 'list_revisions', { collection: 'posts', id: created.payload.id });
     expect(revs.payload.map((r: { revision: number }) => r.revision)).toEqual([2, 1]);
 
-    const restored = await call(editorToken, 'restore_posts', { id: created.payload.id, revision: 1 });
+    const restored = await call(editorToken, 'restore_revision', { collection: 'posts', id: created.payload.id, revision: 1 });
     expect(restored.isError).toBe(false);
     expect(restored.payload.data.title).toBe('v1');
   });
@@ -144,29 +148,31 @@ describe('MCP parity — delete/revisions/restore/upload (D29/D34)', () => {
     expect(r2Puts).toHaveLength(0);
   });
 
-  it('schedule_<slug> (D32): publish-gated visibility; set + cancel round-trip; exactly-one-arg rule', async () => {
+  it('schedule_document (D32): publish-gated visibility; set + cancel round-trip; exactly-one-arg rule', async () => {
     const editorTools = (await mcp(editorToken, 'tools/list')).result!.tools!.map((t) => t.name);
-    expect(editorTools).toContain('schedule_posts');
+    expect(editorTools).toContain('schedule_document');
     const readerTools = (await mcp(readerToken, 'tools/list')).result!.tools!.map((t) => t.name);
-    expect(readerTools).not.toContain('schedule_posts');
+    expect(readerTools).not.toContain('schedule_document');
 
-    const created = await call(editorToken, 'create_posts', { title: 'Later' });
-    const scheduled = await call(editorToken, 'schedule_posts', {
+    const created = await call(editorToken, 'create_document', { collection: 'posts', data: { title: 'Later' } });
+    const scheduled = await call(editorToken, 'schedule_document', {
+      collection: 'posts',
       id: created.payload.id,
       publish_at: '2030-01-01T12:00:00Z',
     });
     expect(scheduled.isError).toBe(false);
     expect(scheduled.payload.publishAt).toBe('2030-01-01T12:00:00Z');
 
-    const cancelled = await call(editorToken, 'schedule_posts', { id: created.payload.id, cancel: true });
+    const cancelled = await call(editorToken, 'schedule_document', { collection: 'posts', id: created.payload.id, cancel: true });
     expect(cancelled.isError).toBe(false);
     expect(cancelled.payload.publishAt).toBeNull();
 
     // Exactly one of publish_at / cancel — both and neither are validation errors.
-    const neither = await call(editorToken, 'schedule_posts', { id: created.payload.id });
+    const neither = await call(editorToken, 'schedule_document', { collection: 'posts', id: created.payload.id });
     expect(neither.isError).toBe(true);
     expect(neither.payload.code).toBe('VALIDATION');
-    const both = await call(editorToken, 'schedule_posts', {
+    const both = await call(editorToken, 'schedule_document', {
+      collection: 'posts',
       id: created.payload.id,
       publish_at: '2030-01-01T12:00:00Z',
       cancel: true,
@@ -179,7 +185,7 @@ describe('MCP parity — delete/revisions/restore/upload (D29/D34)', () => {
     for (const token of [editorToken, readerToken]) {
       expect((await mcp(token, 'tools/list')).result!.tools!.map((t) => t.name)).toContain('poll_events');
     }
-    const created = await call(editorToken, 'create_posts', { title: 'Watched' });
+    const created = await call(editorToken, 'create_document', { collection: 'posts', data: { title: 'Watched' } });
     const poll = await call(editorToken, 'poll_events', { since: 0 });
     expect(poll.isError).toBe(false);
     const match = poll.payload.data.find(

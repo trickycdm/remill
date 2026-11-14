@@ -184,7 +184,7 @@ describe('mintApiShareLink (D61) — read-only and review links for API callers'
             jsonrpc: '2.0',
             id: 1,
             method: 'tools/call',
-            params: { name: 'share_link_pages', arguments: { id: pageId, ...args } },
+            params: { name: 'create_share_link', arguments: { collection: 'pages', id: pageId, ...args } },
           }),
         },
         env(),
