@@ -87,7 +87,8 @@ describe('MCP document tools — a fixed set taking `collection` (D65)', () => {
         }
       }
     }
-  });
+    // ~1,400 in-memory requests: about a second alone, several under a loaded machine.
+  }, 30_000);
 
   it('the tool list is the same 33 names however many collections exist', async () => {
     const admin = fx.tokens.admin;
@@ -298,6 +299,44 @@ describe('MCP document tools — a fixed set taking `collection` (D65)', () => {
     // A reader is not offered create_collection: still the plain refusal.
     const hidden = await fx.call(fx.tokens.reader, 'create_collection', { definition: {} });
     expect(hidden.payload.code).toBe('FORBIDDEN');
+  });
+
+  it('the collection-definition schema is carried once, and an update round-trips through describe', async () => {
+    const builder = fx.tokens.builder;
+    const tools = (await fx.mcp(builder, 'tools/list')).body.result.tools ?? [];
+    const size = (name: string) => JSON.stringify(tools.find((t) => t.name === name)).length;
+    // create_collection documents every field type; update_collection points at it (D66).
+    expect(size('create_collection')).toBeGreaterThan(8_000);
+    expect(size('update_collection')).toBeLessThan(1_500);
+    // A budget for the whole list, so the next large schema is a decision, not a drift.
+    expect(JSON.stringify(tools).length).toBeLessThan(34_000);
+
+    // Read → change → send back, with no schema in hand: validateDefinition decides.
+    const current = (await fx.call(builder, 'describe_collection', { collection: 'notes' })).payload;
+    const { slug, name, shape, fields, workflow } = current;
+    expect(name).toBe('Notes');
+    const updated = await fx.call(builder, 'update_collection', {
+      slug: 'notes',
+      definition: {
+        slug,
+        name: 'Field notes',
+        shape,
+        workflow,
+        fields: [...(fields as object[]), { key: 'source', type: 'text' }],
+      },
+    });
+    expect(updated.isError).toBe(false);
+    const after = (await fx.call(builder, 'describe_collection', { collection: 'notes' })).payload;
+    expect(after.name).toBe('Field notes');
+    expect((after.fields as { key: string }[]).map((f) => f.key)).toEqual(['title', 'body', 'source']);
+    expect(after.lifecycle).toBe(false); // workflow survived the replace
+
+    // A malformed definition is still refused by the service, with the reason.
+    const bad = await fx.call(builder, 'update_collection', {
+      slug: 'notes',
+      definition: { slug: 'notes', name: 'x', shape: 'collection', fields: [{ key: 'Bad Key', type: 'text' }] },
+    });
+    expect(bad.payload.code).toBe('VALIDATION');
   });
 
   it('initialize tells a client how the surface works', async () => {

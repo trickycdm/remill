@@ -14,3 +14,4 @@
 | 2026-11-14 07:42 | blocker hit | preview deploy failed: account at D1 database cap. Cause: PRs #53–#57 (closed unmerged 2026-10-04) had previews deployed and no cleanup run ever fired |
 | 2026-11-14 07:50 | blocker cleared | Col approved; ran preview-cleanup.yml for 53–57 (each deleted its Worker + D1); re-ran #61 preview → deployed, all checks green |
 | 2026-11-14 07:55 | verified (partial) | preview serves the new bundle: homepage shows create_document copy, /mcp answers the 401 OAuth challenge. Authenticated tool flow NOT testable on a preview — its D1 has no admin user by design; covered locally (workerd walkthrough) and to be confirmed on production after release |
+| 2026-11-14 08:20 | follow-up (Col: do items 1–4) | D66: definition schema on create_collection only; update_collection untyped + describe→change→send loop; admin tools/list 45 KB → 32 KB; 34 KB budget test; gating test timeout 30s (timed out at 5s on a loaded machine) |

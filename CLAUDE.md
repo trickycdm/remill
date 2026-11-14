@@ -134,7 +134,9 @@ rendered public pages + share links.)
 > tool is listed when it applies to at least one collection for the caller, and a call is let
 > through only for a collection it applies to; a missing or hidden collection gets one uniform
 > `FORBIDDEN` plus `available`. A new collection is usable in the same session; a retired name
-> answers `TOOL_RENAMED`; `initialize` returns `instructions`.
+> answers `TOOL_RENAMED`; `initialize` returns `instructions`. **D66**: the 13 KB collection-definition
+> schema rides on `create_collection` only (`update_collection` points at it), and a test budgets
+> the whole tool list at 34 KB.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.

@@ -62,12 +62,10 @@ ideas stay here until promoted. Brainstormed 2026-07-17.
   silently strips its reading template. Fix: carry template/bind through the form (hidden
   inputs or a picker) or merge onto the stored def instead of replacing. Surfaced during
   D46; the private-collection work touched the same wholesale-rebuild pattern.
-- **MCP: the collection-definition schema is most of what is left of `tools/list` for schema
-  managers (D65 follow-up).** After D65 an admin's tool list is ~45 KB, of which ~26 KB is D64's
-  generated `definition` JSON Schema — carried in full by BOTH `create_collection` and
-  `update_collection` (measured on the gating fixture; everyone without `manage_schema` is at
-  ~16 KB or less). Options: give `update_collection` an opaque `definition` that points at
-  `create_collection`'s schema (halves it, one line); or move the schema out of `tools/list`
-  into a discovery call (a `describe_collection`-style "how to define a collection" result),
-  keeping `validateDefinition` as the authority. The second undoes part of D64's "never an
-  opaque object" rule, so it needs its own decision.
+- **MCP: `create_collection` still carries the 13 KB collection-definition schema (D66
+  follow-up).** D66 took it off `update_collection`; a schema manager's `tools/list` is now
+  ~32 KB, of which that schema is ~14 KB (everyone without `manage_schema` is at ~16 KB or
+  less). Moving it behind a discovery call would get the list to ~19 KB, but an agent creating
+  its first collection would have to know to ask for it — the problem D64 solved. Worth doing
+  only with evidence that agents find such a call unprompted (the `initialize` instructions
+  could name it). Needs its own decision.

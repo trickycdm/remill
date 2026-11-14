@@ -383,15 +383,23 @@ export async function buildToolsForPrincipal(
     tools.push({
       name: 'update_collection',
       description:
-        'Modify an existing content type. The definition REPLACES the stored one (send every field you ' +
-        'want to keep — read it first with describe_collection) and follows the create_collection schema. ' +
+        'Modify an existing content type. The definition REPLACES the stored one, so send every field you ' +
+        'want to keep: read the current one with describe_collection, change it, send it back. It follows ' +
+        "the schema of create_collection's `definition` argument, which is documented there. " +
         'Turning publicRead ON over existing documents requires `onEnablePublic` (D57): ' +
         "'private' switches them all to private first (recommended), 'keep' publishes them as they are.",
       inputSchema: {
         type: 'object',
         properties: {
           slug: { type: 'string' },
-          definition: definitionSchema,
+          // The full definition schema is ~13 KB; it rides on create_collection
+          // only, not twice in every schema manager's tool list (D66). The
+          // service's validateDefinition is the authority either way.
+          definition: {
+            type: 'object',
+            description:
+              "The whole new definition — same schema as create_collection's `definition`.",
+          },
           onEnablePublic: { type: 'string', enum: [...collectionsService.ON_ENABLE_PUBLIC] },
         },
         required: ['slug', 'definition'],

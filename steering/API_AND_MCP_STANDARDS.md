@@ -267,11 +267,17 @@ tokens** as REST.
     agent refused `FORBIDDEN`. Denials name what would admit the call (e.g. thread reads say
     "requires 'comment' or 'update'").
   - Schema management: `create_collection`, `update_collection`
-    (require `manage_schema` — held by `admin` and `builder`, D64). The `definition` input is a
-    GENERATED JSON Schema (`collectionDefinitionJsonSchema()` in the collections service, field
-    branches from `fieldDescriptorJsonSchema()` in the registry — each field type's `configSchema`
-    + its one-line `summary`), never a hand-written or opaque `object`; `validateDefinition` stays
-    the authority for cross-field rules. `create_collection` and `install_pack` results carry a
+    (require `manage_schema` — held by `admin` and `builder`, D64). `create_collection`'s
+    `definition` input is a GENERATED JSON Schema (`collectionDefinitionJsonSchema()` in the
+    collections service, field branches from `fieldDescriptorJsonSchema()` in the registry — each
+    field type's `configSchema` + its one-line `summary`), never hand-written; `validateDefinition`
+    stays the authority for cross-field rules. That schema is ~13 KB, so it is carried ONCE (D66):
+    `update_collection` takes an untyped `definition` whose description points at it, and the
+    loop is read with `describe_collection` → change → send back.
+  - **Tool-list weight is budgeted.** `collection-tools.test.ts` fails if a schema manager's
+    `tools/list` passes 34 KB. Every client pays for the whole list in every conversation — put
+    large or per-collection schemas behind a discovery call (`describe_collection`), not in a
+    tool's `inputSchema`. Raising the budget is a decision-log entry. `create_collection` and `install_pack` results carry a
     `note` saying the collection is usable at once (D65 — no new tool appears, so there is
     nothing to re-list; this replaced D64's `newTools` + reconnect note).
   - Packs/templates (D42): `list_templates` + `list_packs` (ungated discovery — registry metadata
