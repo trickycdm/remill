@@ -15,3 +15,6 @@
 | 2026-11-14 07:50 | blocker cleared | Col approved; ran preview-cleanup.yml for 53–57 (each deleted its Worker + D1); re-ran #61 preview → deployed, all checks green |
 | 2026-11-14 07:55 | verified (partial) | preview serves the new bundle: homepage shows create_document copy, /mcp answers the 401 OAuth challenge. Authenticated tool flow NOT testable on a preview — its D1 has no admin user by design; covered locally (workerd walkthrough) and to be confirmed on production after release |
 | 2026-11-14 08:20 | follow-up (Col: do items 1–4) | D66: definition schema on create_collection only; update_collection untyped + describe→change→send loop; admin tools/list 45 KB → 32 KB; 34 KB budget test; gating test timeout 30s (timed out at 5s on a loaded machine) |
+| 2026-11-14 08:45 | shipped | PR #61 squash-merged (067f07c); tag v1.20.0 deployed to production (no migrations) ✅ |
+| 2026-11-14 08:50 | verified live | remill.me /mcp as the claude-code agent (editor, 13 collections): 27 tools / 17.1 KB, no per-collection names, instructions present, describe_collection + list_documents work, `list_clippings` answers TOOL_RENAMED |
+| 2026-11-14 08:55 | follow-ups done | hopper skill → v0.3.0 (tricky-skills PR #3, merged, plugin updated); 53 Claude Code settings files searched — no rule names an old remill tool, nothing to change |
