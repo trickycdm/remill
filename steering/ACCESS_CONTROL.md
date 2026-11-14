@@ -65,7 +65,7 @@
    Friday." Surfaced (Share) on all three doors: the document edit view's **Share panel** (its People &
    roles section needs install-wide `manage_access`; its Share links section needs `share_link` on
    the document, probed with the non-auditing `canAuthorize`), the REST `/api/c/:collection/:id/grants` endpoint
-   (GET/POST/DELETE), and the generated MCP `share_<slug>` tool (visible only with `manage_access`).
+   (GET/POST/DELETE), and the MCP `share_document` tool (listed only with `manage_access`).
    All route through `grantItem`/`revokeItem`/`listItemGrants`, each
    `authorize('manage_access', {collection, documentId})`-gated. Link grants have their own
    `createShareLink`/`listShareLinks`/`revokeShareLink`/`emailShareLink`, gated on `share_link`.
@@ -130,10 +130,13 @@ action, no condition-enum change; flag-without-session redirects to login before
 sibling `access.private` (D46) governs **discovery visibility**, not content: a private collection
 is omitted from every discovery surface (REST/MCP collection list+get, `/api/openapi.json` paths,
 pack installed-status) for principals who hold neither `manage_schema` nor a **role/token-scope
-`read`** on it. Item grants deliberately do NOT confer discovery — an item-grant-only principal
+`read`** on it. (One narrow exception, as before D65: a principal with a role/scope write action
+there but no `read` — a create-only token — is not shown it in `list_collections`, but the MCP
+document tools and `describe_collection` do answer for it, since the tool applies.) Item grants deliberately do NOT confer discovery — an item-grant-only principal
 reaches its document via `/s/:token` or "Shared with me", never by enumerating the collection
-(matching MCP tool visibility, which also ignores item grants). `publicRead` and `private` are the
-**two** collection-level access fields and are **mutually exclusive** (rejected together on write);
+(matching the MCP document tools, whose listing and per-call collection check also ignore item
+grants). `publicRead` and `private` are the **two** collection-level access fields and are
+**mutually exclusive** (rejected together on write);
 neither changes document authorization, which was already deny-by-default. Collection-scoped
 permissions are still expressed only with `role_permissions` + collection-scoped `principal_roles`,
 the single mechanism the authorizer consumes. An inline `access: { <role>: [actions] }` map is
@@ -246,8 +249,14 @@ code. The audit log is itself readable only with `manage_access`.
   client compatibility and **never** an authority (roles never come from client input).
 - Permission resolution happens **once per request**, is carried on the request context, and is
   never read from client input (no role-in-cookie-payload, no role-in-body).
-- MCP tool listing is intersected with the connecting principal's effective permissions — an agent
-  without `publish` never sees `publish_<slug>`. Capability discovery IS permission discovery.
+- MCP tool listing is intersected with the connecting principal's effective permissions. The
+  document tools are a fixed set that take a `collection` (D65): a tool is LISTED when it applies
+  to at least one collection for the caller, and a CALL is let through only when it applies to the
+  named collection — one condition decides both. An agent that cannot `publish` anywhere never sees
+  `publish_document`, and one that can publish only in `posts` is refused it on any other
+  collection. A missing collection and a private one the caller cannot know about get the same
+  `FORBIDDEN` "Unknown or unavailable collection" answer, with `available` listing the slugs the
+  tool applies to (D46). Capability discovery IS permission discovery.
 - "Agent proposes, human approves" is expressed with the permission model (grant `create` + `update`
   with condition `own`, withhold `publish`) — never build a parallel workflow engine.
 - **Identity-scoped self-service edits skip `authorize()`/`Grant`** — the identity IS the

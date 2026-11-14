@@ -93,8 +93,9 @@ Routes / DOs  →  Services (src/services/)  →  Queries (src/db/queries/)  →
   ("slopsquatting"). Run `bun audit` before adding a dependency.
 - **No architecture by autocomplete.** Don't generate micro-abstractions, wrapper layers, or helper
   files without a concrete immediate need. Every new file justifies its existence. (The deleted MCP
-  tool-framework in the reference repo is the cautionary tale — tools are generated directly from
-  collection definitions, not routed through an indirection.)
+  tool-framework in the reference repo is the cautionary tale — the MCP tools are plain descriptors
+  built directly against the services and collection definitions, not routed through an
+  indirection.)
 
 ## Specific load-bearing rules
 

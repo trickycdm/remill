@@ -1,7 +1,7 @@
 /**
  * MCP JSON-RPC dispatch (steering/API_AND_MCP_STANDARDS.md). Handles the MCP
  * methods over streamable HTTP: initialize, tools/list, tools/call, resources/*.
- * The permission-filtered tool set comes from src/mcp/tools.ts; every tool call
+ * The permission-filtered, fixed tool set (D65) comes from src/mcp/tools.ts; every tool call
  * runs through the same services as admin/REST (one pipeline, three doors).
  *
  * TRANSPORT NOTE (deviation from D10, done per §8): the plan specified an McpAgent
@@ -17,13 +17,29 @@
 
 import type { Database } from '@/db/client';
 import type { Principal } from '@/access';
-import { buildToolsForPrincipal, isMcpTextResult, type McpToolContext } from '@/mcp/tools';
+import {
+  buildToolsForPrincipal,
+  isMcpTextResult,
+  retiredToolRedirect,
+  McpToolError,
+  type McpToolContext,
+} from '@/mcp/tools';
 import { getPromptForPrincipal, listPromptsForPrincipal } from '@/mcp/prompts';
 import { listCollections } from '@/services/collections';
 import { getDocument, listDocuments } from '@/services/documents';
 import { AppError, ForbiddenError, NotFoundError } from '@/lib/errors';
 
 const PROTOCOL_VERSION = '2024-11-05';
+
+/** Sent once, on `initialize` — the orientation the per-collection tool names
+ *  used to give by existing (D65). Static, so a cached copy is never wrong. */
+const INSTRUCTIONS =
+  'remill stores documents in collections (content types). Call list_collections first: it lists each ' +
+  "collection's slug, fields and the actions you may take there. Every document tool (list_documents, " +
+  'get_document, create_document, update_document, …) takes that slug as `collection`. Before writing ' +
+  "to a collection, call describe_collection for the JSON Schema of its fields. A collection you create " +
+  'with create_collection or install_pack is usable at once. To publish a standalone HTML page, use ' +
+  'publish_page.';
 
 interface JsonRpcRequest {
   jsonrpc: '2.0';
@@ -55,6 +71,7 @@ export async function handleMcp(
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {}, resources: {}, prompts: {} },
         serverInfo: { name: 'remill', version: '1.0.0' },
+        instructions: INSTRUCTIONS,
       });
 
     case 'notifications/initialized':
@@ -74,12 +91,15 @@ export async function handleMcp(
       const tools = await buildToolsForPrincipal(db, principal, now, baseUrl, ctx);
       const tool = tools.find((t) => t.name === name);
       // A tool the principal can't see is, in effect, forbidden — don't leak its
-      // existence differently from a permission denial.
+      // existence differently from a permission denial. A pre-D65 per-collection
+      // name (`create_articles`) is answered with what replaced it; that answer
+      // is derived from the name alone, so it leaks nothing either.
       if (!tool) {
-        return result(id, {
-          isError: true,
-          content: [{ type: 'text', text: JSON.stringify({ error: `Unknown or unavailable tool '${name}'`, code: 'FORBIDDEN' }) }],
-        });
+        const retired = retiredToolRedirect(name);
+        const payload = retired
+          ? { error: retired.message, code: 'TOOL_RENAMED', replacedBy: retired.replacedBy }
+          : { error: `Unknown or unavailable tool '${name}'`, code: 'FORBIDDEN' };
+        return result(id, { isError: true, content: [{ type: 'text', text: JSON.stringify(payload) }] });
       }
       try {
         const value = await tool.handler(args);
@@ -93,14 +113,17 @@ export async function handleMcp(
             },
           ],
         });
-      } catch (err) {
+      } catch (thrown) {
         // Return errors as tool results (isError) so the agent can reason about
-        // them — including the structured 403 with `missing`.
+        // them — including the structured 403 with `missing`. A tool may add its
+        // own keys beside the service error's (`available`, `hint` — D65).
+        const err = thrown instanceof McpToolError ? thrown.inner : thrown;
+        const extra = thrown instanceof McpToolError ? thrown.extra : {};
         const payload =
           err instanceof ForbiddenError
-            ? { error: err.friendlyMessage, code: err.code, missing: err.missing }
+            ? { error: err.friendlyMessage, code: err.code, missing: err.missing, ...extra }
             : err instanceof AppError
-              ? { error: err.friendlyMessage, code: err.code, details: err.details }
+              ? { error: err.friendlyMessage, code: err.code, details: err.details, ...extra }
               : { error: 'Internal error', code: 'INTERNAL_ERROR' };
         return result(id, { isError: true, content: [{ type: 'text', text: JSON.stringify(payload) }] });
       }

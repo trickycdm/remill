@@ -5,7 +5,7 @@
  * same call, and reports what the page will refuse to load. It adds
  * NO rule of its own — authorization, validation, revisions and the size
  * limit are `createDocument` / `updateDocument` / `mintApiShareLink`, exactly
- * as `create_pages` and `share_link_pages` would apply them.
+ * as `create_document` and `create_share_link` on `pages` would apply them.
  *
  * ONE implementation behind the MCP `publish_page` tool and REST `/api/pages`.
  */

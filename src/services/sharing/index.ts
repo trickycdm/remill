@@ -92,7 +92,7 @@ const text = (v: unknown): string | undefined => (typeof v === 'string' && v ? v
 
 /**
  * Mint a share link for an API caller — the ONE implementation behind REST
- * `POST …/share-links` and MCP `share_link_<slug>`, so the two cannot drift
+ * `POST …/share-links` and MCP `create_share_link`, so the two cannot drift
  * (API_AND_MCP_STANDARDS: parity). Read-only by default; `review: {mode,
  * reviewer?}` makes it a review link (D61) — the holder may also comment.
  * Either way the expiry is required and clamped to 30 days.

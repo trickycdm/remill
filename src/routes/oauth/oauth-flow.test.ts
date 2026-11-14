@@ -211,7 +211,7 @@ describe('OAuth 2.1 flow — integration through the Hono app', () => {
     expect(mcp.status).toBe(200);
     const rpc = (await mcp.json()) as { result: { tools: { name: string }[] } };
     const names = rpc.result.tools.map((t) => t.name);
-    expect(names).toContain('create_posts'); // editor can write
+    expect(names).toContain('create_document'); // editor can write
     expect(names).not.toContain('install_pack'); // no manage_schema
   });
 
@@ -231,7 +231,7 @@ describe('OAuth 2.1 flow — integration through the Hono app', () => {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
     });
     const names = ((await mcp.json()) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(['create_collection', 'update_collection', 'install_pack', 'create_posts']));
+    expect(names).toEqual(expect.arrayContaining(['create_collection', 'update_collection', 'install_pack', 'create_document']));
     expect(names).not.toContain('list_teams'); // manage_access stays admin-only
   });
 

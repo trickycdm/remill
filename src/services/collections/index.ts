@@ -31,7 +31,6 @@ import { InputValidationError, NotFoundError, ConflictError, ForbiddenError } fr
 import {
   RESERVED_FIELD_KEYS,
   RESERVED_COLLECTION_SLUGS,
-  TOOL_RESERVED_COLLECTION_SLUGS,
 } from '@/config/constants';
 import { TEMPLATE_KEYS, isTemplateKey } from '@/templates/keys';
 import { PACKS, resolvePack, type PackKey } from '@/templates/packs';
@@ -88,8 +87,8 @@ export function collectionDefinitionJsonSchema(): JSONSchema {
         type: 'string',
         pattern: SLUG_RE.source,
         description:
-          'Lowercase a-z0-9- (e.g. "reading-list"). Names the URL and the generated tools ' +
-          `(create_<slug>, list_<slug>, …). Reserved: ${[...RESERVED_COLLECTION_SLUGS, ...TOOL_RESERVED_COLLECTION_SLUGS].join(', ')}.`,
+          'Lowercase a-z0-9- (e.g. "reading-list"). Names the URL, and is the `collection` you pass to ' +
+          `the document tools. Reserved: ${RESERVED_COLLECTION_SLUGS.join(', ')}.`,
       },
       name: { type: 'string', minLength: 1, description: 'Display name, e.g. "Reading list".' },
       shape: {
@@ -348,12 +347,6 @@ export async function createCollection(
   // `protected` marks the built-in, seed-created collections; no caller may mint
   // a new undeletable one (D64 — schema rights now reach OAuth agents).
   const def = validateDefinition({ ...input, protected: false });
-  // Reserved on CREATE only (an install that already has such a collection
-  // must still be able to edit it): the slug would generate collection tools
-  // that shadow a static MCP tool of the same name.
-  if ((TOOL_RESERVED_COLLECTION_SLUGS as readonly string[]).includes(def.slug)) {
-    throw new InputValidationError([{ path: 'slug', message: `'${def.slug}' is reserved.` }]);
-  }
   if (await q.getCollection(db, def.slug)) {
     throw new ConflictError(`A collection '${def.slug}' already exists.`);
   }
@@ -659,7 +652,7 @@ export interface PublicCollectionView {
   readonly fields: PublicFieldView[];
 }
 
-function toPublicView(def: CollectionDefinition): PublicCollectionView {
+export function toPublicView(def: CollectionDefinition): PublicCollectionView {
   return {
     slug: def.slug,
     name: def.name,
@@ -689,6 +682,21 @@ function canDiscover(def: CollectionDefinition, readable: '*' | string[]): boole
   return def.access?.private !== true || readable === '*' || readable.includes(def.slug);
 }
 
+/** The pure half of discovery (TD-3: resolve once, derive many) — for callers
+ *  that already hold the definitions and the principal's permissions (the MCP
+ *  tool builder). `defs` are the definitions the principal may discover, WHOLE;
+ *  `internals` says whether they may also be SHOWN whole (schema managers) or
+ *  must go through `toPublicView` first. */
+export function discoverableFrom(
+  defs: readonly CollectionDefinition[],
+  perms: readonly EffectivePermission[],
+  principal: Principal,
+): { defs: CollectionDefinition[]; internals: boolean } {
+  if (canSeeInternals(perms)) return { defs: [...defs], internals: true };
+  const readable = collectionsWithActionFrom(perms, principal, 'read');
+  return { defs: defs.filter((d) => canDiscover(d, readable)), internals: false };
+}
+
 /** List collections for discovery: full definitions for schema managers, the
  *  public-safe projection for everyone else (including anonymous) — with
  *  `private` collections omitted for principals who can't read them (D46).
@@ -697,11 +705,9 @@ export async function listCollectionsForDiscovery(
   db: Database,
   principal: Principal,
 ): Promise<CollectionDefinition[] | PublicCollectionView[]> {
-  const defs = await q.listCollections(db);
   const perms = await getPrincipalPermissions(db, principal.id);
-  if (canSeeInternals(perms)) return defs;
-  const readable = collectionsWithActionFrom(perms, principal, 'read');
-  return defs.filter((d) => canDiscover(d, readable)).map(toPublicView);
+  const { defs, internals } = discoverableFrom(await q.listCollections(db), perms, principal);
+  return internals ? defs : defs.map(toPublicView);
 }
 
 /** Get one collection for discovery, projected per the caller's capability. A
@@ -727,9 +733,6 @@ export async function listDiscoverableCollections(
   db: Database,
   principal: Principal,
 ): Promise<CollectionDefinition[]> {
-  const defs = await q.listCollections(db);
   const perms = await getPrincipalPermissions(db, principal.id);
-  if (canSeeInternals(perms)) return defs;
-  const readable = collectionsWithActionFrom(perms, principal, 'read');
-  return defs.filter((d) => canDiscover(d, readable));
+  return discoverableFrom(await q.listCollections(db), perms, principal).defs;
 }

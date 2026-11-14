@@ -55,13 +55,6 @@ ideas stay here until promoted. Brainstormed 2026-07-17.
   `public, immutable` with no auth check (MEDIA_STANDARDS.md), so an image embedded in a
   password-locked (D51) or private (D50) document is still reachable by anyone who has its
   (unguessable) media id. Gating media by the documents that reference it is a separate project.
-- **Push `notifications/tools/list_changed` after schema changes (D64 follow-up).** The MCP
-  endpoint answers every POST with plain JSON, so after `create_collection`/`install_pack` the
-  client keeps its cached tool list and the result can only tell the agent to reconnect. The
-  streamable-HTTP spec lets a server answer a POST as `text/event-stream` and send notifications
-  before the response; doing that for schema-changing calls (and advertising
-  `tools.listChanged: true`) would surface the new tools in place. Verify Claude Code / Desktop /
-  claude.ai actually refetch on it first.
 - **Builder form drops `template` + `bind` on save** — `parseCollectionForm`
   (`src/components/admin/collection-builder.tsx`) rebuilds the whole definition from the
   posted fields and never reads `template`/`bind`, so `updateCollectionRow` overwrites
@@ -69,3 +62,10 @@ ideas stay here until promoted. Brainstormed 2026-07-17.
   silently strips its reading template. Fix: carry template/bind through the form (hidden
   inputs or a picker) or merge onto the stored def instead of replacing. Surfaced during
   D46; the private-collection work touched the same wholesale-rebuild pattern.
+- **MCP: `create_collection` still carries the 13 KB collection-definition schema (D66
+  follow-up).** D66 took it off `update_collection`; a schema manager's `tools/list` is now
+  ~32 KB, of which that schema is ~14 KB (everyone without `manage_schema` is at ~16 KB or
+  less). Moving it behind a discovery call would get the list to ~19 KB, but an agent creating
+  its first collection would have to know to ask for it — the problem D64 solved. Worth doing
+  only with evidence that agents find such a call unprompted (the `initialize` instructions
+  could name it). Needs its own decision.

@@ -528,7 +528,7 @@ export async function assertResolvable(
 }
 
 /** Resolve several threads at once after a save that addressed them (the
- *  agent's `update_<slug>` with `resolves`). All ids are validated before any
+ *  agent's `update_document` with `resolves`). All ids are validated before any
  *  is resolved. */
 export async function resolveThreads(
   db: Database,

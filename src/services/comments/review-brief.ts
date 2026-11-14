@@ -5,7 +5,7 @@
  *
  * It does NOT reproduce the document. Each thread carries its quote in context
  * (`…before {==quote==} after…`), which is what an agent needs to find the
- * passage in the source it fetches with `get_<slug>`. Budget priorities put
+ * passage in the source it fetches with `get_document`. Budget priorities put
  * open must-fix threads first and resolved threads last, so a tight budget
  * drops history before it drops live feedback.
  */

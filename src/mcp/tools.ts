@@ -1,9 +1,14 @@
 /**
- * MCP tool generation — surface (6) of the schema engine
- * (steering/API_AND_MCP_STANDARDS.md). Tools are GENERATED per collection from the
- * same field descriptors as every other surface, and the set is INTERSECTED with
- * the connecting principal's effective permissions: an agent without `publish`
- * never sees `publish_<slug>`. Capability discovery IS permission discovery.
+ * The MCP tool surface — surface (6) of the schema engine
+ * (steering/API_AND_MCP_STANDARDS.md). The tool list is FIXED (D65): one set of
+ * document tools that each take a `collection`, the way REST has one set of
+ * routes under `/api/c/:collection`. What a collection definition generates is
+ * everything behind them — validation, the `data` JSON Schema that
+ * `describe_collection` returns, the filters, the renders — and which tools
+ * apply to it. The set is INTERSECTED with the connecting principal's effective
+ * permissions: an agent that cannot `publish` anywhere never sees
+ * `publish_document`, and one that can publish only in `posts` is refused it on
+ * any other collection. Capability discovery IS permission discovery.
  *
  * This module is SDK-agnostic and unit-testable: it returns plain tool descriptors
  * with async handlers that call the same services as admin/REST — one pipeline,
@@ -12,7 +17,7 @@
  */
 
 import type { Database } from '@/db/client';
-import { scopeMatches, type Principal, type Action } from '@/access';
+import { ACTIONS, scopeMatches, type Principal, type Action } from '@/access';
 // COR-6: the MCP surface must go through SERVICES, never the queries layer directly.
 import {
   getPrincipalPermissions,
@@ -21,15 +26,11 @@ import {
   listAuditPage,
   describeSelf,
 } from '@/services/access';
-import { InputValidationError } from '@/lib/errors';
+import { BadRequestError, ForbiddenError, InputValidationError, type AppError } from '@/lib/errors';
 import { mintApiShareLink } from '@/services/sharing';
 import { publishPage, isPageMode } from '@/services/pages';
 import { PAGES_COLLECTION } from '@/config/constants';
-import {
-  listCollections,
-  getCollection,
-  listCollectionsForDiscovery,
-} from '@/services/collections';
+import { listCollections, getCollection } from '@/services/collections';
 import { listTemplates } from '@/templates/registry';
 import { rendersFor } from '@/templates/renders';
 import * as docs from '@/services/documents';
@@ -85,7 +86,7 @@ export interface McpToolContext {
   readonly media?: R2Bucket;
   readonly consumeUploadLimit?: () => Promise<unknown>;
   /** SESSION_SECRET — keys the AES-GCM encryption of minted share-link tokens
-   *  (D53), so `share_link_<slug>` can store a re-copyable `token_enc` like
+   *  (D53), so `create_share_link` can store a re-copyable `token_enc` like
    *  the admin Share panel does. */
   readonly secret?: string;
 }
@@ -147,6 +148,135 @@ function filtersFromArgs(raw: unknown): Record<string, Partial<Record<docs.Filte
   return filters;
 }
 
+/** The document tools (D65), keyed by the per-collection verb each replaced:
+ *  before D65 a collection `posts` generated `list_posts`, `create_posts`, …
+ *  One map is both the closed list of document tool names and the source of the
+ *  retired-name redirect below. */
+const DOCUMENT_TOOL_BY_RETIRED_VERB = {
+  list: 'list_documents',
+  search: 'search_documents',
+  get: 'get_document',
+  backlinks: 'get_backlinks',
+  revisions: 'list_revisions',
+  create: 'create_document',
+  update: 'update_document',
+  restore: 'restore_revision',
+  delete: 'delete_document',
+  publish: 'publish_document',
+  schedule: 'schedule_document',
+  visibility: 'set_visibility',
+  share: 'share_document',
+  share_link: 'create_share_link',
+  comments: 'list_comments',
+  comment: 'add_comment',
+  reply_comment: 'reply_comment',
+  resolve_comment: 'resolve_comment',
+} as const;
+
+type RetiredVerb = keyof typeof DOCUMENT_TOOL_BY_RETIRED_VERB;
+export type DocumentToolName = (typeof DOCUMENT_TOOL_BY_RETIRED_VERB)[RetiredVerb];
+
+export const DOCUMENT_TOOL_NAMES: readonly DocumentToolName[] = Object.values(
+  DOCUMENT_TOOL_BY_RETIRED_VERB,
+);
+
+/** Every tool that is NOT a document tool. With `DOCUMENT_TOOL_NAMES` this is
+ *  the whole surface — a test holds the two to what `tools/list` returns. */
+export const STATIC_TOOL_NAMES = [
+  'list_collections',
+  'describe_collection',
+  'whoami',
+  'list_templates',
+  'list_packs',
+  'create_collection',
+  'install_pack',
+  'update_collection',
+  'list_teams',
+  'list_audit',
+  'publish_page',
+  'upload_media',
+  'list_media',
+  'get_media_url',
+  'poll_events',
+] as const;
+
+const CURRENT_TOOL_NAMES: ReadonlySet<string> = new Set([...STATIC_TOOL_NAMES, ...DOCUMENT_TOOL_NAMES]);
+
+/** What to tell a caller that used a pre-D65 per-collection name
+ *  (`create_articles`): the tool that replaced it and the `collection` to pass.
+ *  PURELY TEXTUAL — a slug cannot contain `_`, so the name splits at its last
+ *  underscore; no collection is looked up, so the answer is the same whether
+ *  that collection exists, is hidden, or never did (no D46 oracle). Null for
+ *  anything that is not shaped like a retired name. */
+export function retiredToolRedirect(name: string): { replacedBy: DocumentToolName; message: string } | null {
+  if (CURRENT_TOOL_NAMES.has(name)) return null;
+  const cut = name.lastIndexOf('_');
+  const verb = name.slice(0, cut);
+  const slug = name.slice(cut + 1);
+  if (cut < 1 || !Object.hasOwn(DOCUMENT_TOOL_BY_RETIRED_VERB, verb) || !/^[a-z][a-z0-9-]*$/.test(slug)) {
+    return null;
+  }
+  const replacedBy = DOCUMENT_TOOL_BY_RETIRED_VERB[verb as RetiredVerb];
+  const fields =
+    verb === 'create' || verb === 'update' ? ' Document fields now go inside a `data` object.' : '';
+  return {
+    replacedBy,
+    message: `'${name}' was replaced by '${replacedBy}': call it with collection: "${slug}".${fields}`,
+  };
+}
+
+/** A tool error whose result payload carries extra, tool-supplied keys beside
+ *  the service error's own (D65): `available` when a document tool cannot act
+ *  on the named collection, `hint` on a validation failure. The transport
+ *  (handler.ts) renders `inner` as it would any error, then merges `extra`. */
+export class McpToolError extends Error {
+  constructor(
+    readonly inner: AppError,
+    readonly extra: Readonly<Record<string, unknown>>,
+  ) {
+    super(inner.message);
+    this.name = 'McpToolError';
+  }
+}
+
+/** One document tool: a fixed name and schema, plus the condition under which
+ *  it applies to a given collection. That ONE condition decides both whether
+ *  the tool is listed (it applies to at least one collection) and whether a
+ *  call naming a collection is let through to the service — so what is
+ *  advertised and what is reachable cannot drift. */
+interface DocumentToolSpec {
+  readonly name: DocumentToolName;
+  readonly description: string;
+  /** Arguments besides `collection`, which every document tool takes. */
+  readonly properties: Record<string, JSONSchema>;
+  readonly required?: readonly string[];
+  /** The action a permission denial names (`missing.action`). */
+  readonly action: Action;
+  /** Whether the principal could ever do this in `def` (roles ∩ token scope). */
+  readonly permitted: (def: CollectionDefinition) => boolean;
+  /** A collection feature the tool needs beyond permission, if any. */
+  readonly needs?: { readonly label: string; readonly test: (def: CollectionDefinition) => boolean };
+  readonly run: (def: CollectionDefinition, args: Record<string, unknown>) => Promise<unknown>;
+}
+
+const COLLECTION_ARG: JSONSchema = {
+  type: 'string',
+  description: 'Collection slug — list_collections shows the ones you can use.',
+};
+
+const ID_ARG: JSONSchema = { type: 'string', description: 'the document id' };
+
+/** The `data` argument of create/update: the document's field values. */
+function dataArg(args: Record<string, unknown>): Record<string, unknown> {
+  const data = args.data;
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    throw new InputValidationError([
+      { path: 'data', message: 'data must be an object of field values — see describe_collection.' },
+    ]);
+  }
+  return data as Record<string, unknown>;
+}
+
 /** Build the permission-filtered tool set for a principal. `baseUrl` is the
  *  absolute origin for tools that mint URLs (threaded from the route — this
  *  module has no request Context). */
@@ -159,17 +289,10 @@ export async function buildToolsForPrincipal(
 ): Promise<McpTool[]> {
   const perms = await getPrincipalPermissions(db, principal.id);
   const collections = await listCollections(db);
+  // Discovery derives from the permissions and definitions already in hand (TD-3).
+  const discoverable = collectionsService.discoverableFrom(collections, perms, principal);
   const tools: McpTool[] = [];
 
-  // Schema management (guarded by manage_schema).
-  tools.push({
-    name: 'list_collections',
-    description: 'List all content-type definitions.',
-    inputSchema: { type: 'object', properties: {} },
-    // SEC-5: discovery is public but projected — unauthenticated/unprivileged
-    // callers never see the internal access/workflow config.
-    handler: async () => listCollectionsForDiscovery(db, principal),
-  });
   // Ungated: the caller's own identity and permissions — how an agent learns
   // why a call was refused (and which grant or role would fix it).
   tools.push({
@@ -203,26 +326,17 @@ export async function buildToolsForPrincipal(
     handler: async () => collectionsService.listPackStatuses(db, principal),
   });
   if (couldDo(perms, principal, 'manage_schema', '*', false)) {
-    // D64: a new collection's tools exist server-side at once, but a client
-    // lists tools at connect time and remill has no channel to push
-    // `tools/list_changed` — so say exactly which tools appeared and where they
-    // will show up. Diffed against THIS build's tool list (the pre-change state).
-    const newToolsSince = async () => {
-      const before = new Set(tools.map((t) => t.name));
-      const after = await buildToolsForPrincipal(db, principal, now, baseUrl, ctx);
-      return {
-        newTools: after.map((t) => t.name).filter((n) => !before.has(n)),
-        note:
-          'These tools exist now. If your client does not list them yet, refresh its tool list or reconnect ' +
-          'to the remill MCP server to use them.',
-      };
-    };
+    // A new collection needs no new tools (D65): the document tools take its
+    // slug at once, in the same session — so the result says exactly that.
+    const usableNow = (slugs: readonly string[]) =>
+      `Ready to use: pass collection: ${slugs.map((x) => `"${x}"`).join(' or ')} to create_document, ` +
+      'list_documents and the other document tools — no reconnect needed.';
     const definitionSchema = collectionsService.collectionDefinitionJsonSchema();
     tools.push({
       name: 'create_collection',
       description:
-        'Define a new content type — a collection to group documents — then fill it with the generated ' +
-        'create_<slug>/list_<slug>/… tools (the result lists them). `definition` is {slug, name, shape, ' +
+        'Define a new content type — a collection to group documents — then fill it straight away by ' +
+        'passing its slug as `collection` to create_document. `definition` is {slug, name, shape, ' +
         'fields[]}; its schema documents every field type and its `config`: text, slug, markdown, html, ' +
         'number, boolean, datetime, select, tags, json, media, relation. For a ready-made shape (blog, docs, ' +
         'prompts, …) prefer install_pack. Omit `access` for an ordinary internal collection; ' +
@@ -240,7 +354,7 @@ export async function buildToolsForPrincipal(
           args.definition as CollectionDefinition,
           now(),
         );
-        return { ...def, ...(await newToolsSince()) };
+        return { ...def, note: usableNow([def.slug]) };
       },
     });
     tools.push({
@@ -263,21 +377,29 @@ export async function buildToolsForPrincipal(
           now(),
           args.slug !== undefined ? { slug: String(args.slug) } : undefined,
         );
-        return { collections: installed, ...(await newToolsSince()) };
+        return { collections: installed, note: usableNow(installed.map((d) => d.slug)) };
       },
     });
     tools.push({
       name: 'update_collection',
       description:
-        'Modify an existing content type. The definition REPLACES the stored one (send every field you ' +
-        'want to keep — read it first with list_collections) and follows the create_collection schema. ' +
+        'Modify an existing content type. The definition REPLACES the stored one, so send every field you ' +
+        'want to keep: read the current one with describe_collection, change it, send it back. It follows ' +
+        "the schema of create_collection's `definition` argument, which is documented there. " +
         'Turning publicRead ON over existing documents requires `onEnablePublic` (D57): ' +
         "'private' switches them all to private first (recommended), 'keep' publishes them as they are.",
       inputSchema: {
         type: 'object',
         properties: {
           slug: { type: 'string' },
-          definition: definitionSchema,
+          // The full definition schema is ~13 KB; it rides on create_collection
+          // only, not twice in every schema manager's tool list (D66). The
+          // service's validateDefinition is the authority either way.
+          definition: {
+            type: 'object',
+            description:
+              "The whole new definition — same schema as create_collection's `definition`.",
+          },
           onEnablePublic: { type: 'string', enum: [...collectionsService.ON_ENABLE_PUBLIC] },
         },
         required: ['slug', 'definition'],
@@ -294,7 +416,7 @@ export async function buildToolsForPrincipal(
     });
   }
 
-  // Team discovery — resolve "the tech team" to a team id for share_<slug>.
+  // Team discovery — resolve "the tech team" to a team id for share_document.
   // Visible with manage_access (the same capability the share tools need).
   if (couldDo(perms, principal, 'manage_access', '*', false)) {
     tools.push({
@@ -341,9 +463,7 @@ export async function buildToolsForPrincipal(
 
   // Pages (D62): publish a standalone HTML page in ONE call — the built-in
   // `pages` collection in the viewer (inline D63, or framed D60). Static sugar over create/update +
-  // share_link for that collection (services/pages); registered BEFORE the
-  // generated tools so a pre-existing collection whose tools collide by name
-  // (slug `page` → `publish_page`) can never shadow it.
+  // share_link for that collection (services/pages).
   const pagesDef = collections.find(
     (d) => d.slug === PAGES_COLLECTION && isPageMode(d.renderMode) && d.fields.some((f) => f.type === 'html'),
   );
@@ -410,527 +530,636 @@ export async function buildToolsForPrincipal(
     });
   }
 
-  // Per-collection document tools, filtered by permission.
-  for (const def of collections) {
-    if (def.slug === 'media') continue; // media has its own tools below
-    const publicRead = def.access?.publicRead === true;
-    const slug = def.slug;
-    // Review threads (D55): reading and resolving admit `comment` OR `update`
-    // (whoever may edit the text may see the feedback on it); posting and
-    // replying need `comment` — mirrors the comments service's gates.
-    const annotatable = comments.hasAnnotatableFields(def);
-    const canComment = annotatable && couldDo(perms, principal, 'comment', slug, false);
-    const canSeeReview = canComment || (annotatable && couldDo(perms, principal, 'update', slug, false));
+  // ---------------------------------------------------------------------------
+  // Document tools (D65): ONE fixed set, each taking `collection`. Before D65
+  // these were generated per collection (`create_<slug>` …), which grew the tool
+  // list by up to 19 per collection. Each spec's condition is the one the old
+  // generator used to decide whether to EMIT the per-collection tool, unchanged.
+  // ---------------------------------------------------------------------------
+  const can = (action: Action, def: CollectionDefinition) =>
+    couldDo(perms, principal, action, def.slug, def.access?.publicRead === true);
+  // Review threads (D55): reading and resolving admit `comment` OR `update`
+  // (whoever may edit the text may see the feedback on it); posting and
+  // replying need `comment` — mirrors the comments service's gates.
+  const canSeeReview = (def: CollectionDefinition) => can('comment', def) || can('update', def);
+  const annotatable = { label: 'an html or markdown field', test: comments.hasAnnotatableFields };
+  const lifecycle = { label: 'a draft/published lifecycle', test: hasLifecycle };
+  const publicPages = {
+    label: 'public pages (access.publicRead)',
+    test: (def: CollectionDefinition) => def.access?.publicRead === true,
+  };
+  /** Validation failures on a write name the wrong key but not the right ones;
+   *  add them. Reached only past the tool's own permission check, so only by
+   *  callers `describe_collection` would show the full schema to anyway. */
+  const withFieldHint = async <T>(def: CollectionDefinition, save: () => Promise<T>): Promise<T> => {
+    try {
+      return await save();
+    } catch (err) {
+      if (!(err instanceof InputValidationError)) throw err;
+      const fields = def.fields.map((f) => (f.required ? `${f.key} (required)` : f.key)).join(', ');
+      throw new McpToolError(err, {
+        hint: `Fields of '${def.slug}': ${fields}. describe_collection returns their full schema.`,
+      });
+    }
+  };
 
-    if (couldDo(perms, principal, 'read', slug, publicRead)) {
-      tools.push({
-        name: `list_${slug}`,
-        description: `List ${def.name} documents (filter/sort/paginate).`,
-        inputSchema: {
+  const specs: DocumentToolSpec[] = [
+    {
+      name: 'list_documents',
+      description:
+        'List the documents in a collection (filter/sort/paginate). Filter and sort only on indexed ' +
+        'fields — describe_collection lists them.',
+      properties: {
+        page: { type: 'integer' },
+        pageSize: { type: 'integer' },
+        status: {
+          type: 'string',
+          enum: ['draft', 'published'],
+          description: 'only for collections with a draft/published lifecycle',
+        },
+        sort: { type: 'string', description: 'indexed field name, prefix "-" for descending' },
+        filters: {
+          type: 'array',
+          description:
+            'filters on indexed fields; op defaults to eq (gte/lte compare, contains substring-matches text, in matches any of comma-separated values)',
+          items: {
+            type: 'object',
+            properties: {
+              field: { type: 'string' },
+              op: { type: 'string', enum: [...docs.FILTER_OPS] },
+              value: { type: 'string' },
+            },
+            required: ['field', 'value'],
+          },
+        },
+      },
+      action: 'read',
+      permitted: (def) => can('read', def),
+      run: async (def, args) =>
+        docs.listDocuments(
+          db,
+          principal,
+          def.slug,
+          {
+            page: clampPage(args.page),
+            pageSize: clampPageSize(args.pageSize),
+            status: args.status as 'draft' | 'published' | undefined,
+            sort: parseSort(typeof args.sort === 'string' ? args.sort : undefined),
+            filters: filtersFromArgs(args.filters),
+          },
+          now(),
+        ),
+    },
+    {
+      name: 'search_documents',
+      description:
+        'Full-text search the documents in a collection — matches title and body text, relevance-ranked (D28).',
+      properties: {
+        q: {
+          type: 'string',
+          description: 'search terms (words are ANDed; the last word prefix-matches)',
+        },
+        limit: { type: 'integer' },
+        offset: { type: 'integer' },
+      },
+      required: ['q'],
+      action: 'read',
+      permitted: (def) => can('read', def),
+      run: async (def, args) => {
+        const res = await searchSite(
+          db,
+          principal,
+          {
+            q: String(args.q ?? ''),
+            collection: def.slug,
+            limit: typeof args.limit === 'number' ? args.limit : undefined,
+            offset: typeof args.offset === 'number' ? args.offset : undefined,
+          },
+          now(),
+        );
+        return {
+          hits: res.hits.map((h) => ({ ...h, snippet: snippetToText(h.snippet) })),
+          hasMore: res.hasMore,
+        };
+      },
+    },
+    {
+      name: 'get_document',
+      description:
+        'Get one document by id. Its `revision` is what update_document expects back. Pass `render` for a ' +
+        'role-tailored markdown brief instead of raw JSON — describe_collection lists the renders a ' +
+        'collection offers (D47; `review` is the open review threads, D55); `budget` caps its approximate tokens.',
+      properties: {
+        id: ID_ARG,
+        render: { type: 'string', description: 'Named text render — returns markdown, not JSON.' },
+        budget: { type: 'integer', description: 'Approximate token cap for the render.' },
+      },
+      required: ['id'],
+      action: 'read',
+      permitted: (def) => can('read', def),
+      run: async (def, args) => {
+        const id = String(args.id);
+        const budget = typeof args.budget === 'number' ? args.budget : undefined;
+        // `review` (D55) is offered on any collection with annotatable fields,
+        // to principals who may see its review threads — the brief IS the threads.
+        if (args.render === 'review' && annotatable.test(def) && canSeeReview(def)) {
+          return mcpText(await comments.renderReview(db, principal, def.slug, id, { budget }, now()));
+        }
+        if (typeof args.render === 'string') {
+          return mcpText(
+            await docs.renderDocumentText(
+              db,
+              principal,
+              def.slug,
+              id,
+              { render: args.render, budget, baseUrl },
+              now(),
+            ),
+          );
+        }
+        return docs.getDocument(db, principal, def.slug, id, now());
+      },
+    },
+    {
+      name: 'get_backlinks',
+      description:
+        'List the documents that reference a document via relation fields (reverse links — the graph).',
+      properties: { id: ID_ARG },
+      required: ['id'],
+      action: 'read',
+      permitted: (def) => can('read', def),
+      run: async (def, args) => docs.getBacklinks(db, principal, def.slug, String(args.id), now()),
+    },
+    {
+      name: 'list_revisions',
+      description: 'Revision history for a document (newest first — every save appends one).',
+      properties: { id: ID_ARG },
+      required: ['id'],
+      action: 'read',
+      permitted: (def) => can('read', def),
+      run: async (def, args) => docs.listRevisions(db, principal, def.slug, String(args.id), now()),
+    },
+    {
+      name: 'create_document',
+      description:
+        'Create a document in a collection. `data` holds its field values — describe_collection returns ' +
+        "the collection's fields as a JSON Schema (required fields, select options, relation targets). " +
+        'Undeclared fields are rejected.',
+      properties: { data: { type: 'object', description: 'field values, keyed by field key' } },
+      required: ['data'],
+      action: 'create',
+      permitted: (def) => can('create', def),
+      run: async (def, args) => {
+        const data = dataArg(args);
+        return withFieldHint(def, () => docs.createDocument(db, principal, def.slug, data, now()));
+      },
+    },
+    {
+      name: 'update_document',
+      description:
+        'Update a document. `data` holds only the fields that change. Pass expectedRevision — the ' +
+        '`revision` from get_document your edit is based on — so a save made on a stale copy fails with ' +
+        'STALE_REVISION instead of overwriting newer work (re-read, re-apply, retry).',
+      properties: {
+        id: ID_ARG,
+        expectedRevision: {
+          type: 'integer',
+          description: 'The revision your edit is based on (from get_document).',
+        },
+        data: { type: 'object', description: 'changed field values, keyed by field key' },
+        resolves: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Review thread ids (threadId from get_document render=review) this save addresses — resolved at the new revision once it saves.',
+        },
+      },
+      required: ['id', 'data'],
+      action: 'update',
+      permitted: (def) => can('update', def),
+      run: async (def, args) => {
+        const id = String(args.id);
+        const data = dataArg(args);
+        const threadIds = stringList(args.resolves, 'resolves');
+        // Check the threads BEFORE saving, so a bad id can't leave a saved
+        // document with the threads it claimed to address still open.
+        if (threadIds.length) {
+          await comments.assertResolvable(db, principal, def.slug, id, threadIds, now());
+        }
+        const doc = await withFieldHint(def, () =>
+          docs.updateDocument(db, principal, def.slug, id, data, now(), {
+            expectedRevision: docs.parseExpectedRevision(args.expectedRevision),
+          }),
+        );
+        if (threadIds.length) {
+          await comments.resolveThreads(db, principal, def.slug, id, threadIds, now());
+        }
+        return threadIds.length ? { ...doc, resolvedThreads: threadIds } : doc;
+      },
+    },
+    {
+      name: 'restore_revision',
+      description:
+        'Restore a prior revision of a document as a new save (history is preserved — see list_revisions).',
+      properties: { id: ID_ARG, revision: { type: 'integer' } },
+      required: ['id', 'revision'],
+      action: 'update',
+      permitted: (def) => can('update', def),
+      run: async (def, args) =>
+        docs.restoreRevision(db, principal, def.slug, String(args.id), Number(args.revision), now()),
+    },
+    {
+      name: 'delete_document',
+      description:
+        'Delete a document. Moves to trash — recoverable by an admin for 30 days, then purged.',
+      properties: { id: ID_ARG },
+      required: ['id'],
+      action: 'delete',
+      permitted: (def) => can('delete', def),
+      run: async (def, args) => {
+        await docs.deleteDocument(db, principal, def.slug, String(args.id), now());
+        return { deleted: true, recoverableDays: 30 };
+      },
+    },
+    {
+      name: 'publish_document',
+      description: 'Publish a document, or unpublish it with publish=false.',
+      properties: { id: ID_ARG, publish: { type: 'boolean' } },
+      required: ['id'],
+      action: 'publish',
+      permitted: (def) => can('publish', def),
+      needs: lifecycle,
+      run: async (def, args) =>
+        docs.setPublished(db, principal, def.slug, String(args.id), args.publish !== false, now()),
+    },
+    {
+      name: 'schedule_document',
+      description:
+        'Schedule a draft document to publish at a future time (D32), or cancel a pending schedule. Provide exactly one of publish_at / cancel.',
+      properties: {
+        id: ID_ARG,
+        publish_at: {
+          type: 'string',
+          description: 'ISO-8601 datetime to publish at (drafts only)',
+        },
+        cancel: { type: 'boolean', description: 'true to clear a pending schedule' },
+      },
+      required: ['id'],
+      action: 'publish',
+      permitted: (def) => can('publish', def),
+      needs: lifecycle,
+      run: async (def, args) => {
+        const hasAt = typeof args.publish_at === 'string' && args.publish_at !== '';
+        const cancel = args.cancel === true;
+        if (hasAt === cancel) {
+          throw new InputValidationError([
+            { path: 'publish_at', message: 'Provide exactly one of publish_at or cancel:true.' },
+          ]);
+        }
+        return docs.scheduleDocument(
+          db,
+          principal,
+          def.slug,
+          String(args.id),
+          cancel ? null : String(args.publish_at),
+          now(),
+        );
+      },
+    },
+    {
+      // Visibility (D50) only matters for collections readable by the public —
+      // gated on publicRead (like the editor sidebar control), not lifecycle: a
+      // lifecycle:'none' document is always 'published', so visibility alone
+      // still decides whether the public list/read surfaces show it.
+      name: 'set_visibility',
+      description:
+        "Set a document's visibility (D50): public (listed everywhere), unlisted (reachable only by its doc_ id link, not listed), or private (no public URL at all — share it via create_share_link). Allowed on drafts too; it takes effect once published.",
+      properties: { id: ID_ARG, visibility: { type: 'string', enum: [...VISIBILITIES] } },
+      required: ['id', 'visibility'],
+      action: 'publish',
+      permitted: (def) => can('publish', def),
+      needs: publicPages,
+      run: async (def, args) =>
+        docs.setVisibility(db, principal, def.slug, String(args.id), args.visibility as Visibility, now()),
+    },
+    {
+      name: 'share_document',
+      description:
+        'Grant a principal, role, or team scoped actions on one document (item grant, optionally expiring).',
+      properties: {
+        id: { type: 'string', description: 'the document id to share' },
+        subjectKind: { type: 'string', enum: ['principal', 'role', 'team'] },
+        subjectId: { type: 'string', description: 'principal id, role slug, or team id' },
+        actions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'actions to grant, e.g. ["read"]',
+        },
+        expiresAt: { type: 'string', description: 'optional ISO-8601 expiry' },
+      },
+      required: ['id', 'subjectKind', 'subjectId', 'actions'],
+      action: 'manage_access',
+      permitted: (def) => can('manage_access', def),
+      run: async (def, args) => ({
+        id: await grantItem(
+          db,
+          principal,
+          {
+            subjectKind:
+              args.subjectKind === 'role' ? 'role' : args.subjectKind === 'team' ? 'team' : 'principal',
+            subjectId: String(args.subjectId ?? ''),
+            documentId: String(args.id ?? ''),
+            collection: def.slug,
+            actions: Array.isArray(args.actions) ? (args.actions.map(String) as Action[]) : [],
+            expiresAt: typeof args.expiresAt === 'string' ? args.expiresAt : undefined,
+          },
+          now(),
+        ),
+      }),
+    },
+    {
+      name: 'create_share_link',
+      description:
+        'Mint an anonymous, expiring share link for one document. Anyone with the URL can open it — no account needed. READ-ONLY by default; pass `review` for a review link whose holders can also comment. Expiry is required and clamped to 30 days.',
+      properties: {
+        id: { type: 'string', description: 'the document id to share' },
+        expiresAt: {
+          type: 'string',
+          description: 'REQUIRED ISO-8601 expiry (clamped to 30 days out)',
+        },
+        password: {
+          type: 'string',
+          description: 'optional password to require before the link opens (min 8 characters)',
+        },
+        label: { type: 'string', description: 'optional human label shown in the Share panel' },
+        review: {
           type: 'object',
+          description:
+            'optional — make this a REVIEW link: whoever opens it can also comment on the document (needs your `comment` permission as well as `share_link`). Omit for a read-only link.',
           properties: {
-            page: { type: 'integer' },
-            pageSize: { type: 'integer' },
-            // lifecycle:'none' collections have no meaningful status axis (B4).
-            ...(hasLifecycle(def)
-              ? { status: { type: 'string', enum: ['draft', 'published'] } }
-              : {}),
-            sort: { type: 'string', description: 'indexed field name, prefix "-" for descending' },
-            filters: {
-              type: 'array',
+            mode: {
+              type: 'string',
+              enum: ['group', 'individual'],
               description:
-                'filters on indexed fields; op defaults to eq (gte/lte compare, contains substring-matches text, in matches any of comma-separated values)',
-              items: {
-                type: 'object',
-                properties: {
-                  field: { type: 'string' },
-                  op: { type: 'string', enum: [...docs.FILTER_OPS] },
-                  value: { type: 'string' },
-                },
-                required: ['field', 'value'],
-              },
+                "'group' (default): reviewers on group links see each other's comments. 'individual': each reviewer sees only their own.",
             },
-          },
-        },
-        handler: async (args) =>
-          docs.listDocuments(
-            db,
-            principal,
-            slug,
-            {
-              page: clampPage(args.page),
-              pageSize: clampPageSize(args.pageSize),
-              status: args.status as 'draft' | 'published' | undefined,
-              sort: parseSort(typeof args.sort === 'string' ? args.sort : undefined),
-              filters: filtersFromArgs(args.filters),
-            },
-            now(),
-          ),
-      });
-      tools.push({
-        name: `search_${slug}`,
-        description: `Full-text search ${def.name} documents — matches title and body text, relevance-ranked (D28).`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            q: {
+            reviewer: {
               type: 'string',
-              description: 'search terms (words are ANDed; the last word prefix-matches)',
+              description:
+                'name the one person this link is for; omit for an open link where each reviewer types their name',
             },
-            limit: { type: 'integer' },
-            offset: { type: 'integer' },
           },
-          required: ['q'],
         },
-        handler: async (args) => {
-          const res = await searchSite(
-            db,
-            principal,
-            {
-              q: String(args.q ?? ''),
-              collection: slug,
-              limit: typeof args.limit === 'number' ? args.limit : undefined,
-              offset: typeof args.offset === 'number' ? args.offset : undefined,
-            },
-            now(),
-          );
-          return {
-            hits: res.hits.map((h) => ({ ...h, snippet: snippetToText(h.snippet) })),
-            hasMore: res.hasMore,
-          };
-        },
-      });
-      // Collections whose template declares text renders (D47) advertise the
-      // `render`/`budget` args; everything else keeps the bare read — the enum
-      // derives from code, so schema drift is impossible.
-      // `review` (D55) is available on any collection with annotatable fields,
-      // to principals who may see its review threads — the brief is the threads.
-      const renders = [...rendersFor(def.template), ...(canSeeReview ? ['review'] : [])];
-      tools.push({
-        name: `get_${slug}`,
-        description: renders.length
-          ? `Get one ${def.name} document by id. Pass \`render\` (${renders.join(', ')}) for a ` +
-            `role-tailored markdown brief instead of raw JSON; \`budget\` caps its approximate tokens.`
-          : `Get one ${def.name} document by id.`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            ...(renders.length
-              ? {
-                  render: {
-                    type: 'string',
-                    enum: [...renders],
-                    description: 'Named text render — returns markdown, not JSON.',
-                  },
-                  budget: {
-                    type: 'integer',
-                    description: 'Approximate token cap for the render.',
-                  },
-                }
-              : {}),
+      },
+      required: ['id', 'expiresAt'],
+      action: 'share_link',
+      permitted: (def) => can('share_link', def),
+      run: async (def, args) => {
+        // Validation, the 30-day clamp and the review rules all live in
+        // mintApiShareLink() — ONE implementation for this tool and REST.
+        const { token, ...link } = await mintApiShareLink(
+          db,
+          principal,
+          {
+            collection: def.slug,
+            documentId: String(args.id ?? ''),
+            expiresAt: args.expiresAt,
+            password: args.password,
+            label: args.label,
+            review: args.review,
           },
-          required: ['id'],
-        },
-        handler: async (args) =>
-          args.render === 'review' && canSeeReview
-            ? mcpText(
-                await comments.renderReview(
-                  db,
-                  principal,
-                  slug,
-                  String(args.id),
-                  { budget: typeof args.budget === 'number' ? args.budget : undefined },
-                  now(),
-                ),
-              )
-            : typeof args.render === 'string'
-            ? mcpText(
-                await docs.renderDocumentText(
-                  db,
-                  principal,
-                  slug,
-                  String(args.id),
-                  {
-                    render: args.render,
-                    budget: typeof args.budget === 'number' ? args.budget : undefined,
-                    baseUrl,
-                  },
-                  now(),
-                ),
-              )
-            : docs.getDocument(db, principal, slug, String(args.id), now()),
-      });
-      tools.push({
-        name: `backlinks_${slug}`,
-        description: `List documents that reference a ${def.name} document via relation fields (reverse links — the graph).`,
-        inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-        handler: async (args) => docs.getBacklinks(db, principal, slug, String(args.id), now()),
-      });
-      tools.push({
-        name: `revisions_${slug}`,
-        description: `Revision history for a ${def.name} document (newest first — every save appends one).`,
-        inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-        handler: async (args) => docs.listRevisions(db, principal, slug, String(args.id), now()),
-      });
-    }
-    if (couldDo(perms, principal, 'create', slug, false)) {
-      tools.push({
-        name: `create_${slug}`,
-        description: `Create a ${def.name} document.`,
-        inputSchema: docInputSchema(def),
-        handler: async (args) => docs.createDocument(db, principal, slug, args, now()),
-      });
-    }
-    if (couldDo(perms, principal, 'update', slug, false)) {
-      tools.push({
-        name: `update_${slug}`,
-        description: `Update a ${def.name} document. Provide id + changed fields, and expectedRevision — the \`revision\` from get_${slug} your edit is based on — so a save made on a stale copy fails with STALE_REVISION instead of overwriting newer work (re-read, re-apply, retry).`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            expectedRevision: {
-              type: 'integer',
-              description: `The revision your edit is based on (from get_${slug}).`,
-            },
-            ...(comments.hasAnnotatableFields(def)
-              ? {
-                  resolves: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    description:
-                      'Review thread ids (threadId from get_' +
-                      slug +
-                      ' render=review) this save addresses — resolved at the new revision once it saves.',
-                  },
-                }
-              : {}),
-            ...(docInputSchema(def).properties as object),
+          ctx.secret ?? '',
+          now(),
+        );
+        // The plaintext token intentionally enters the agent's context — that
+        // IS the capability; it stays revocable from the Share panel/matrix.
+        return {
+          grantId: link.grantId,
+          url: `${baseUrl}/s/${token}`,
+          expiresAt: link.expiresAt,
+          hasPassword: link.hasPassword,
+          label: link.label,
+          review: link.review,
+        };
+      },
+    },
+    {
+      name: 'list_comments',
+      description:
+        'Review threads on a document as JSON — roots with replies, each with its author, time, body, intent, anchor and status. For a readable brief use get_document with render=review.',
+      properties: {
+        id: ID_ARG,
+        status: { type: 'string', enum: ['open', 'resolved'] },
+        intent: { type: 'string', enum: [...comments.COMMENT_INTENTS] },
+      },
+      required: ['id'],
+      action: 'comment',
+      permitted: canSeeReview,
+      needs: annotatable,
+      run: async (def, args) =>
+        comments.listThreads(
+          db,
+          { kind: 'principal', principal },
+          def.slug,
+          String(args.id),
+          {
+            status: args.status === 'open' || args.status === 'resolved' ? args.status : undefined,
+            intent: (comments.COMMENT_INTENTS as readonly unknown[]).includes(args.intent)
+              ? (args.intent as comments.CommentIntent)
+              : undefined,
           },
-          required: ['id'],
-        },
-        handler: async (args) => {
-          const { id, expectedRevision, resolves, ...rest } = args;
-          const threadIds = stringList(resolves, 'resolves');
-          // Check the threads BEFORE saving, so a bad id can't leave a saved
-          // document with the threads it claimed to address still open.
-          if (threadIds.length) {
-            await comments.assertResolvable(db, principal, slug, String(id), threadIds, now());
-          }
-          const doc = await docs.updateDocument(db, principal, slug, String(id), rest, now(), {
-            expectedRevision: docs.parseExpectedRevision(expectedRevision),
-          });
-          if (threadIds.length) {
-            await comments.resolveThreads(db, principal, slug, String(id), threadIds, now());
-          }
-          return threadIds.length ? { ...doc, resolvedThreads: threadIds } : doc;
-        },
-      });
-      tools.push({
-        name: `restore_${slug}`,
-        description: `Restore a prior revision of a ${def.name} document as a new save (history is preserved — see revisions_${slug}).`,
-        inputSchema: {
-          type: 'object',
-          properties: { id: { type: 'string' }, revision: { type: 'integer' } },
-          required: ['id', 'revision'],
-        },
-        handler: async (args) =>
-          docs.restoreRevision(db, principal, slug, String(args.id), Number(args.revision), now()),
-      });
-    }
-    if (canSeeReview) {
-      tools.push({
-        name: `comments_${slug}`,
-        description: `Review threads on a ${def.name} document as JSON — roots with replies, each with its author, time, body, intent, anchor and status. For a readable brief use get_${slug} with render=review.`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            status: { type: 'string', enum: ['open', 'resolved'] },
-            intent: { type: 'string', enum: [...comments.COMMENT_INTENTS] },
-          },
-          required: ['id'],
-        },
-        handler: async (args) =>
-          comments.listThreads(
-            db,
-            { kind: 'principal', principal },
-            slug,
-            String(args.id),
-            {
-              status: args.status === 'open' || args.status === 'resolved' ? args.status : undefined,
-              intent: (comments.COMMENT_INTENTS as readonly unknown[]).includes(args.intent)
-                ? (args.intent as comments.CommentIntent)
-                : undefined,
-            },
-            now(),
-          ),
-      });
-      tools.push({
-        name: `resolve_comment_${slug}`,
-        description: `Resolve a review thread on a ${def.name} document (stamped with the current revision), or reopen it with reopen=true. Prefer update_${slug}'s \`resolves\` when a save addresses the thread.`,
-        inputSchema: {
-          type: 'object',
-          properties: { id: { type: 'string' }, threadId: { type: 'string' }, reopen: { type: 'boolean' } },
-          required: ['id', 'threadId'],
-        },
-        handler: async (args) =>
-          comments.setThreadResolved(
-            db,
-            principal,
-            slug,
-            String(args.id),
-            String(args.threadId),
-            args.reopen !== true,
-            now(),
-          ),
-      });
-    }
-    if (canComment) {
-      tools.push({
-        name: `comment_${slug}`,
-        description:
-          `Start a review thread on a ${def.name} document. Pass \`quote\` (exact text from the document) to comment on a passage, ` +
-          `\`blockId\` to comment on a figure/widget, or neither for a general note. \`visibility\`: internal (default — ` +
-          `principals only) or shared (review-link reviewers see it too).`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            body: { type: 'string' },
-            quote: { type: 'string' },
-            field: { type: 'string', description: 'Field the quote is in (optional — found automatically).' },
-            blockId: { type: 'string' },
-            intent: { type: 'string', enum: [...comments.COMMENT_INTENTS] },
-            visibility: { type: 'string', enum: ['internal', 'shared'] },
-          },
-          required: ['id', 'body'],
-        },
-        handler: async (args) => {
-          const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
-          const quote = str(args.quote);
-          const blockId = str(args.blockId);
-          const anchor: comments.AnchorInput = quote
-            ? { kind: 'text', quote, field: str(args.field), blockId }
-            : blockId
-              ? { kind: 'block', blockId, field: str(args.field) }
-              : { kind: 'document' };
-          return comments.createThread(
-            db,
-            { kind: 'principal', principal },
-            slug,
-            String(args.id),
-            { anchor, body: String(args.body ?? ''), intent: str(args.intent), visibility: str(args.visibility) },
-            now(),
-          );
-        },
-      });
-      tools.push({
-        name: `reply_comment_${slug}`,
-        description: `Reply to a review thread on a ${def.name} document.`,
-        inputSchema: {
-          type: 'object',
-          properties: { id: { type: 'string' }, threadId: { type: 'string' }, body: { type: 'string' } },
-          required: ['id', 'threadId', 'body'],
-        },
-        handler: async (args) =>
-          comments.replyToThread(
-            db,
-            { kind: 'principal', principal },
-            slug,
-            String(args.id),
-            String(args.threadId),
-            { body: String(args.body ?? '') },
-            now(),
-          ),
-      });
-    }
-    if (couldDo(perms, principal, 'delete', slug, false)) {
-      tools.push({
-        name: `delete_${slug}`,
-        description: `Delete a ${def.name} document. Moves to trash — recoverable by an admin for 30 days, then purged.`,
-        inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-        handler: async (args) => {
-          await docs.deleteDocument(db, principal, slug, String(args.id), now());
-          return { deleted: true, recoverableDays: 30 };
-        },
-      });
-    }
-    if (hasLifecycle(def) && couldDo(perms, principal, 'publish', slug, false)) {
-      tools.push({
-        name: `publish_${slug}`,
-        description: `Publish or unpublish a ${def.name} document.`,
-        inputSchema: {
-          type: 'object',
-          properties: { id: { type: 'string' }, publish: { type: 'boolean' } },
-          required: ['id'],
-        },
-        handler: async (args) =>
-          docs.setPublished(db, principal, slug, String(args.id), args.publish !== false, now()),
-      });
-      tools.push({
-        name: `schedule_${slug}`,
-        description: `Schedule a draft ${def.name} document to publish at a future time (D32), or cancel a pending schedule. Provide exactly one of publish_at / cancel.`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            publish_at: {
-              type: 'string',
-              description: 'ISO-8601 datetime to publish at (drafts only)',
-            },
-            cancel: { type: 'boolean', description: 'true to clear a pending schedule' },
-          },
-          required: ['id'],
-        },
-        handler: async (args) => {
-          const hasAt = typeof args.publish_at === 'string' && args.publish_at !== '';
-          const cancel = args.cancel === true;
-          if (hasAt === cancel) {
-            throw new InputValidationError([
-              { path: 'publish_at', message: 'Provide exactly one of publish_at or cancel:true.' },
-            ]);
-          }
-          return docs.scheduleDocument(
-            db,
-            principal,
-            slug,
-            String(args.id),
-            cancel ? null : String(args.publish_at),
-            now(),
-          );
-        },
-      });
-    }
-    // Visibility (D50) only matters for collections readable by the public —
-    // gated on publicRead (like the editor sidebar control), not lifecycle: a
-    // lifecycle:'none' document is always 'published', so visibility alone
-    // still decides whether the public list/read surfaces show it.
-    if (publicRead && couldDo(perms, principal, 'publish', slug, false)) {
-      tools.push({
-        name: `visibility_${slug}`,
-        description: `Set a ${def.name} document's visibility (D50): public (listed everywhere), unlisted (reachable only by its doc_ id link, not listed), or private (no public URL at all — share it via share_link_${slug}). Allowed on drafts too; it takes effect once published.`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            visibility: { type: 'string', enum: [...VISIBILITIES] },
-          },
-          required: ['id', 'visibility'],
-        },
-        handler: async (args) =>
-          docs.setVisibility(
-            db,
-            principal,
-            slug,
-            String(args.id),
-            args.visibility as Visibility,
-            now(),
-          ),
-      });
-    }
-    if (couldDo(perms, principal, 'manage_access', slug, false)) {
-      tools.push({
-        name: `share_${slug}`,
-        description: `Grant a principal, role, or team scoped actions on one ${def.name} document (item grant, optionally expiring).`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', description: 'the document id to share' },
-            subjectKind: { type: 'string', enum: ['principal', 'role', 'team'] },
-            subjectId: { type: 'string', description: 'principal id, role slug, or team id' },
-            actions: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'actions to grant, e.g. ["read"]',
-            },
-            expiresAt: { type: 'string', description: 'optional ISO-8601 expiry' },
-          },
-          required: ['id', 'subjectKind', 'subjectId', 'actions'],
-        },
-        handler: async (args) => ({
-          id: await grantItem(
-            db,
-            principal,
-            {
-              subjectKind:
-                args.subjectKind === 'role'
-                  ? 'role'
-                  : args.subjectKind === 'team'
-                    ? 'team'
-                    : 'principal',
-              subjectId: String(args.subjectId ?? ''),
-              documentId: String(args.id ?? ''),
-              collection: slug,
-              actions: Array.isArray(args.actions) ? (args.actions.map(String) as Action[]) : [],
-              expiresAt: typeof args.expiresAt === 'string' ? args.expiresAt : undefined,
-            },
-            now(),
-          ),
+          now(),
+        ),
+    },
+    {
+      name: 'add_comment',
+      description:
+        'Start a review thread on a document. Pass `quote` (exact text from the document) to comment on a passage, ' +
+        '`blockId` to comment on a figure/widget, or neither for a general note. `visibility`: internal (default — ' +
+        'principals only) or shared (review-link reviewers see it too).',
+      properties: {
+        id: ID_ARG,
+        body: { type: 'string' },
+        quote: { type: 'string' },
+        field: { type: 'string', description: 'Field the quote is in (optional — found automatically).' },
+        blockId: { type: 'string' },
+        intent: { type: 'string', enum: [...comments.COMMENT_INTENTS] },
+        visibility: { type: 'string', enum: ['internal', 'shared'] },
+      },
+      required: ['id', 'body'],
+      action: 'comment',
+      permitted: (def) => can('comment', def),
+      needs: annotatable,
+      run: async (def, args) => {
+        const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+        const quote = str(args.quote);
+        const blockId = str(args.blockId);
+        const anchor: comments.AnchorInput = quote
+          ? { kind: 'text', quote, field: str(args.field), blockId }
+          : blockId
+            ? { kind: 'block', blockId, field: str(args.field) }
+            : { kind: 'document' };
+        return comments.createThread(
+          db,
+          { kind: 'principal', principal },
+          def.slug,
+          String(args.id),
+          { anchor, body: String(args.body ?? ''), intent: str(args.intent), visibility: str(args.visibility) },
+          now(),
+        );
+      },
+    },
+    {
+      name: 'reply_comment',
+      description: 'Reply to a review thread on a document.',
+      properties: { id: ID_ARG, threadId: { type: 'string' }, body: { type: 'string' } },
+      required: ['id', 'threadId', 'body'],
+      action: 'comment',
+      permitted: (def) => can('comment', def),
+      needs: annotatable,
+      run: async (def, args) =>
+        comments.replyToThread(
+          db,
+          { kind: 'principal', principal },
+          def.slug,
+          String(args.id),
+          String(args.threadId),
+          { body: String(args.body ?? '') },
+          now(),
+        ),
+    },
+    {
+      name: 'resolve_comment',
+      description:
+        "Resolve a review thread on a document (stamped with the current revision), or reopen it with reopen=true. Prefer update_document's `resolves` when a save addresses the thread.",
+      properties: { id: ID_ARG, threadId: { type: 'string' }, reopen: { type: 'boolean' } },
+      required: ['id', 'threadId'],
+      action: 'comment',
+      permitted: canSeeReview,
+      needs: annotatable,
+      run: async (def, args) =>
+        comments.setThreadResolved(
+          db,
+          principal,
+          def.slug,
+          String(args.id),
+          String(args.threadId),
+          args.reopen !== true,
+          now(),
+        ),
+    },
+  ];
+
+  // `media` is a collection but never a document-tool target: it has its own
+  // tools below (uploads go through MIME sniffing and R2, not createDocument).
+  const documentCollections = collections.filter((d) => d.slug !== 'media');
+  const appliesTo = (spec: DocumentToolSpec, def: CollectionDefinition) =>
+    spec.permitted(def) && (spec.needs?.test(def) ?? true);
+  const toolsOn = (def: CollectionDefinition) =>
+    documentCollections.includes(def) ? specs.filter((s) => appliesTo(s, def)).map((s) => s.name) : [];
+  /** Whether the caller may know `def` exists at all: it is in discovery, or a
+   *  tool applies to it (a create-only token on a private collection). */
+  const isKnown = (def: CollectionDefinition) =>
+    discoverable.defs.includes(def) || toolsOn(def).length > 0;
+  const unavailable = (slug: string, available: string[]) =>
+    // Hidden and nonexistent are ONE answer (D46) — and it must come from here:
+    // several write services look the collection up before they authorize.
+    new McpToolError(new ForbiddenError(`Unknown or unavailable collection '${slug}'.`), { available });
+
+  /** The per-call half of a spec's condition. Refusals here never reach the
+   *  service, so they are not audited — like the unknown-tool refusal. */
+  const resolveCollection = (spec: DocumentToolSpec, raw: unknown): CollectionDefinition => {
+    const slug = typeof raw === 'string' ? raw : '';
+    const def = documentCollections.find((d) => d.slug === slug);
+    if (def && appliesTo(spec, def)) return def;
+    const available = documentCollections.filter((d) => appliesTo(spec, d)).map((d) => d.slug);
+    if (!def || !isKnown(def)) throw unavailable(slug, available);
+    if (!spec.permitted(def)) {
+      throw new McpToolError(
+        new ForbiddenError(`Not permitted to ${spec.action} in '${slug}'`, {
+          action: spec.action,
+          collection: slug,
         }),
-      });
+        { available },
+      );
     }
-    if (couldDo(perms, principal, 'share_link', slug, false)) {
-      tools.push({
-        name: `share_link_${slug}`,
-        description: `Mint an anonymous, expiring share link for one ${def.name} document. Anyone with the URL can open it — no account needed. READ-ONLY by default; pass \`review\` for a review link whose holders can also comment. Expiry is required and clamped to 30 days.`,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', description: 'the document id to share' },
-            expiresAt: {
-              type: 'string',
-              description: 'REQUIRED ISO-8601 expiry (clamped to 30 days out)',
-            },
-            password: {
-              type: 'string',
-              description: 'optional password to require before the link opens (min 8 characters)',
-            },
-            label: { type: 'string', description: 'optional human label shown in the Share panel' },
-            review: {
-              type: 'object',
-              description:
-                'optional — make this a REVIEW link: whoever opens it can also comment on the document (needs your `comment` permission as well as `share_link`). Omit for a read-only link.',
-              properties: {
-                mode: {
-                  type: 'string',
-                  enum: ['group', 'individual'],
-                  description: "'group' (default): reviewers on group links see each other's comments. 'individual': each reviewer sees only their own.",
-                },
-                reviewer: {
-                  type: 'string',
-                  description: 'name the one person this link is for; omit for an open link where each reviewer types their name',
-                },
-              },
-            },
-          },
-          required: ['id', 'expiresAt'],
-        },
-        handler: async (args) => {
-          // Validation, the 30-day clamp and the review rules all live in
-          // mintApiShareLink() — ONE implementation for this tool and REST.
-          const { token, ...link } = await mintApiShareLink(
-            db,
-            principal,
-            {
-              collection: slug,
-              documentId: String(args.id ?? ''),
-              expiresAt: args.expiresAt,
-              password: args.password,
-              label: args.label,
-              review: args.review,
-            },
-            ctx.secret ?? '',
-            now(),
-          );
-          // The plaintext token intentionally enters the agent's context — that
-          // IS the capability; it stays revocable from the Share panel/matrix.
-          return { grantId: link.grantId, url: `${baseUrl}/s/${token}`, expiresAt: link.expiresAt, hasPassword: link.hasPassword, label: link.label, review: link.review };
-        },
-      });
-    }
+    throw new McpToolError(
+      new BadRequestError(`${spec.name} does not apply to '${slug}': it has no ${spec.needs?.label}.`),
+      { available },
+    );
+  };
+
+  for (const spec of specs) {
+    if (!documentCollections.some((d) => appliesTo(spec, d))) continue;
+    tools.push({
+      name: spec.name,
+      description: spec.description,
+      inputSchema: {
+        type: 'object',
+        properties: { collection: COLLECTION_ARG, ...spec.properties },
+        required: ['collection', ...(spec.required ?? [])],
+      },
+      handler: async (args) => spec.run(resolveCollection(spec, args.collection), args),
+    });
   }
+
+  // Collection discovery. `list_collections` is the map an agent starts from;
+  // `describe_collection` is what the per-collection tool schemas used to carry.
+  const actionsOn = (def: CollectionDefinition) => ACTIONS.filter((a) => can(a, def));
+  const view = (def: CollectionDefinition) =>
+    discoverable.internals ? def : collectionsService.toPublicView(def);
+  tools.unshift(
+    {
+      name: 'list_collections',
+      description:
+        'List the collections (content types) on this server: slug, name, fields, and `actions` — what you ' +
+        'may do in each. Pass a slug as `collection` to the document tools; describe_collection returns ' +
+        "one collection's full detail.",
+      inputSchema: { type: 'object', properties: {} },
+      // SEC-5: discovery is public but projected — and compact for everyone here:
+      // this is the first call of every session, so definitions stay in describe.
+      handler: async () =>
+        discoverable.defs.map((d) => ({ ...collectionsService.toPublicView(d), actions: actionsOn(d) })),
+    },
+    {
+      name: 'describe_collection',
+      description:
+        'Everything needed to work with one collection: its fields, the document tools that apply to it for ' +
+        'you (`tools`), and — where you may write — `dataSchema`, the JSON Schema of the `data` argument of ' +
+        'create_document / update_document. Also the indexed fields you can filter and sort on, and the ' +
+        'text `renders` get_document offers.',
+      inputSchema: {
+        type: 'object',
+        properties: { collection: COLLECTION_ARG },
+        required: ['collection'],
+      },
+      handler: async (args) => {
+        const slug = typeof args.collection === 'string' ? args.collection : '';
+        const def = collections.find((d) => d.slug === slug);
+        if (!def || !isKnown(def)) {
+          throw unavailable(slug, collections.filter(isKnown).map((d) => d.slug));
+        }
+        return {
+          ...view(def),
+          actions: actionsOn(def),
+          tools: toolsOn(def),
+          lifecycle: hasLifecycle(def),
+          publicRead: def.access?.publicRead === true,
+          ...(can('read', def)
+            ? {
+                indexedFields: def.fields.filter((f) => f.index).map((f) => f.key),
+                renders: [
+                  ...rendersFor(def.template),
+                  ...(annotatable.test(def) && canSeeReview(def) ? ['review'] : []),
+                ],
+              }
+            : {}),
+          // The same callers who saw this schema on `create_<slug>` / `update_<slug>`.
+          ...(can('create', def) || can('update', def) ? { dataSchema: docInputSchema(def) } : {}),
+        };
+      },
+    },
+  );
 
   // Media upload (D34): base64 over JSON-RPC, riding the SAME service (MIME
   // sniff, 25 MiB cap, alt-required) and the SAME 'upload' rate bucket as REST.
@@ -1044,10 +1273,5 @@ export async function buildToolsForPrincipal(
       }),
   });
 
-  // Tool names are the dispatch key: where two collide (a collection whose
-  // generated tools repeat an earlier name), the FIRST registered wins and the
-  // rest are dropped, so `tools/list` never advertises a tool `tools/call`
-  // would not reach.
-  const seen = new Set<string>();
-  return tools.filter((t) => !seen.has(t.name) && seen.add(t.name));
+  return tools;
 }

@@ -17,7 +17,13 @@
 3. **Admin list view** — columns, cell renderers, sort/filter
 4. **Admin edit form** — composed field edit components
 5. **REST API** — endpoints + OpenAPI schemas
-6. **MCP tools** — per-collection tools with JSON Schema inputs
+6. **MCP tools** — a FIXED set of document tools that each take a `collection` (D65); the
+   definition drives what they accept and return for it — validation, the `data` JSON Schema that
+   `describe_collection` returns, filters, renders, and which tools apply
+
+Surface 6 has the shape of surface 5: REST has one set of routes under `/api/c/:collection` plus a
+generated OpenAPI document; MCP has one set of tools plus `describe_collection`. Neither grows
+with the number of collections.
 
 A change that serves one surface but breaks generation for another is wrong. Review any change to the
 FieldType contract against all six surfaces before merging.
@@ -41,8 +47,9 @@ FieldType contract against all six surfaces before merging.
 - **Lifecycle modes (B4).** `workflow` has three states: `{draftPublish: true}` (authored content —
   born draft, explicit publish step), absent/default (born published, publish/unpublish available),
   and `{lifecycle: 'none'}` (record-like data — born published, and the status column, status
-  filter, publish button, `publish_<slug>` tool, and OpenAPI publish path are ALL suppressed;
-  `setPublished` 400s). This is a **visibility opt-out, not a status removal**: `documents.status`
+  filter, publish button, MCP `publish_document` on that collection, and OpenAPI publish path are
+  ALL suppressed; `setPublished` 400s). This is a **visibility opt-out, not a status removal**:
+  `documents.status`
   stays load-bearing in the access layer (the `published` condition, publicRead sugar), which is
   exactly why lifecycle-none docs must be born published. Gate on `hasLifecycle(def)`
   (`src/lib/lifecycle.ts`) — never re-derive the rule. `none` + `draftPublish` is rejected on write.
@@ -80,11 +87,12 @@ FieldType contract against all six surfaces before merging.
 - **Text renders (D47).** Beside the HTML templates, a template key can declare named TEXT renders
   (`src/templates/renders.ts` — pure, import-light, no JSX): role-tailored, token-budgeted markdown
   views of a document (the `warp` template ships `reviewer`/`implementer`). A derived surface riding
-  the existing `read` action — exposed as `render`/`budget` args on generated `get_<slug>` MCP tools
-  and `?render=` on the REST document GET, advertised ONLY where the template declares renders (the
-  enum derives from code, so schema drift is impossible). Tailoring is by ROLE + BUDGET, never model
-  vendor. The `renderDocumentText` service validates the render name against code metadata BEFORE the
-  document read (no existence oracle). See TECH_DECISIONS D47.
+  the existing `read` action — exposed as `render`/`budget` args on the MCP `get_document` tool and
+  `?render=` on the REST document GET. The render names are advertised ONLY where the template
+  declares them — in `describe_collection`'s `renders` and the OpenAPI param enum, both derived
+  from code, so schema drift is impossible. Tailoring is by ROLE + BUDGET, never model vendor. The
+  `renderDocumentText` service validates the render name against code metadata BEFORE the document
+  read (no existence oracle). See TECH_DECISIONS D47.
 - **Explicit slot binding (`bind`, D42).** When convention would guess wrong (an `author` text field
   winning the dek slot), the optional `bind` key pins the scalar slots explicitly:
   `{ title?, hero?, lead? }` → field keys. CLOSED shape (strictObject, the workflow/access posture);
@@ -128,7 +136,7 @@ interface FieldType<Config, Value> {
   CellComponent?: FC<FieldCellProps<Value>>          // (3) list-view cell (fallback: text render)
   ViewComponent?: FC<FieldViewProps<Config, Value>>  // read-only detail/public render (C1, D23);
                                                      // fallback: SAFE ESCAPED TEXT
-  jsonSchema: (cfg: Config) => JSONSchema            // (5) OpenAPI + (6) MCP input schemas
+  jsonSchema: (cfg: Config) => JSONSchema            // (5) OpenAPI + (6) the MCP `data` schema
 }
 ```
 
@@ -142,7 +150,7 @@ Rules:
   `toIndex`, which may truncate (markdown/html store a 200-char lead-in). Implement it on any type
   whose `toIndex` truncates or that carries prose; types without it fall back to their `toIndex`
   string output. Search indexing ignores `index: true` — every field with text is searchable
-  (`?q=`/`search_<slug>` — FTS is its own surface, DATABASE_STANDARDS.md).
+  (`?q=`/`search_documents` — FTS is its own surface, DATABASE_STANDARDS.md).
 - **Multi-valued indexing:** a type whose `toIndex` may return an array MUST declare it via
   `multiValued(cfg)`. The engine writes one `document_index` row per element (each independently
   filterable — filter matches ANY element — and reverse-lookupable for backlinks), and enforces

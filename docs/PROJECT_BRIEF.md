@@ -75,7 +75,7 @@ agent-bolted-on.
 | 3 | Admin list view (columns, cells) | field `CellComponent` + `showInList` |
 | 4 | Admin edit form (widgets) | field `EditComponent` |
 | 5 | REST API + OpenAPI | field `jsonSchema` |
-| 6 | MCP tools | field `jsonSchema` + collection labels |
+| 6 | MCP tools (a fixed set that takes `collection`, D65) | field `jsonSchema` → the `data` schema `describe_collection` returns |
 
 Track C adds a **render seam** to the same contract: an optional field `ViewComponent` (default: safe
 escaped text) drives read-only detail views and the public HTML pages — the seventh consumer of the
@@ -93,7 +93,7 @@ scope-masked tokens — scopable per collection × action from the admin.
 Authorization is **default-deny, additive-only**: data-defined **roles** (RBAC, scoped assignments, a
 tiny closed condition enum — custom roles manageable in the admin) plus per-document **item grants**
 with optional expiry, managed from each document's Share panel (admin, REST `/grants`, MCP
-`share_<slug>`). One decision point (`authorize()`), enforced by witness types and SQL-compiled list
+`share_document`). One decision point (`authorize()`), enforced by witness types and SQL-compiled list
 filters so bypass is a compile error and paginated lists can't leak. The consolidated matrix at
 `/admin/access/matrix` shows effective permissions (principal × collection), token scopes, and active
 item grants. Everything — every allow and every deny — is audited with principal, token, and surface.
@@ -113,9 +113,9 @@ item grants. Everything — every allow and every deny — is audited with princ
   public pages at `/{collection}/{slug}` (+ the admin read-only detail view), share links
   (`item_grants` with `subjectKind='link'`, public `/s/:token`).
 - **Tier 1 platform completion (Phases 1–4): shipped** — full-text search (FTS5, bm25-ranked, with
-  REST `?q=` + operator filters and MCP `search_<slug>` tool), recoverable delete (trash snapshot,
-  30-day purge, scheduled Worker jobs), MCP content parity (`upload_media`, `revisions_<slug>`,
-  `restore_<slug>`), and audit surfacing (`/admin/activity`, `/api/audit`, MCP `list_audit`). Agents
+  REST `?q=` + operator filters and the MCP `search_documents` tool), recoverable delete (trash
+  snapshot, 30-day purge, scheduled Worker jobs), MCP content parity (`upload_media`,
+  `list_revisions`, `restore_revision`), and audit surfacing (`/admin/activity`, `/api/audit`, MCP `list_audit`). Agents
   over MCP now have full parity with non-technical admins for all content operations; access-management
   mutations remain deliberately human-only.
 - **Sharing fabric v2 (shipped before Tier 1)** — teams as a fourth grant subject kind + multi-use
@@ -131,7 +131,7 @@ item grants. Everything — every allow and every deny — is audited with princ
   media picker, progressive enhancement over `data-bind` carriers; implements D13, supersedes D12/Uppy),
   revision diff viewer, and bulk list actions via one native form with per-item authorize/audit/events (D39).
 - **Multi-model context bus (D47): shipped** — text renders (`renderDocumentText` service,
-  per-template named markdown views exposed via MCP `get_<slug>` `render`/`budget` args and REST
+  per-template named markdown views exposed via MCP `get_document` `render`/`budget` args and REST
   `?render=` → `text/markdown`; role-first section ordering with token-budget truncation) and the
   collab pack (six packs total: blog/changelog/portfolio/docs/prompts/collab; collab is the first
   multi-collection pack — three private lifecycle-none collections `tasks`/`warps`/`decisions` with

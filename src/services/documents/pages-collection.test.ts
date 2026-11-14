@@ -164,12 +164,10 @@ describe('access.defaultVisibility + reserved slugs (D62)', () => {
     expect((await docs.getDocument(db, admin, 'open', open.id, NOW)).visibility).toBe('public');
   });
 
-  it("refuses to CREATE a collection whose tools would shadow a static one ('page' → publish_page)", async () => {
-    await expect(
-      collectionsService.createCollection(db, admin, { ...NOTES, slug: 'page' }, NOW),
-    ).rejects.toBeInstanceOf(InputValidationError);
-    // …but validation alone (the update path) still accepts the slug, so an
-    // install that already has one is not locked out of editing it.
-    expect(() => collectionsService.validateDefinition({ ...NOTES, slug: 'page' })).not.toThrow();
+  it("accepts a collection named 'page' — no MCP tool is named after a slug any more (D65)", async () => {
+    // Before D65 this slug was refused on create: its generated `publish_page`
+    // would have shadowed the static tool of that name.
+    const created = await collectionsService.createCollection(db, admin, { ...NOTES, slug: 'page' }, NOW);
+    expect(created.slug).toBe('page');
   });
 });

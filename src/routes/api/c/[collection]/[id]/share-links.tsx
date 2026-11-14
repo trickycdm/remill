@@ -35,7 +35,7 @@ export const onRequestGet = factory.createHandlers(async (c) => {
  * `{ expiresAt, password?, label?, review?: { mode?, reviewer? } }`. Read-only
  * by default; `review` makes it a review link whose holders can also comment
  * (D61). `expiresAt` is required and clamped to 30 days. The rules live in
- * `mintApiShareLink` — the same function the MCP `share_link_<slug>` tool calls.
+ * `mintApiShareLink` — the same function the MCP `create_share_link` tool calls.
  */
 export const onRequestPost = factory.createHandlers(async (c) => {
   const now = nowIso();

@@ -21,7 +21,7 @@ const POSTS: CollectionDefinition = {
   access: { publicRead: true },
 };
 
-describe('MCP server — generated, permission-filtered tools (Phase 7)', () => {
+describe('MCP server — a fixed, permission-filtered tool set (Phase 7, D65)', () => {
   let db: Database;
   let env: { DB: D1Database; MEDIA: R2Bucket; SESSION_SECRET: string; BASE_URL: string };
   let admin: Principal;
@@ -42,6 +42,14 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
   }
   const toolNames = (listResult: { body: { result: { tools: { name: string }[] } } }) =>
     listResult.body.result.tools.map((t) => t.name);
+  /** `describe_collection` as JSON — `tools` is the document tools that apply to
+   *  that collection for this token (what a per-collection tool list used to say). */
+  async function describeCollection(token: string, collection: string) {
+    const r = await mcp(token, 'tools/call', { name: 'describe_collection', arguments: { collection } });
+    return JSON.parse(r.body.result.content[0].text) as { tools?: string[]; renders?: string[] };
+  }
+  const toolsOn = async (token: string, collection: string) =>
+    (await describeCollection(token, collection)).tools ?? [];
 
   async function tokenFor(name: string, role: string) {
     const pid = await access.createAgent(db, admin, name, NOW);
@@ -75,32 +83,39 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(r.body.result.capabilities.tools).toBeTruthy();
   });
 
-  it('tools are generated per collection and intersected with permissions', async () => {
+  it('document tools are one fixed set, intersected with permissions', async () => {
     const editor = toolNames(await mcp(editorToken, 'tools/list'));
     expect(editor).toEqual(
       expect.arrayContaining([
-        'list_posts',
-        'get_posts',
-        'create_posts',
-        'update_posts',
-        'publish_posts',
+        'list_documents',
+        'get_document',
+        'create_document',
+        'update_document',
+        'publish_document',
       ]),
     );
+    // No tool is named after a collection (D65).
+    expect(editor.filter((n) => n.endsWith('_posts'))).toEqual([]);
 
     // An author sees create/update but NOT publish, and NOT schema management.
     const author = toolNames(await mcp(authorToken, 'tools/list'));
-    expect(author).toContain('create_posts');
-    expect(author).not.toContain('publish_posts');
+    expect(author).toContain('create_document');
+    expect(author).not.toContain('publish_document');
     expect(author).not.toContain('create_collection');
 
     // A reader sees only read tools.
     const reader = toolNames(await mcp(readerToken, 'tools/list'));
-    expect(reader).toEqual(expect.arrayContaining(['list_posts', 'get_posts']));
-    expect(reader).not.toContain('create_posts');
+    expect(reader).toEqual(expect.arrayContaining(['list_documents', 'get_document']));
+    expect(reader).not.toContain('create_document');
 
     // An admin (schema rights) sees create_collection.
     // (admin has no token here; verify via editor lacking it and the tool existing for manage_schema)
     expect(editor).not.toContain('create_collection'); // editor lacks manage_schema
+
+    // Per collection, describe_collection names the tools that apply.
+    expect(await toolsOn(authorToken, 'posts')).toEqual(expect.arrayContaining(['create_document', 'update_document']));
+    expect(await toolsOn(authorToken, 'posts')).not.toContain('publish_document');
+    expect(await toolsOn(readerToken, 'posts')).not.toContain('create_document');
   });
 
   it('D64: a builder agent manages schema; the definition schema and result guide it', async () => {
@@ -127,7 +142,7 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(select.required).toContain('config');
     expect(def.properties.template.enum).toContain('article');
 
-    // The result names the tools the new collection brought (and only those).
+    // The result says the collection is usable at once; no tool appears (D65).
     const created = await mcp(builderToken, 'tools/call', {
       name: 'create_collection',
       arguments: {
@@ -145,18 +160,19 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(created.body.result.isError).toBeFalsy();
     const payload = JSON.parse(created.body.result.content[0].text);
     expect(payload.slug).toBe('reading-list');
-    expect(payload.newTools).toEqual(expect.arrayContaining(['create_reading-list', 'list_reading-list']));
-    expect(payload.newTools).not.toContain('create_posts');
-    expect(payload.note).toMatch(/reconnect/);
+    expect(payload.newTools).toBeUndefined();
+    expect(payload.note).toContain('collection: "reading-list"');
+    expect(toolNames(await mcp(builderToken, 'tools/list'))).toEqual(names);
+    expect(await toolsOn(builderToken, 'reading-list')).toContain('create_document');
 
     // install_pack reports the same way.
     const installed = await mcp(builderToken, 'tools/call', { name: 'install_pack', arguments: { pack: 'blog' } });
     const pack = JSON.parse(installed.body.result.content[0].text);
     expect(pack.collections.map((c: { slug: string }) => c.slug)).toEqual(['articles']);
-    expect(pack.newTools).toContain('create_articles');
+    expect(pack.note).toContain('collection: "articles"');
   });
 
-  it('an agent can create a collection and documents through generated tools', async () => {
+  it('an agent can create a collection and fill it in the same session', async () => {
     const adminToken = await tokenFor('admin-bot', 'admin');
     const created = await mcp(adminToken, 'tools/call', {
       name: 'create_collection',
@@ -171,36 +187,33 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     });
     expect(created.body.result.isError).toBeFalsy();
 
-    // The new collection's tools now exist for this principal.
-    const names = toolNames(await mcp(adminToken, 'tools/list'));
-    expect(names).toContain('create_notes');
-
+    // No re-list, no reconnect: the document tools take the new slug at once.
     const doc = await mcp(adminToken, 'tools/call', {
-      name: 'create_notes',
-      arguments: { body: 'first note' },
+      name: 'create_document',
+      arguments: { collection: 'notes', data: { body: 'first note' } },
     });
     const payload = JSON.parse(doc.body.result.content[0].text);
     expect(payload.data.body).toBe('first note');
   });
 
-  it('D54: update_<slug> with a stale expectedRevision is an isError STALE_REVISION result', async () => {
+  it('D54: update_document with a stale expectedRevision is an isError STALE_REVISION result', async () => {
     const call = async (name: string, args: object) => {
       const r = await mcp(editorToken, 'tools/call', { name, arguments: args });
       return { isError: r.body.result.isError, payload: JSON.parse(r.body.result.content[0].text) };
     };
-    const created = await call('create_posts', { title: 'Agent draft' });
+    const created = await call('create_document', { collection: 'posts', data: { title: 'Agent draft' } });
     const id = created.payload.id;
     expect(created.payload.revision).toBe(1);
 
-    const ok = await call('update_posts', { id, title: 'Agent v2', expectedRevision: 1 });
+    const ok = await call('update_document', { collection: 'posts', id, data: { title: 'Agent v2' }, expectedRevision: 1 });
     expect(ok.isError).toBeFalsy();
     expect(ok.payload.revision).toBe(2);
 
-    const stale = await call('update_posts', { id, title: 'Agent stale', expectedRevision: 1 });
+    const stale = await call('update_document', { collection: 'posts', id, data: { title: 'Agent stale' }, expectedRevision: 1 });
     expect(stale.isError).toBe(true);
     expect(stale.payload.code).toBe('STALE_REVISION');
 
-    const got = await call('get_posts', { id });
+    const got = await call('get_document', { collection: 'posts', id });
     expect(got.payload.data.title).toBe('Agent v2');
   });
 
@@ -227,14 +240,18 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     const json = async (name: string, args: object) => JSON.parse((await rpc(editorToken, name, args)).text);
 
     // Tools exist for a commenter on an annotatable collection, not for a reader.
-    expect(toolNames(await mcp(editorToken, 'tools/list'))).toEqual(
-      expect.arrayContaining(['comments_reports', 'comment_reports', 'reply_comment_reports', 'resolve_comment_reports']),
+    expect(await toolsOn(editorToken, 'reports')).toEqual(
+      expect.arrayContaining(['list_comments', 'add_comment', 'reply_comment', 'resolve_comment']),
     );
-    expect(toolNames(await mcp(readerToken, 'tools/list'))).not.toContain('comment_reports');
-    expect(toolNames(await mcp(editorToken, 'tools/list'))).not.toContain('comment_posts'); // no annotatable field
+    expect(await toolsOn(readerToken, 'reports')).not.toContain('add_comment');
+    expect(await toolsOn(editorToken, 'posts')).not.toContain('add_comment'); // no annotatable field
 
-    const doc = await json('create_reports', { title: 'Q3', page: '<p>Revenue grew 12% in Q3.</p>' });
-    const thread = await json('comment_reports', {
+    const doc = await json('create_document', {
+      collection: 'reports',
+      data: { title: 'Q3', page: '<p>Revenue grew 12% in Q3.</p>' },
+    });
+    const thread = await json('add_comment', {
+      collection: 'reports',
       id: doc.id,
       quote: 'grew 12%',
       body: 'Cite the source',
@@ -242,30 +259,32 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     });
     expect(thread.root.anchor).toMatchObject({ kind: 'text', field: 'page', quote: 'grew 12%' });
 
-    const brief = await rpc(editorToken, 'get_reports', { id: doc.id, render: 'review' });
+    const brief = await rpc(editorToken, 'get_document', { collection: 'reports', id: doc.id, render: 'review' });
     expect(brief.isError).toBe(false);
     expect(brief.text).toContain('# Review: Q3');
     expect(brief.text).toContain('{==grew 12%==}');
     expect(brief.text).toContain(`threadId: ${thread.root.id}`);
 
     // A bad thread id fails the whole call BEFORE the save.
-    const bad = await rpc(editorToken, 'update_reports', {
+    const bad = await rpc(editorToken, 'update_document', {
+      collection: 'reports',
       id: doc.id,
       expectedRevision: 1,
-      page: '<p>Revenue grew 12% in Q3 (source: finance).</p>',
+      data: { page: '<p>Revenue grew 12% in Q3 (source: finance).</p>' },
       resolves: ['cmt_nope'],
     });
     expect(bad.isError).toBe(true);
-    expect((await json('get_reports', { id: doc.id })).revision).toBe(1);
+    expect((await json('get_document', { collection: 'reports', id: doc.id })).revision).toBe(1);
 
-    const saved = await json('update_reports', {
+    const saved = await json('update_document', {
+      collection: 'reports',
       id: doc.id,
       expectedRevision: 1,
-      page: '<p>Revenue grew 12% in Q3 (source: finance).</p>',
+      data: { page: '<p>Revenue grew 12% in Q3 (source: finance).</p>' },
       resolves: [thread.root.id],
     });
     expect(saved).toMatchObject({ revision: 2, resolvedThreads: [thread.root.id] });
-    const [after] = await json('comments_reports', { id: doc.id });
+    const [after] = await json('list_comments', { collection: 'reports', id: doc.id });
     expect(after.root).toMatchObject({ status: 'resolved', resolvedRevision: 2 });
   });
 
@@ -308,31 +327,49 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
       return { isError: r.body.result.isError === true, text: r.body.result.content[0].text as string };
     };
 
-    const tools = toolNames(await mcp(fixerToken, 'tools/list'));
-    expect(tools).toEqual(expect.arrayContaining(['comments_reports', 'resolve_comment_reports', 'whoami']));
-    expect(tools).not.toContain('comment_reports');
-    expect(tools).not.toContain('reply_comment_reports');
-    const getTool = (await mcp(fixerToken, 'tools/list')).body.result.tools.find(
-      (t: { name: string }) => t.name === 'get_reports',
-    );
-    expect(getTool.inputSchema.properties.render.enum).toContain('review');
+    // Nobody on this token may comment anywhere, so the posting tools are not listed at all.
+    const listed = toolNames(await mcp(fixerToken, 'tools/list'));
+    expect(listed).toEqual(expect.arrayContaining(['list_comments', 'resolve_comment', 'whoami']));
+    expect(listed).not.toContain('add_comment');
+    expect(listed).not.toContain('reply_comment');
+    const described = await describeCollection(fixerToken, 'reports');
+    expect(described.tools).toEqual(expect.arrayContaining(['list_comments', 'resolve_comment']));
+    expect(described.renders).toContain('review');
 
-    const doc = JSON.parse((await call(fixerToken, 'create_reports', { title: 'Q3', page: '<p>Revenue grew 12% in Q3.</p>' })).text);
+    const doc = JSON.parse(
+      (
+        await call(fixerToken, 'create_document', {
+          collection: 'reports',
+          data: { title: 'Q3', page: '<p>Revenue grew 12% in Q3.</p>' },
+        })
+      ).text,
+    );
     const thread = JSON.parse(
-      (await call(editorToken, 'comment_reports', { id: doc.id, quote: 'grew 12%', body: 'Cite the source', intent: 'must_fix' })).text,
+      (
+        await call(editorToken, 'add_comment', {
+          collection: 'reports',
+          id: doc.id,
+          quote: 'grew 12%',
+          body: 'Cite the source',
+          intent: 'must_fix',
+        })
+      ).text,
     );
 
-    const [seen] = JSON.parse((await call(fixerToken, 'comments_reports', { id: doc.id })).text);
+    const [seen] = JSON.parse((await call(fixerToken, 'list_comments', { collection: 'reports', id: doc.id })).text);
     expect(seen.root).toMatchObject({ body: 'Cite the source', intent: 'must_fix', author: { kind: 'principal' } });
     expect(seen.root.createdAt).toBeTruthy();
-    expect((await call(fixerToken, 'get_reports', { id: doc.id, render: 'review' })).text).toContain('Cite the source');
+    expect(
+      (await call(fixerToken, 'get_document', { collection: 'reports', id: doc.id, render: 'review' })).text,
+    ).toContain('Cite the source');
 
     const saved = JSON.parse(
       (
-        await call(fixerToken, 'update_reports', {
+        await call(fixerToken, 'update_document', {
+          collection: 'reports',
           id: doc.id,
           expectedRevision: 1,
-          page: '<p>Revenue grew 12% in Q3 (source: finance).</p>',
+          data: { page: '<p>Revenue grew 12% in Q3 (source: finance).</p>' },
           resolves: [thread.root.id],
         })
       ).text,
@@ -340,7 +377,8 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(saved).toMatchObject({ revision: 2, resolvedThreads: [thread.root.id] });
 
     // Readers still can't see review threads at all.
-    expect(toolNames(await mcp(readerToken, 'tools/list'))).not.toContain('comments_reports');
+    expect(await toolsOn(readerToken, 'reports')).not.toContain('list_comments');
+    expect(toolNames(await mcp(readerToken, 'tools/list'))).not.toContain('list_comments');
   });
 
   it('whoami: an agent can see its own identity, roles, permissions and token scope', async () => {
@@ -392,7 +430,7 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     });
     expect(denied.body.result.isError).toBe(true);
 
-    // The headline agent flow: list_packs → install_pack → create_articles.
+    // The headline agent flow: list_packs → install_pack → create_document.
     const adminToken = await tokenFor('admin-bot', 'admin');
     const installed = await mcp(adminToken, 'tools/call', {
       name: 'install_pack',
@@ -400,11 +438,13 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     });
     expect(installed.body.result.isError).toBeFalsy();
 
-    const names = toolNames(await mcp(adminToken, 'tools/list'));
-    expect(names).toContain('create_articles');
+    expect(JSON.parse(installed.body.result.content[0].text).note).toContain('collection: "articles"');
     const doc = await mcp(adminToken, 'tools/call', {
-      name: 'create_articles',
-      arguments: { title: 'First post', body: 'Written into a pack-installed collection.' },
+      name: 'create_document',
+      arguments: {
+        collection: 'articles',
+        data: { title: 'First post', body: 'Written into a pack-installed collection.' },
+      },
     });
     expect(doc.body.result.isError).toBeFalsy();
 
@@ -421,7 +461,7 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(again.body.result.isError).toBe(true);
   });
 
-  it('D47 collab + text renders: render args advertised only where declared; markdown comes back literal', async () => {
+  it('D47 collab + text renders: renders described only where declared; markdown comes back literal', async () => {
     const adminToken = await tokenFor('collab-admin', 'admin');
     const installed = await mcp(adminToken, 'tools/call', {
       name: 'install_pack',
@@ -429,53 +469,56 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     });
     expect(installed.body.result.isError).toBeFalsy();
 
-    // Render-declaring templates ('warp') advertise their renders; any collection
+    // Render-declaring templates ('warp') describe their renders; any collection
     // with annotatable fields adds `review` (D55) for principals who may comment.
     // `posts` here has only a text field — nothing to render.
-    type ToolRow = {
-      name: string;
-      inputSchema: { properties: Record<string, { enum?: string[] } | undefined> };
-    };
-    const tools = (await mcp(adminToken, 'tools/list')).body.result.tools as ToolRow[];
-    expect(tools.find((t) => t.name === 'get_warps')?.inputSchema.properties.render?.enum).toEqual(
-      ['reviewer', 'implementer', 'review'],
-    );
-    expect(tools.find((t) => t.name === 'get_posts')?.inputSchema.properties.render).toBeUndefined();
+    expect((await describeCollection(adminToken, 'warps')).renders).toEqual(['reviewer', 'implementer', 'review']);
+    expect((await describeCollection(adminToken, 'posts')).renders).toEqual([]);
     // lifecycle:'none' working data — no publish ceremony offered.
-    expect(tools.map((t) => t.name)).not.toContain('publish_tasks');
+    expect(await toolsOn(adminToken, 'tasks')).not.toContain('publish_document');
+    expect(await toolsOn(adminToken, 'posts')).toContain('publish_document');
 
     const task = await mcp(adminToken, 'tools/call', {
-      name: 'create_tasks',
-      arguments: { title: 'CSV export', goal: 'Ship the export.', stage: 'building' },
+      name: 'create_document',
+      arguments: {
+        collection: 'tasks',
+        data: { title: 'CSV export', goal: 'Ship the export.', stage: 'building' },
+      },
     });
     const taskId = JSON.parse(task.body.result.content[0].text).id as string;
 
     // The 422 beat: a lazy warp (no open questions) is rejected at write time.
     const lazy = await mcp(adminToken, 'tools/call', {
-      name: 'create_warps',
-      arguments: { title: 'Lazy', task: taskId, state: 'stuff', next_action: 'more stuff' },
+      name: 'create_document',
+      arguments: {
+        collection: 'warps',
+        data: { title: 'Lazy', task: taskId, state: 'stuff', next_action: 'more stuff' },
+      },
     });
     expect(lazy.body.result.isError).toBe(true);
     expect(lazy.body.result.content[0].text).toContain('open_questions');
 
     const warp = await mcp(adminToken, 'tools/call', {
-      name: 'create_warps',
+      name: 'create_document',
       arguments: {
-        title: 'Session 1',
-        task: taskId,
-        written_as: 'implementer',
-        state: 'Streaming export works on the happy path.',
-        open_questions: '- viewer locale or invoice locale?',
-        next_action: 'Wire the UI button.',
-        code: { branch: 'feat/csv-export' },
+        collection: 'warps',
+        data: {
+          title: 'Session 1',
+          task: taskId,
+          written_as: 'implementer',
+          state: 'Streaming export works on the happy path.',
+          open_questions: '- viewer locale or invoice locale?',
+          next_action: 'Wire the UI button.',
+          code: { branch: 'feat/csv-export' },
+        },
       },
     });
     const warpId = JSON.parse(warp.body.result.content[0].text).id as string;
 
     // A render comes back as LITERAL markdown — no JSON quoting (D47 passthrough).
     const rendered = await mcp(adminToken, 'tools/call', {
-      name: 'get_warps',
-      arguments: { id: warpId, render: 'implementer', budget: 500 },
+      name: 'get_document',
+      arguments: { collection: 'warps', id: warpId, render: 'implementer', budget: 500 },
     });
     const text = rendered.body.result.content[0].text as string;
     expect(text.startsWith('# Session 1')).toBe(true);
@@ -484,54 +527,69 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
 
     // Unknown render → structured 422 listing what IS available.
     const bad = await mcp(adminToken, 'tools/call', {
-      name: 'get_warps',
-      arguments: { id: warpId, render: 'bogus' },
+      name: 'get_document',
+      arguments: { collection: 'warps', id: warpId, render: 'bogus' },
     });
     expect(bad.body.result.isError).toBe(true);
     expect(bad.body.result.content[0].text).toContain('reviewer, implementer');
 
     // Without `render`, the plain JSON read is unchanged.
     const plain = await mcp(adminToken, 'tools/call', {
-      name: 'get_warps',
-      arguments: { id: warpId },
+      name: 'get_document',
+      arguments: { collection: 'warps', id: warpId },
     });
     expect(JSON.parse(plain.body.result.content[0].text).id).toBe(warpId);
   });
 
-  it('D50: visibility_<slug> — gated like publish (editor yes, reader no), happy path, and 403 audited', async () => {
-    const editor = toolNames(await mcp(editorToken, 'tools/list'));
-    expect(editor).toContain('visibility_posts');
-    const reader = toolNames(await mcp(readerToken, 'tools/list'));
-    expect(reader).not.toContain('visibility_posts');
+  it('D50: set_visibility — gated like publish (editor yes, reader no) and to public collections', async () => {
+    expect(await toolsOn(editorToken, 'posts')).toContain('set_visibility');
+    expect(await toolsOn(readerToken, 'posts')).not.toContain('set_visibility');
+    expect(toolNames(await mcp(readerToken, 'tools/list'))).not.toContain('set_visibility');
 
     const create = await mcp(editorToken, 'tools/call', {
-      name: 'create_posts',
-      arguments: { title: 'Visible or not' },
+      name: 'create_document',
+      arguments: { collection: 'posts', data: { title: 'Visible or not' } },
     });
     const doc = JSON.parse(create.body.result.content[0].text);
 
     const set = await mcp(editorToken, 'tools/call', {
-      name: 'visibility_posts',
-      arguments: { id: doc.id, visibility: 'unlisted' },
+      name: 'set_visibility',
+      arguments: { collection: 'posts', id: doc.id, visibility: 'unlisted' },
     });
     expect(set.body.result.isError).toBeFalsy();
     const updated = JSON.parse(set.body.result.content[0].text);
     expect(updated.visibility).toBe('unlisted');
 
     // Calling it isn't even discoverable for a reader — refused without a
-    // service call (same discovery-time denial shape as publish_posts).
+    // service call (same discovery-time denial shape as publish_document).
     const denied = await mcp(readerToken, 'tools/call', {
-      name: 'visibility_posts',
-      arguments: { id: doc.id, visibility: 'private' },
+      name: 'set_visibility',
+      arguments: { collection: 'posts', id: doc.id, visibility: 'private' },
     });
     expect(denied.body.result.isError).toBe(true);
+
+    // A collection without public pages has no visibility to set — said plainly.
+    await collectionsService.createCollection(
+      db,
+      admin,
+      { ...POSTS, slug: 'internal', name: 'Internal', access: undefined },
+      NOW,
+    );
+    const inapplicable = await mcp(editorToken, 'tools/call', {
+      name: 'set_visibility',
+      arguments: { collection: 'internal', id: doc.id, visibility: 'private' },
+    });
+    expect(JSON.parse(inapplicable.body.result.content[0].text)).toMatchObject({
+      code: 'BAD_REQUEST',
+      available: ['posts'],
+    });
   });
 
   it('AGENTIC GOVERNANCE: an author drafts but cannot publish — denial is structured and audited', async () => {
-    // Author creates a draft via the generated tool (allowed).
+    // Author creates a draft over MCP (allowed).
     const create = await mcp(authorToken, 'tools/call', {
-      name: 'create_posts',
-      arguments: { title: 'Draft by agent' },
+      name: 'create_document',
+      arguments: { collection: 'posts', data: { title: 'Draft by agent' } },
     });
     const doc = JSON.parse(create.body.result.content[0].text);
     expect(doc.status).toBe('draft');
@@ -539,8 +597,8 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     // The author has no publish tool over MCP — calling it is refused at discovery
     // with a structured FORBIDDEN payload (no service call, so nothing to audit).
     const viaMcp = await mcp(authorToken, 'tools/call', {
-      name: 'publish_posts',
-      arguments: { id: doc.id, publish: true },
+      name: 'publish_document',
+      arguments: { collection: 'posts', id: doc.id, publish: true },
     });
     expect(viaMcp.body.result.isError).toBe(true);
 
@@ -579,10 +637,14 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
 
   it('an unknown/unavailable tool is refused without leaking its existence', async () => {
     const r = await mcp(readerToken, 'tools/call', {
-      name: 'publish_posts',
-      arguments: { id: 'x' },
+      name: 'publish_document',
+      arguments: { collection: 'posts', id: 'x' },
     });
     expect(r.body.result.isError).toBe(true);
+    expect(JSON.parse(r.body.result.content[0].text)).toEqual({
+      error: "Unknown or unavailable tool 'publish_document'",
+      code: 'FORBIDDEN',
+    });
   });
 
   it('D48: anonymous /mcp gets the 401 OAuth challenge (no anonymous surface)', async () => {
@@ -652,18 +714,18 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(await installedFor(maskedToken)).toBe(false);
   });
 
-  it('share_<slug> supports team subjects; list_teams resolves names (manage_access only)', async () => {
+  it('share_document supports team subjects; list_teams resolves names (manage_access only)', async () => {
     const adminToken = await tokenFor('sharer-bot', 'admin');
     const teamId = await access.createTeam(db, admin, { name: 'Tech team' }, NOW);
     const member = await makePrincipal(db, NOW, { id: 'prn_tm', role: 'reader' });
     await access.addTeamMember(db, admin, teamId, member.id, NOW);
 
-    // Visibility: list_teams and share_posts require manage_access.
+    // Visibility: list_teams and share_document require manage_access.
     const adminTools = toolNames(await mcp(adminToken, 'tools/list'));
-    expect(adminTools).toEqual(expect.arrayContaining(['list_teams', 'share_posts']));
+    expect(adminTools).toEqual(expect.arrayContaining(['list_teams', 'share_document']));
     const editorTools = toolNames(await mcp(editorToken, 'tools/list'));
     expect(editorTools).not.toContain('list_teams');
-    expect(editorTools).not.toContain('share_posts');
+    expect(editorTools).not.toContain('share_document');
 
     // The agent resolves "the tech team" by name, then grants it read on a draft.
     const teams = JSON.parse(
@@ -675,14 +737,14 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(teams.find((t) => t.name === 'Tech team')?.id).toBe(teamId);
 
     const draft = await mcp(adminToken, 'tools/call', {
-      name: 'create_posts',
-      arguments: { title: 'Team-shared draft' },
+      name: 'create_document',
+      arguments: { collection: 'posts', data: { title: 'Team-shared draft' } },
     });
     const doc = JSON.parse(draft.body.result.content[0].text);
 
     const grant = await mcp(adminToken, 'tools/call', {
-      name: 'share_posts',
-      arguments: { id: doc.id, subjectKind: 'team', subjectId: teamId, actions: ['read'] },
+      name: 'share_document',
+      arguments: { collection: 'posts', id: doc.id, subjectKind: 'team', subjectId: teamId, actions: ['read'] },
     });
     expect(grant.body.result.isError).toBeFalsy();
 
@@ -692,29 +754,29 @@ describe('MCP server — generated, permission-filtered tools (Phase 7)', () => 
     expect(seen.data.title).toBe('Team-shared draft');
   });
 
-  it('share_link_<slug> (D26): visible only with share_link; mints a clamped, resolvable URL', async () => {
+  it('create_share_link (D26): visible only with share_link; mints a clamped, resolvable URL', async () => {
     // Visibility intersects with the role: editor holds share_link, reader/author do not.
-    expect(toolNames(await mcp(editorToken, 'tools/list'))).toContain('share_link_posts');
-    expect(toolNames(await mcp(readerToken, 'tools/list'))).not.toContain('share_link_posts');
-    expect(toolNames(await mcp(authorToken, 'tools/list'))).not.toContain('share_link_posts');
+    expect(toolNames(await mcp(editorToken, 'tools/list'))).toContain('create_share_link');
+    expect(toolNames(await mcp(readerToken, 'tools/list'))).not.toContain('create_share_link');
+    expect(toolNames(await mcp(authorToken, 'tools/list'))).not.toContain('create_share_link');
 
     const create = await mcp(editorToken, 'tools/call', {
-      name: 'create_posts',
-      arguments: { title: 'Linked from MCP' },
+      name: 'create_document',
+      arguments: { collection: 'posts', data: { title: 'Linked from MCP' } },
     });
     const doc = JSON.parse(create.body.result.content[0].text);
 
     // Missing/garbage expiry is a structured validation error.
     const bad = await mcp(editorToken, 'tools/call', {
-      name: 'share_link_posts',
-      arguments: { id: doc.id, expiresAt: 'soon' },
+      name: 'create_share_link',
+      arguments: { collection: 'posts', id: doc.id, expiresAt: 'soon' },
     });
     expect(bad.body.result.isError).toBe(true);
 
     // A far-future expiry is clamped to ≤ 30 days; the URL uses the threaded base.
     const minted = await mcp(editorToken, 'tools/call', {
-      name: 'share_link_posts',
-      arguments: { id: doc.id, expiresAt: '2036-01-01T00:00:00Z' },
+      name: 'create_share_link',
+      arguments: { collection: 'posts', id: doc.id, expiresAt: '2036-01-01T00:00:00Z' },
     });
     const payload = JSON.parse(minted.body.result.content[0].text) as {
       grantId: string;

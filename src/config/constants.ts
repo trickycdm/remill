@@ -20,10 +20,6 @@ export const PROTECTED_COLLECTIONS = ['settings', 'media', 'pages'] as const;
  *  writes to and the admin's Pages section lists. */
 export const PAGES_COLLECTION = 'pages';
 
-/** Slugs whose GENERATED tool names would shadow a static MCP tool — a
- *  collection `page` would generate `publish_page`. Refused on create only. */
-export const TOOL_RESERVED_COLLECTION_SLUGS = ['page'] as const;
-
 /** URL-reserved collection slugs (C2): the router's static top-level path
  *  segments — a collection named one of these would be shadowed by them on the
  *  public `/:collection/:slug` surface. (`media`/`settings` need no entry: the

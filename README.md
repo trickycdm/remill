@@ -61,7 +61,7 @@ A collection definition is a row of data, not code. Write one and remill derives
 | 3 | **Admin list** | `/admin/c/:collection` with bulk actions, import and export |
 | 4 | **Admin edit form** | Server-rendered with Datastar; one scroll, with a draft preview |
 | 5 | **REST API** | `/api/c/:collection` with bearer tokens, described at `/api/openapi.json` |
-| 6 | **MCP tools** | `create_`, `get_`, `list_`, `search_`, `update_`, `share_` and more, per collection |
+| 6 | **MCP tools** | A fixed set — `create_document`, `get_document`, `list_documents`, `search_documents`, `share_document` and more — that take a `collection`; `describe_collection` returns its schema |
 
 Because collections are data, an agent can define a new content type over MCP and start filling it
 in the same session, with no deploy. The full contract is in
