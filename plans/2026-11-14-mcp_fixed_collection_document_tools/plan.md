@@ -1,5 +1,7 @@
 # MCP: a fixed set of document tools that take a `collection` (D65)
 
+**Status:** shipped in v1.20.0 · 2026-11-14 (PR #61; D65 + D66)
+
 ## Bottom line
 
 Replace the per-collection generated MCP tools (`create_articles`, `list_tasks`, … 13–19 per
@@ -259,3 +261,7 @@ prompts (D44) share only `couldDo`; token scope masks are enforced inside `autho
   76 KB → 33 / 45 KB; editor 91 / 44 KB → 27 / 16 KB. Found while measuring, out of scope and
   backlogged: 26 KB of the admin's remaining 45 KB is D64's collection-definition schema, sent
   by both `create_collection` and `update_collection`.
+- 2026-11-14: After the first review Col asked for the four follow-ups. Added D66 to the same
+  PR (the collection-definition schema rides on `create_collection` only; a 34 KB budget test),
+  which took the admin's list from 45 KB to 32 KB. Shipped as v1.20.0. On the live install the
+  owner's agent (editor role, 13 collections) now lists 27 tools / 17 KB, down from about 160.
