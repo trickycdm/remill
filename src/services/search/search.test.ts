@@ -122,7 +122,7 @@ describe('searchSite — FTS5 search with in-query ACL (D28)', () => {
     expect(res.hits.map((h) => h.id)).toEqual([pub.id]);
   });
 
-  it('restricts to one collection when asked (the MCP search_<slug> shape)', async () => {
+  it('restricts to one collection when asked (the MCP search_documents shape)', async () => {
     await docs.createDocument(db, admin, 'posts', { title: 'Everywhere echo' }, NOW);
     await docs.createDocument(db, admin, 'notes', { title: 'Everywhere echo too' }, NOW);
     const res = await searchSite(db, admin, { q: 'everywhere', collection: 'notes' }, NOW);

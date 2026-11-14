@@ -244,3 +244,18 @@ prompts (D44) share only `couldDo`; token scope masks are enforced inside `autho
   uses `publish_page`, which does not change.)
 - Check Claude Code permission allowlists for rules naming old `mcp__remill__<verb>_<slug>`
   tools.
+
+## Revision Log
+
+- 2026-11-14: Three refinements made while building, none changing the approved shape.
+  (1) A known collection that lacks the *feature* a tool needs (no lifecycle, not public, no
+  html/markdown field) is refused `BAD_REQUEST` naming the feature, not `FORBIDDEN` + `missing` —
+  `missing` would name a permission the caller already holds. A missing *permission* still gets
+  `FORBIDDEN` + `missing`. (2) A retired tool name answers with its own code, `TOOL_RENAMED`,
+  plus `replacedBy`. (3) `describe_collection` also returns `tools`: the document tools that
+  apply to that collection for the caller — the direct replacement for reading a per-collection
+  tool list.
+- 2026-11-14: Measured result on the 7-collection test fixture: admin `tools/list` 102 tools /
+  76 KB → 33 / 45 KB; editor 91 / 44 KB → 27 / 16 KB. Found while measuring, out of scope and
+  backlogged: 26 KB of the admin's remaining 45 KB is D64's collection-definition schema, sent
+  by both `create_collection` and `update_collection`.

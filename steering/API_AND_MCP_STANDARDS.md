@@ -2,19 +2,20 @@
 
 > **STATUS: IMPLEMENTED — REST (Phase 6) + MCP (Phase 7).** Both surfaces are generated from the
 > same field descriptors as the admin (surfaces 5 and 6 of the schema engine); neither maintains a
-> hand-written schema or tool list. REST code: `src/routes/api/**`, `src/lib/api.ts` +
+> hand-written per-collection schema. REST code: `src/routes/api/**`, `src/lib/api.ts` +
 > `api-auth.ts` (bearer/scope resolution), `src/lib/openapi.ts` (generated OpenAPI 3.1). The list
 > filter/sort over `document_index` lives in `src/db/queries/documents.ts` + the documents service.
-> MCP code: `src/mcp/tools.ts` (permission-filtered tool generation), `src/mcp/handler.ts` (JSON-RPC
-> dispatch), `src/routes/mcp.tsx`. Sharing fabric v2 added team subjects, `share_link_<slug>`, and
-> `list_teams` (D24/D26).
+> MCP code: `src/mcp/tools.ts` (the fixed, permission-filtered tool set — D65), `src/mcp/handler.ts`
+> (JSON-RPC dispatch), `src/routes/mcp.tsx`. Sharing fabric v2 added team subjects,
+> `create_share_link`, and `list_teams` (D24/D26).
 >
 > **MCP transport deviation from D10 (deliberate, per §8):** the plan specified an `McpAgent` on a
 > Durable Object via the Cloudflare `agents` SDK. We instead serve MCP as a direct streamable-HTTP
 > JSON-RPC endpoint. Rationale: the `agents` SDK is a §8 watch-item (fast-moving; its bearer-auth
 > prop injection is version-fragile) and a stateless generated-tool server needs no DO session state.
-> Every load-bearing property is preserved — tools generated from field descriptors, intersected with
-> the connecting principal's permissions, routed through the shared service pipeline — and the whole
+> Every load-bearing property is preserved — tool behaviour derived from field descriptors, the tool
+> set intersected with the connecting principal's permissions, every call routed through the shared
+> service pipeline — and the whole
 > registration surface stays in the one thin `src/mcp/` module, which is the containment §8 asks for.
 > Revisit if MCP session state (elicitation, sampling) is needed. Logged as a decision below.
 
@@ -57,7 +58,7 @@ validation or authorization step that lives only in one surface.
   `403 { error, code: 'FORBIDDEN', missing: { action, collection } }`.
 - Other failures follow ERROR_HANDLING.md: `{ error, code }` with the machine-readable code.
 - Stale saves are `409 { code: 'STALE_REVISION' }` (D54). Every document read carries `revision`;
-  REST exposes it as `ETag` and accepts it back as `If-Match` on PATCH, MCP `update_<slug>` takes
+  REST exposes it as `ETag` and accepts it back as `If-Match` on PATCH, MCP `update_document` takes
   it as `expectedRevision`. Any new surface that writes a document must accept the expected
   revision and pass it to the service — don't add a write path that can only overwrite blind.
 - Success bodies are plain JSON — REST returns documents/collections directly, never Datastar HTML
@@ -104,7 +105,7 @@ revisions; media upload; `/media/:id[/:variant]` serving; **item-grant sharing**
   `{ [mediaFieldKey]: { id, alt, width, height } }` — whitelisted metadata only (never `r2Key`,
   filenames, or uploader). Gated once per batch via `read` on `media`; on Forbidden the expansion
   degrades to absent rather than erroring, so a public render never 500s.
-- **Backlinks (B3)**: `GET /api/c/:collection/:id/backlinks` (and the MCP `backlinks_<slug>` tool)
+- **Backlinks (B3)**: `GET /api/c/:collection/:id/backlinks` (and the MCP `get_backlinks` tool)
   lists documents that reference the given one through **indexed** relation fields —
   `[{ id, collection, title, status, updatedAt }]`. Read-gated twice: asking requires `read` on the
   target, and each SOURCE collection is queried under the caller's own compiled filter, so a
@@ -185,36 +186,77 @@ A direct streamable-HTTP JSON-RPC endpoint at `/mcp` (`src/mcp/handler.ts` + `to
 **D18**; not an `agents`-SDK `McpAgent` on a Durable Object), authenticated with the **same bearer
 tokens** as REST.
 
-- **Tools are generated per collection** from field descriptors (surface 6), not hand-listed:
-  - Per collection: `list_<slug>` (accepts a `filters` array `{field, op?, value}`, D28),
-    `search_<slug>` (full-text, read-gated, plain-text snippets, D28), `get_<slug>` (when the
-    collection's template declares text renders — D47 — it also accepts `render` (enum of the
-    declared names) + `budget` (≈ token cap) and returns LITERAL markdown via the `McpTextResult`
-    transport passthrough, never JSON-quoted; REST parity: `GET /api/c/:c/:id?render=&budget=` →
-    `text/markdown`, params advertised in OpenAPI; unknown render → the standard 422 listing the
-    available names),
-    `backlinks_<slug>` (reverse links, read-gated), `revisions_<slug>` (read-gated, D34),
-    `restore_<slug>` (update-gated — restoring a revision IS an update, D34),
-    `create_<slug>`, `update_<slug>`, `delete_<slug>` (delete-gated; moves to trash,
-    recoverable ~30 days — D29), `publish_<slug>`, `schedule_<slug>` (publish-gated, lifecycle
-    collections only; `{id, publish_at? | cancel?}` — exactly one of the two, validated in the
-    handler — D32),
-    `share_<slug>` (item grant; `subjectKind: 'principal' | 'role' | 'team'`; visible only with
-    `manage_access`), `share_link_<slug>` (anonymous share link, D26 — see below), and
-    `visibility_<slug>` (D50 — `{id, visibility}`, publish-gated; visible when the caller could
-    both `publicRead` the collection and `publish`, since visibility is meaningless on a
-    non-publicRead collection), and — on collections with an `html`/`markdown` field (D55) — for
-    callers who could `comment` OR `update` (D56): `comments_<slug>` (threads as JSON, each
-    comment with author, time, body, intent, anchor, status) and `resolve_comment_<slug>`
-    (`reopen: true` reopens); for callers who could `comment` only: `comment_<slug>` (start a
-    thread: `quote` → text anchor the server locates, `blockId` → figure, neither → whole
-    document) and `reply_comment_<slug>`
-    — input schemas from field types' `jsonSchema`, descriptions from collection/field labels.
-  - **Document review for agents (D55):** `get_<slug>` gains `render: 'review'` on annotatable
+- **The tool list is FIXED (D65).** There is one set of document tools, each taking a required
+  `collection` (the slug) — the shape REST already has (`/api/c/:collection/...`). No tool is named
+  after a collection, so the list is the same 33 names however many collections exist, a new
+  collection is usable in the same session (clients cache `tools/list` and there is no push
+  channel), and a slug can never collide with a tool name. **Never add a per-collection tool, and
+  never make `collection` a JSON Schema `enum`** (it would go stale in a cached list).
+  What a collection definition generates (surface 6) is everything behind those tools: validation,
+  the `data` schema, the filters, the renders, and which tools apply to it.
+  - **Document tools** (declared once each as a `DocumentToolSpec` in `tools.ts`):
+    `list_documents` (accepts a `filters` array `{field, op?, value}`, D28),
+    `search_documents` (full-text, read-gated, plain-text snippets, D28), `get_document` (accepts
+    `render` + `budget` (≈ token cap): a text render the collection's template declares — D47 —
+    comes back as LITERAL markdown via the `McpTextResult` transport passthrough, never
+    JSON-quoted; REST parity: `GET /api/c/:c/:id?render=&budget=` → `text/markdown`, params
+    advertised in OpenAPI; unknown render → the standard 422 listing the available names),
+    `get_backlinks` (reverse links, read-gated), `list_revisions` (read-gated, D34),
+    `restore_revision` (update-gated — restoring a revision IS an update, D34),
+    `create_document` (`{collection, data}`), `update_document`
+    (`{collection, id, expectedRevision, data, resolves?}`), `delete_document` (delete-gated;
+    moves to trash, recoverable ~30 days — D29), `publish_document`, `schedule_document`
+    (publish-gated, lifecycle collections only; `{id, publish_at? | cancel?}` — exactly one of
+    the two, validated in the handler — D32), `share_document` (item grant;
+    `subjectKind: 'principal' | 'role' | 'team'`; needs `manage_access`), `create_share_link`
+    (anonymous share link, D26 — see below), `set_visibility` (D50 — `{id, visibility}`,
+    publish-gated, `publicRead` collections only, since visibility is meaningless elsewhere), and
+    — on collections with an `html`/`markdown` field (D55) — for callers who could `comment` OR
+    `update` (D56): `list_comments` (threads as JSON, each comment with author, time, body,
+    intent, anchor, status) and `resolve_comment` (`reopen: true` reopens); for callers who could
+    `comment`: `add_comment` (start a thread: `quote` → text anchor the server locates,
+    `blockId` → figure, neither → whole document) and `reply_comment`.
+  - **Document fields travel under `data`** on create/update, never beside the tool's own
+    arguments — a field may be called `resolves` or `expectedRevision`. Fields at the top level
+    are a 422, not silently dropped.
+  - **One condition, used twice.** Each spec carries `permitted(def)` (could the principal ever do
+    this here: roles ∩ token scope) and optionally `needs` (a collection feature: a lifecycle,
+    `publicRead`, an annotatable field). A tool is LISTED when the condition holds for at least
+    one collection, and a CALL reaches the service only when it holds for the named one
+    (`resolveCollection`). Add a rule to the spec, never to one of the two sides. The service's
+    `authorize()` stays the authority on every call (conditions like `own` are decided there).
+  - **Refusals before the service** (unaudited, like the unknown-tool refusal — they never reach
+    `authorize()`), each with `available`: the slugs the tool does apply to for this caller.
+    A missing collection, `media`, or a private one the caller cannot know about (D46) → ONE
+    answer, `FORBIDDEN` "Unknown or unavailable collection" — hidden and nonexistent must stay
+    byte-identical, and the check must stay in the MCP layer because several write services look
+    the collection up before they authorize. A known collection the caller lacks the action on →
+    `FORBIDDEN` + `missing: { action, collection }`. A known collection without the needed
+    feature → `BAD_REQUEST` naming it.
+  - **`media` is never a document-tool target**; it has its own tools (below).
+  - **Discovery**: `list_collections` (ungated) returns the public projection for EVERY caller —
+    slug, name, shape, fields as key/type/label/required — plus `actions`, what the caller may do
+    in each; it is the first call of a session, so it stays compact even for schema managers.
+    `describe_collection {collection}` returns one collection in full: the definition (whole for
+    schema managers, projected otherwise), `actions`, `tools` (the document tools that apply),
+    `lifecycle`, `publicRead`; `indexedFields` + `renders` for callers who can `read`; and
+    `dataSchema` — the JSON Schema of `data`, from field types' `jsonSchema` — for callers who
+    could `create` or `update`. It answers for any collection in discovery or that a tool applies
+    to (a create-only token on a private collection). REST: `GET /api/collections[/:slug]`,
+    unchanged.
+  - **Errors teach.** A validation failure on `create_document` / `update_document` adds `hint`:
+    the collection's field keys. Tools add such keys by throwing `McpToolError(inner, extra)`;
+    the transport renders `inner` as usual and merges `extra`.
+  - **Retired names.** A call to a pre-D65 name (`create_articles`) is answered `TOOL_RENAMED`
+    with the replacement and the `collection` to pass. `retiredToolRedirect` derives that from
+    the NAME ALONE (a slug cannot contain `_`), never from whether the collection exists.
+  - **`initialize` returns `instructions`** — static text on how the surface works (call
+    `list_collections`, pass the slug as `collection`, `describe_collection` before writing).
+  - **Document review for agents (D55):** `get_document` accepts `render: 'review'` on annotatable
     collections — a markdown brief of every visible thread with its quote in context
     (`…before {==quote==} after…`), author, intent, anchor state (outdated flagged), replies and
     `threadId`; open must-fix threads first, resolved last under a `budget`. It deliberately does
-    not reproduce the document (the agent reads the source with `get_<slug>`). `update_<slug>`
+    not reproduce the document (the agent reads the source with `get_document`). `update_document`
     takes `resolves: [threadId]`, validated BEFORE the save (a bad id fails the call with nothing
     written) and resolved at the new revision after it. REST parity: `/api/c/:c/:id/comments`
     (GET/POST), `…/comments/:cid` (DELETE), `…/replies`, `…/resolve` (`{resolved:false}`
@@ -224,15 +266,14 @@ tokens** as REST.
     assignments, resolved permissions, token scope mask and OAuth client — the first call for an
     agent refused `FORBIDDEN`. Denials name what would admit the call (e.g. thread reads say
     "requires 'comment' or 'update'").
-  - Schema management: `list_collections`, `create_collection`, `update_collection`
+  - Schema management: `create_collection`, `update_collection`
     (require `manage_schema` — held by `admin` and `builder`, D64). The `definition` input is a
     GENERATED JSON Schema (`collectionDefinitionJsonSchema()` in the collections service, field
     branches from `fieldDescriptorJsonSchema()` in the registry — each field type's `configSchema`
     + its one-line `summary`), never a hand-written or opaque `object`; `validateDefinition` stays
-    the authority for cross-field rules. `create_collection` and `install_pack` results carry
-    `newTools` (the names this change added, diffed against the pre-call tool build) and a
-    reconnect `note`: there is no push channel for `tools/list_changed`, so clients holding a
-    cached tool list must be told.
+    the authority for cross-field rules. `create_collection` and `install_pack` results carry a
+    `note` saying the collection is usable at once (D65 — no new tool appears, so there is
+    nothing to re-list; this replaced D64's `newTools` + reconnect note).
   - Packs/templates (D42): `list_templates` + `list_packs` (ungated discovery — registry metadata
     is code; `installed` reveals nothing `list_collections` doesn't) and `install_pack`
     (`manage_schema`; `{pack, slug?}` — slug renames a single-collection pack's scaffold). REST
@@ -243,8 +284,7 @@ tokens** as REST.
   - Teams: `list_teams` (visible only with `manage_access`).
   - Pages: `publish_page` (D62 — one call to publish or revise a standalone HTML page, optionally
     minting a share or review link; offered when the caller could `create` or `update` in the
-    built-in pages collection). Static tools are registered BEFORE the generated ones and the tool
-    list is de-duplicated by name (first wins), so a collection can never shadow a static tool.
+    built-in pages collection).
   - Media: `list_media`, `get_media_url`, and `upload_media` (D34 — base64, create-gated,
     offered only when the route threads the R2 bucket via `McpToolContext`; reuses the REST
     upload service verbatim: MIME sniffed from bytes, 25 MiB service cap, alt required for
@@ -263,7 +303,7 @@ tokens** as REST.
     ignored, `nextCursor` omitted — spec-compliant). Unknown/unpublished/non-prompt/forbidden
     all map to ONE `-32602` shape — no existence oracle. `listChanged` deliberately not
     declared (no push channel; clients poll).
-- **`share_link_<slug>` (D26/D51)** mints an anonymous share link for one document. Visibility and
+- **`create_share_link` (D26/D51)** mints an anonymous share link for one document. Visibility and
   gating key on the `share_link` action — not `manage_access`, and not agent-refused. The grant is
   read-only by default; an optional `review: { mode?, reviewer? }` makes it a REVIEW link (read +
   comment, D61), which also requires the caller's `comment` on the document and a collection whose
@@ -277,19 +317,26 @@ tokens** as REST.
 - **Absolute URLs come from `resolveBaseUrl`** (`src/lib/base-url.ts`: `env.BASE_URL` >
   `settings.siteUrl` > request origin), threaded route → `handleMcp` → `buildToolsForPrincipal`, so
   URL-minting tools never hand-build an origin. Admin share/invite links use the same resolver.
-- **Permission-filtered tool listing**: the registered tool set is intersected with the connecting
-  principal's effective permissions. An agent without `publish` **never sees** `publish_<slug>`.
+- **Permission-filtered tool listing**: the tool set is intersected with the connecting
+  principal's effective permissions. An agent that cannot `publish` anywhere **never sees**
+  `publish_document`; one that can publish only in `posts` is refused it on any other collection.
   Capability discovery IS permission discovery — this keeps agents from planning actions they can't
-  take.
-- Tool registration **re-derives per session** from the `collections` table and the principal's
-  permissions, so schema and access changes are visible to agents without a redeploy.
-- **Tool naming rule**: `<verb>_<slug>` with the collection slug verbatim. Slugs are validated
-  (`^[a-z][a-z0-9_]*$`) so tool names are always valid MCP identifiers.
+  take. Per collection, that discovery is `list_collections.actions` and `describe_collection.tools`.
+- The tool set and every per-call check **re-derive per request** from the `collections` table and
+  the principal's permissions, so schema and access changes are visible to agents without a
+  redeploy — and, since the tool NAMES never change, without a reconnect.
+- **Tool naming rule**: `<verb>_<noun>`, the noun never a collection slug. `STATIC_TOOL_NAMES` and
+  `DOCUMENT_TOOL_NAMES` in `tools.ts` are the whole surface; a test holds them to `tools/list`.
+  (Collection slugs are `^[a-z][a-z0-9-]*$` and travel as the `collection` argument.)
+- **Changing a gate**: `src/mcp/gating-golden.json` is the per-collection tool list the old
+  generator produced for the fixture in `gating-fixture.ts`; `collection-tools.test.ts` holds
+  every (principal, tool, collection) to it. A deliberate change to who may call what means
+  editing that file in the same commit, with the reason.
 - **SDK containment**: all `agents`-SDK contact lives in one thin module (`src/mcp/`). The SDK moves
   fast (risk in plan §8) — pin the version, wrap the registration surface so churn stays localized.
-  This is containment of a moving dependency, **not** a premature abstraction — tools are still
-  generated directly from definitions, not routed through a tool-framework indirection (dpt built one
-  and deleted it — do not repeat that).
+  This is containment of a moving dependency, **not** a premature abstraction — the document-tool
+  specs are plain data in that same module, dispatched by one loop, not routed through a
+  tool-framework indirection (dpt built one and deleted it — do not repeat that).
 
 ## Non-negotiables
 

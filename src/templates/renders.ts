@@ -4,7 +4,7 @@
  * "types are code, instances pick them by name" grain as the reading templates:
  * renders are declared per TEMPLATE key (the semantic marker convention the
  * MCP prompts primitive established), so any collection selecting `warp` gets
- * `reviewer`/`implementer` renders — over MCP (`get_<slug>` `render` arg) and
+ * `reviewer`/`implementer` renders — over MCP (`get_document` `render` arg) and
  * REST (`?render=`) — with zero per-collection wiring.
  *
  * Tailoring is by ROLE and BUDGET only — never by model vendor: capability
@@ -42,7 +42,7 @@ interface Section {
 }
 
 export interface TextRender {
-  /** One-line pitch, surfaced in the `get_<slug>` tool description. */
+  /** One-line pitch: who the render is for and what it leads with. */
   readonly description: string;
   /** When true the service fetches backlinks before rendering (none of the
    *  warp renders need them; the flag exists so future renders can ask). */
@@ -164,7 +164,7 @@ const TEXT_RENDERS: Partial<Record<TemplateKey, Readonly<Record<string, TextRend
 /* ── Public surface ───────────────────────────────────────────────────────── */
 
 /** Render names a template declares (empty for templates without renders) —
- *  drives the `get_<slug>` inputSchema enum and the OpenAPI param. */
+ *  drives the `renders` list `describe_collection` returns and the OpenAPI param. */
 export function rendersFor(templateKey: string | undefined): readonly string[] {
   if (!templateKey) return [];
   const renders = TEXT_RENDERS[templateKey as TemplateKey];

@@ -3,8 +3,9 @@
  * points back at A, A's reading page would show B twice — once as a forward
  * relation row ("Related") and again inches lower under "Referenced by". The
  * reverse edge is redundant TO A READER exactly when it duplicates a forward
- * one, so templates filter those; the REST/MCP `backlinks_<slug>` surface keeps
- * returning the whole reverse graph — machine consumers want it complete.
+ * one, so templates filter those; the REST backlinks endpoint and the MCP
+ * `get_backlinks` tool keep returning the whole reverse graph — machine
+ * consumers want it complete.
  */
 
 import type { CollectionDefinition } from '@/fields/types';

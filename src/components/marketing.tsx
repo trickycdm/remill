@@ -161,7 +161,7 @@ export function MarketingHero() {
               <VignetteRow
                 icon={<Bot class="size-4" />}
                 title="Autumn release notes"
-                meta="create_essays · 02:14"
+                meta="create_document · 02:14"
                 badge={<Badge tone="neutral">Draft</Badge>}
               />
               <VignetteRow
@@ -456,16 +456,20 @@ export function EverySurface() {
             <div class="border-accent/60 flex flex-col gap-4 rounded-xl border-[1.5px] bg-surface p-5">
               <div class="flex items-center gap-2 border-b border-border pb-3">
                 <Bot class="size-4 text-accent-text" />
-                <code class="font-mono text-sm font-semibold text-ink">create_essays</code>
+                <code class="font-mono text-sm font-semibold text-ink">create_document</code>
                 <span class="ml-auto font-mono text-xs text-ink-subtle">tools/call</span>
               </div>
               <dl class="flex flex-col gap-2 font-mono text-[13px] leading-relaxed">
                 <div class="flex gap-4">
-                  <dt class="w-10 shrink-0 text-ink-subtle">title</dt>
+                  <dt class="w-24 shrink-0 text-ink-subtle">collection</dt>
+                  <dd class="min-w-0 text-ink">"essays"</dd>
+                </div>
+                <div class="flex gap-4">
+                  <dt class="w-24 shrink-0 text-ink-subtle">data.title</dt>
                   <dd class="min-w-0 text-ink">"Autumn release notes"</dd>
                 </div>
                 <div class="flex gap-4">
-                  <dt class="w-10 shrink-0 text-ink-subtle">body</dt>
+                  <dt class="w-24 shrink-0 text-ink-subtle">data.body</dt>
                   <dd class="min-w-0 truncate text-ink">"## What shipped ..."</dd>
                 </div>
               </dl>
@@ -594,14 +598,14 @@ export function TrustBento() {
           token that asked.
         </p>
         <ul class="mt-10 max-w-3xl">
-          <AuditLine line="02:14 · create_essays · claude-code" stamp="Allowed" />
+          <AuditLine line="02:14 · create · essays · claude-code" stamp="Allowed" />
           <AuditLine
-            line="02:15 · publish_essays · claude-code"
+            line="02:15 · publish · essays · claude-code"
             stamp="Denied"
             tone="refuse"
             tilt="down"
           />
-          <AuditLine line="09:31 · publish · you" stamp="Signed off" tone="event" />
+          <AuditLine line="09:31 · publish · essays · you" stamp="Signed off" tone="event" />
         </ul>
         <ul class="mt-12 grid gap-4 sm:grid-cols-3">
           {TRUST.map((c) => (
@@ -692,14 +696,15 @@ export function RunYourOwnMill() {
   );
 }
 
-/** The tools a connected agent gets for an example collection — shown as
- *  chips, not another code block. */
+/** A sample of the document tools a connected agent gets — one fixed set that
+ *  takes the collection as an argument (D65). Shown as chips, not another code
+ *  block. */
 const EXAMPLE_TOOLS = [
-  'list_essays',
-  'create_essays',
-  'search_essays',
-  'share_link_essays',
-  'publish_essays',
+  'list_documents',
+  'create_document',
+  'search_documents',
+  'create_share_link',
+  'publish_document',
 ] as const;
 
 /** One coupon of the quickstart strip: pop numeral, display heading, body. */
@@ -774,9 +779,9 @@ export function AgentQuickstart() {
           </Coupon>
           <Coupon n="3" title="Put it to work">
             <p class="text-sm leading-relaxed text-ink-muted">
-              Every collection the agent can see becomes a set of tools, gated by its grants:
+              One set of tools works on every collection the agent can see, gated by its grants:
             </p>
-            <ul aria-label="Generated MCP tools" class="flex flex-wrap gap-2">
+            <ul aria-label="MCP document tools" class="flex flex-wrap gap-2">
               {EXAMPLE_TOOLS.map((t) => (
                 <li class="rounded-md border border-border bg-canvas px-2.5 py-1 font-mono text-xs text-ink">
                   {t}

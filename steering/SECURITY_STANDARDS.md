@@ -327,10 +327,13 @@ onto the record — any field an attacker named got written. remill's fix, from 
 ## 9. AI / agent safety
 
 - Every agent principal is least-privilege and audited; its bearer token is revocable and scope-masked.
-  An agent without `publish` never even sees the publish tool (ACCESS_CONTROL.md).
+  An agent that cannot `publish` anywhere never even sees `publish_document`, and one that can
+  publish only in one collection is refused it on any other (ACCESS_CONTROL.md, D65).
 - Treat all model/agent input as untrusted — it can never override system instructions, and model
-  output is **never executed as code or SQL**. MCP tools are constrained to generated
-  collection operations; no filesystem, network, or code-execution tools are registered.
+  output is **never executed as code or SQL**. MCP tools are a fixed set constrained to collection
+  operations — the document tools act only on the collection a call names, through the same
+  validated, `authorize()`-gated services; no filesystem, network, or code-execution tools are
+  registered.
 
 ## Verification
 

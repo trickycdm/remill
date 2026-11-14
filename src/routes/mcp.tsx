@@ -16,9 +16,9 @@ const factory = createFactory<{ Bindings: Env }>();
 
 /**
  * POST /mcp — the MCP server over streamable HTTP (JSON-RPC). Authenticated with
- * the same bearer tokens as REST; tools are generated per collection and filtered
- * to the connecting principal's permissions (src/mcp/). See the transport note in
- * src/mcp/handler.ts.
+ * the same bearer tokens as REST; the tool list is fixed — document tools take a
+ * `collection` (D65) — and filtered to the connecting principal's permissions
+ * (src/mcp/). See the transport note in src/mcp/handler.ts.
  *
  * D48: unauthenticated requests get a 401 with a `WWW-Authenticate` challenge
  * pointing at the protected-resource metadata — this is how MCP clients
@@ -55,7 +55,7 @@ export const onRequestPost = factory.createHandlers(async (c) => {
     throw new BadRequestError('MCP request body must be JSON-RPC.');
   }
 
-  // Tools that mint absolute URLs (share_link_<slug>) have no request Context —
+  // Tools that mint absolute URLs (create_share_link) have no request Context —
   // resolve the base once per request and thread it through. Same for the R2
   // bucket + the upload rate limiter (keyed to the token, else the client IP —
   // shared 'upload' bucket with REST, D34).

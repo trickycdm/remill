@@ -1,6 +1,6 @@
 /**
  * Full-text search service (D28). One implementation behind all three surfaces:
- * the admin /admin/search page, REST `?q=`, and the MCP `search_<slug>` tools.
+ * the admin /admin/search page, REST `?q=`, and the MCP `search_documents` tool.
  *
  * ACL: the caller's compiled read predicate is applied IN-QUERY per collection
  * (D17) — a scope is only included after `authorize('read', …)` mints its Grant.
@@ -36,7 +36,7 @@ const REBUILD_PAGE = 200;
 
 export interface SearchParams {
   readonly q: string;
-  /** Restrict to one collection (the MCP `search_<slug>` tools); default: all
+  /** Restrict to one collection (the MCP `search_documents` tool); default: all
    *  readable, non-protected collections. */
   readonly collection?: string;
   readonly limit?: number;

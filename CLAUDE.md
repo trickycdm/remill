@@ -45,7 +45,7 @@ rendered public pages + share links.)
 > lifecycle-none `tasks`/`warps`/`decisions` whose required fields are the handover protocol; the
 > first multi-collection pack, with per-collection templates `status`/`warp`/`docs`) plus **text
 > renders** (`src/templates/renders.ts` — role + budget-tailored markdown views; `render`/`budget`
-> args on `get_<slug>` MCP tools with a literal-text transport passthrough, REST
+> args on the MCP `get_document` tool with a literal-text transport passthrough, REST
 > `?render=` → `text/markdown`, one `renderDocumentText` service behind both). Orchestration and
 > webhooks are explicit non-goals ("the bus, never the brain").
 > **D48 shipped 2026-07-23** (plan: [`plans/2026-07-23-oauth_mcp_connect_wizard/`](plans/2026-07-23-oauth_mcp_connect_wizard/)):
@@ -66,7 +66,7 @@ rendered public pages + share links.)
 > **D50–D52 shipped 2026-09-23** (plan: [`plans/2026-09-23-visibility_link_passwords_seo_head/`](plans/2026-09-23-visibility_link_passwords_seo_head/)):
 > per-document **visibility** — public/unlisted/private, orthogonal to draft/published (D50,
 > `documents.visibility`; unlisted reads only by its `doc_…` id URL, dropped from every anonymous
-> list/feed/search/backlink; editor sidebar control, REST + MCP `visibility_<slug>` parity);
+> list/feed/search/backlink; editor sidebar control, REST + MCP `set_visibility` parity);
 > **password-protected share links** — one password per link, not per document (D51,
 > `item_grants.password_hash`/`label`, an HMAC unlock cookie scoped to `/s/<token>`, a blanket
 > locked page that leaks nothing, the panel's share-link section decoupled from email); and a
@@ -87,8 +87,8 @@ rendered public pages + share links.)
 > **review links** (share links that may comment — personal or open, group or individual; the
 > first anonymous write), text/figure/document anchors re-located on every save
 > (`src/lib/anchor/`), the reading-page overlay (`src/components/review/`, `src/client/review.ts`,
-> CSS Custom Highlight API), and the agent loop — `get_<slug>` `render: 'review'`,
-> `comment_/comments_/reply_comment_/resolve_comment_<slug>`, `update_<slug>` `resolves`).
+> CSS Custom Highlight API), and the agent loop — `get_document` `render: 'review'`,
+> `add_comment`/`list_comments`/`reply_comment`/`resolve_comment`, `update_document` `resolves`).
 > **D57 built 2026-09-27** (plan: [`plans/2026-09-27-visibility_controls_safe_public_enable/`](plans/2026-09-27-visibility_controls_safe_public_enable/)):
 > **visibility on every document** — admin labels show `effectiveVisibility` (Private on a
 > collection without public pages, whatever the inert stored value says); the editor's Visibility
@@ -122,8 +122,19 @@ rendered public pages + share links.)
 > **agents can create collections** — a `builder` system role (editor + `manage_schema`, no
 > `manage_access`; migration 0022) offered on the OAuth consent screen, which never offers admin;
 > `create_collection`/`update_collection` take a generated definition JSON Schema (field-type
-> branches from the registry, each type now carrying a one-line `summary`); their results — and
-> `install_pack`'s — list `newTools` plus a reconnect note; `createCollection` forces `protected: false`.
+> branches from the registry, each type now carrying a one-line `summary`); `createCollection`
+> forces `protected: false`. (The `newTools` list + reconnect note on their results, and on
+> `install_pack`'s, were superseded by D65.)
+> **D65 built 2026-11-14** (plan: [`plans/2026-11-14-mcp_fixed_collection_document_tools/`](plans/2026-11-14-mcp_fixed_collection_document_tools/)):
+> **a fixed MCP tool list** — 33 tools however many collections exist, replacing the tools once
+> generated per collection (`create_articles`, `list_tasks`, …): 18 document tools that take a
+> required `collection` slug (`list_documents`, `get_document`, `create_document`/`update_document`
+> with fields under `data`, …) plus `describe_collection` (the definition, the caller's `actions`
+> and applicable `tools`, and `dataSchema` — the JSON Schema of `data`). Gating is unchanged: a
+> tool is listed when it applies to at least one collection for the caller, and a call is let
+> through only for a collection it applies to; a missing or hidden collection gets one uniform
+> `FORBIDDEN` plus `available`. A new collection is usable in the same session; a retired name
+> answers `TOOL_RENAMED`; `initialize` returns `instructions`.
 > The plan's Deferred/Tier-4 list records
 > what was consciously not built. Each steering doc carries its own STATUS header; the worklogs
 > have the step-by-step record.
@@ -225,7 +236,7 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   at `/admin/access/teams`, the `matrix/` overview); item-grant sharing via
   the editor's Share drawer (`src/components/admin/share-drawer.tsx`, loaded by
   `src/services/sharing/`, D59), the `/api/c/:collection/:id/grants` route, and the MCP
-  `share_<slug>` tools; the `share_link` action (D26) lets granted agents mint expiring anonymous
+  `share_document` tool; the `share_link` action (D26) lets granted agents mint expiring anonymous
   links over MCP; public invite consumption at `src/routes/auth/set-password/[token].tsx`, team
   join links at `/auth/join/:token`, "Shared with me" at `/admin/shared`. Admin also surfaces activity
   log at `/admin/activity`, search at `/admin/search` (D28), recoverable delete at `/admin/trash` (D29),
@@ -233,17 +244,24 @@ no deploy. This is the constitution: [`steering/SCHEMA_ENGINE.md`](steering/SCHE
   `/admin/c/:collection/bulk` (D39), and the Nebulae graph explorer at `/admin/graph` (D45 — 3D relation
   universe with collection clusters and cross-collection flight paths).
 - **MCP** `src/mcp/` — the streamable-HTTP JSON-RPC server (`handler.ts` + `tools.ts` + `prompts.ts`); the one
-  module owning the MCP protocol surface (decision D18). Tools include `share_<slug>` (subjectKind
-  principal|role|team), `share_link_<slug>` (D26 agent-mintable links), `list_teams` (D24), `search_<slug>`
-  — `filters` arg (D28), `upload_media` (base64, D34), `revisions_<slug>`, `restore_<slug>`, `delete_<slug>`
-    (D34 parity), `schedule_<slug>` (D32 per-collection scheduled publishing), `poll_events` (D33 outbox
-    change feed), `list_audit` (audit log access), the D42 marketplace trio — `list_templates` +
-    `list_packs` (ungated discovery) and `install_pack` (manage_schema), the D44 prompts primitive —
-    items of prompt-shaped collections (`template: 'prompt'`) surfaced as native MCP prompts (`prompts/list`,
-    `prompts/get`) with arguments derived from `{{variables}}` — so the agent flow
-    `list_packs → install_pack('prompts') → create_prompts → list_prompts` needs no schema design — and D47
-    text renders: `get_<slug>` on render-declaring collections gains `render` and `budget` args, returning
-    literal markdown (via `McpTextResult` transport passthrough, not JSON-quoted).
+  module owning the MCP protocol surface (decision D18). The tool list is FIXED (D65 — 33 tools,
+  not a set per collection): 18 document tools that each take a `collection` slug, plus
+  `list_collections` and `describe_collection` (the definition, the caller's `actions` and
+  applicable `tools`, and the JSON Schema of `data`). A tool is listed when it applies to at least
+  one collection for the caller; a call is let through only for a collection it applies to.
+  Document tools include `create_document`/`update_document` (fields under `data`),
+  `share_document` (subjectKind principal|role|team), `create_share_link` (D26 agent-mintable
+  links), `search_documents` — `filters` arg (D28), `list_revisions`, `restore_revision`,
+  `delete_document` (D34 parity), `schedule_document` (D32 scheduled publishing), and
+  `get_document`, whose `render` and `budget` args return a D47 text render as literal markdown
+  (via `McpTextResult` transport passthrough, not JSON-quoted). Static tools include `list_teams`
+  (D24), `upload_media` (base64, D34), `poll_events` (D33 outbox change feed), `list_audit` (audit
+  log access), and the D42 marketplace trio — `list_templates` + `list_packs` (ungated discovery)
+  and `install_pack` (manage_schema). The D44 prompts primitive surfaces items of prompt-shaped
+  collections (`template: 'prompt'`) as native MCP prompts (`prompts/list`, `prompts/get`) with
+  arguments derived from `{{variables}}` — so the agent flow `list_packs →
+  install_pack('prompts') → create_document → list_documents` (both with `collection: 'prompts'`)
+  needs no schema design.
 - **`src/lib/`** errors/validation/auth/logging/datastar-response, `persona.ts` (kind+subtype →
   Person/Service/Agent display persona), `email/` (`EmailTransport` — Resend + styled templates,
   D20 realized; console stub fallback), `base-url.ts` (resolveBaseUrl for minted links),

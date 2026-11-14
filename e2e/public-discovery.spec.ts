@@ -206,7 +206,7 @@ test.describe.serial('D35/D36 — public discovery (feeds, sitemap, OG, homepage
     // Agents tab reveals the MCP tool call.
     await anonPage.getByRole('tab', { name: 'Agents' }).click();
     await expect(agentsPanel).toBeVisible();
-    await expect(agentsPanel).toContainText('create_essays');
+    await expect(agentsPanel).toContainText('create_document');
 
     // APG keyboard support: arrow keys move focus AND selection (roving
     // tabindex, automatic activation); Home jumps back to the first tab.
